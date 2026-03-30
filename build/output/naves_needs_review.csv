@@ -1,0 +1,245 @@
+topic_name,verse_count,classification,rule_applied,set to 0
+ABLUTION,44,needs_review,rule4_needs_review,
+"ACCUSATION, FALSE",29,needs_review,rule4_needs_review,
+AFFECTIONS,37,needs_review,rule4_needs_review,
+AGRICULTURE,39,too_narrow,manual_review,0
+ALIENS,22,too_narrow,manual_review,0
+ALLIANCES,26,needs_review,rule4_needs_review,
+ALMS,21,too_narrow,manual_review,0
+AMBASSADORS,21,needs_review,rule4_needs_review,
+AMBITION,25,needs_review,rule4_needs_review,
+AMMONITES,34,too_narrow,manual_review,0
+AMORITES,33,too_narrow,manual_review,0
+AMUSEMENTS AND WORLDLY PLEASURES,32,needs_review,rule4_needs_review,
+ANGEL (a spirit),165,needs_review,rule4_needs_review,
+ANGER,65,needs_review,rule4_needs_review,
+ANIMALS,75,too_narrow,manual_review,0
+ANTHROPOMORPHISMS,37,too_narrow,manual_review,0
+APOSTLES,40,needs_review,rule4_needs_review,
+ARCHERY,21,too_narrow,manual_review,0
+ARMIES,152,too_narrow,manual_review,0
+ART,48,too_narrow,manual_review,0
+ASS (DONKEY),31,too_narrow,manual_review,0
+BEAUTY,23,too_narrow,manual_review,0
+BENEDICTIONS,54,needs_review,rule4_needs_review,
+BENEFICENCE,28,needs_review,rule4_needs_review,
+BIGOTRY,29,needs_review,rule4_needs_review,
+BIRDS,30,too_narrow,manual_review,0
+BLASPHEMY,54,needs_review,rule4_needs_review,
+BLINDNESS,55,needs_review,rule4_needs_review,
+BOW,20,needs_review,rule4_needs_review,
+BRASS,37,too_narrow,manual_review,0
+BRIBERY,20,needs_review,rule4_needs_review,
+BROTHER,28,needs_review,rule4_needs_review,
+BULLOCK,23,too_narrow,manual_review,0
+BURIAL,57,needs_review,rule4_needs_review,
+CALL,44,needs_review,rule4_needs_review,
+CAMEL,22,too_narrow,manual_review,0
+CANAANITES,30,too_narrow,manual_review,0
+CAPTAIN,25,too_narrow,manual_review,0
+CAPTIVE,31,too_narrow,manual_review,0
+CAPTIVITY,21,too_narrow,manual_review,0
+CHARACTER,179,needs_review,rule4_needs_review,
+CHARIOT,36,too_narrow,manual_review,0
+CHIDING,23,too_narrow,manual_review,0
+CHILDREN,256,needs_review,rule4_needs_review,
+CHURCH AND STATE,20,too_narrow,manual_review,0
+CIRCUMCISION,50,needs_review,rule4_needs_review,
+CITIES,22,too_narrow,manual_review,0
+CITIZENS,59,too_narrow,manual_review,0
+COLORS,41,too_narrow,manual_review,0
+COMMANDMENTS,39,needs_review,rule4_needs_review,
+COMMERCE,93,too_narrow,manual_review,0
+COMPANY,30,too_narrow,manual_review,0
+CONCUBINAGE,22,too_narrow,manual_review,0
+CONDESCENSION OF GOD,20,needs_review,rule4_needs_review,
+CONFIDENCE,44,needs_review,rule4_needs_review,
+CONSPIRACY,30,too_narrow,manual_review,0
+CONTINGENCIES,20,needs_review,rule4_needs_review,
+CONTRACTS,29,needs_review,rule4_needs_review,
+CONVERTS,27,needs_review,rule4_needs_review,
+CORD,21,too_narrow,manual_review,0
+COUNTENANCE,20,too_narrow,manual_review,0
+COURT,41,too_narrow,manual_review,0
+COVETOUSNESS,69,needs_review,rule4_needs_review,
+COWARDICE,46,needs_review,rule4_needs_review,
+CUP,24,needs_review,rule4_needs_review,
+DAY,30,needs_review,rule4_needs_review,
+DEAD (PEOPLE),22,needs_review,rule4_needs_review,
+DECEIT,53,needs_review,rule4_needs_review,
+DECEPTION,23,needs_review,rule4_needs_review,
+DECISION,97,needs_review,rule4_needs_review,
+DESPONDENCY,26,needs_review,rule4_needs_review,
+DILIGENCE,42,needs_review,rule4_needs_review,
+DIPLOMACY,23,needs_review,rule4_needs_review,
+DISEASE,37,needs_review,rule4_needs_review,
+DISHONESTY,31,needs_review,rule4_needs_review,
+DISOBEDIENCE TO GOD,29,needs_review,rule4_needs_review,
+DREAM,32,needs_review,rule4_needs_review,
+DRESS,50,needs_review,rule4_needs_review,
+DRUNKENNESS,35,needs_review,rule4_needs_review,
+EAGLE,22,too_narrow,manual_review,0
+EARTH,42,too_narrow,manual_review,0
+EARTHQUAKES,25,needs_review,rule4_needs_review,
+EDOMITES,41,too_narrow,manual_review,0
+EGYPTIANS,26,too_narrow,manual_review,0
+ENVY,33,needs_review,rule4_needs_review,
+EXAMPLE,44,needs_review,rule4_needs_review,
+FALSE CONFIDENCE,23,needs_review,rule4_needs_review,
+FAMILY,48,needs_review,rule4_needs_review,
+FAMINE,33,needs_review,rule4_needs_review,
+FEAR,81,needs_review,rule4_needs_review,
+FIRSTBORN,31,needs_review,rule4_needs_review,
+FISH,24,too_narrow,manual_review,0
+FLATTERY,22,needs_review,rule4_needs_review,
+FOOD,44,needs_review,rule4_needs_review,
+FORGETTING GOD,32,needs_review,rule4_needs_review,
+FRATERNITY,20,needs_review,rule4_needs_review,
+FRIENDSHIP,29,needs_review,rule4_needs_review,
+GATES,54,needs_review,rule4_needs_review,
+GENEALOGY,26,needs_review,rule4_needs_review,
+GENTILES,37,needs_review,rule4_needs_review,
+GIFTS FROM GOD,35,needs_review,rule4_needs_review,
+GLORIFYING GOD,62,needs_review,rule4_needs_review,
+GOAT,20,too_narrow,manual_review,0
+GOLD,57,too_narrow,manual_review,0
+GOVERNMENT,129,needs_review,rule4_needs_review,
+GRAPE,33,too_narrow,manual_review,0
+HAND,42,too_narrow,manual_review,0
+HAPPINESS,47,too_narrow,manual_review,0
+HARP,24,too_narrow,manual_review,0
+HEATHEN,23,too_narrow,manual_review,0
+HITTITES,20,too_narrow,manual_review,0
+HOMICIDE,86,needs_review,rule4_needs_review,
+HORSE,29,too_narrow,manual_review,0
+HOSPITALITY,45,needs_review,rule4_needs_review,
+HOUSE,79,needs_review,rule4_needs_review,
+HYPOCRISY,55,needs_review,rule4_needs_review,
+IDOL,21,needs_review,rule4_needs_review,
+IGNORANCE,24,needs_review,rule4_needs_review,
+IMPENITENCE,37,needs_review,rule4_needs_review,
+INCENSE,25,too_narrow,manual_review,0
+INCEST,20,needs_review,rule4_needs_review,
+INFIDELITY,27,needs_review,rule4_needs_review,
+INFLUENCE,36,needs_review,rule4_needs_review,
+INGRATITUDE,37,needs_review,rule4_needs_review,
+INSTABILITY,26,needs_review,rule4_needs_review,
+INSTRUCTION,54,needs_review,rule4_needs_review,
+IRON,44,too_narrow,manual_review,0
+"ISRAEL, PROPHECIES CONCERNING",112,needs_review,rule4_needs_review,
+JEALOUSY,26,needs_review,rule4_needs_review,
+JUDAS (JUDE),34,needs_review,rule4_needs_review,
+JUDGE,48,needs_review,rule4_needs_review,
+JUDGMENTS,52,needs_review,rule4_needs_review,
+LAND,31,too_narrow,manual_review,0
+LANGUAGE,23,needs_review,rule4_needs_review,
+LASCIVIOUSNESS,24,needs_review,rule4_needs_review,
+LEPROSY,22,too_narrow,manual_review,0
+LEVITES,92,too_narrow,manual_review,0
+LIBERALITY,69,too_narrow,manual_review,0
+LION,40,too_narrow,manual_review,0
+LONGEVITY,42,too_narrow,manual_review,0
+"LOT, THE",23,too_narrow,manual_review,0
+MALICE,59,needs_review,rule4_needs_review,
+MAN,56,needs_review,rule4_needs_review,
+MASTER,24,needs_review,rule4_needs_review,
+MEASURE,65,too_narrow,manual_review,0
+METEOROLOGY AND CELESTIAL PHENOMENA,45,too_narrow,manual_review,0
+MILK,23,too_narrow,manual_review,0
+MOABITES,20,too_narrow,manual_review,0
+MONEY,45,needs_review,rule4_needs_review,
+MONTH,51,too_narrow,manual_review,0
+MOON,34,too_narrow,manual_review,0
+MOUNTAIN,24,too_narrow,manual_review,0
+MOURNING,61,needs_review,rule4_needs_review,
+MURMURING,32,too_narrow,manual_review,0
+MUSIC,70,too_narrow,manual_review,0
+NATION,47,too_narrow,manual_review,0
+"OPINION, PUBLIC",21,too_narrow,manual_review,0
+OPPRESSION,36,needs_review,rule4_needs_review,
+PARABLES,20,needs_review,rule4_needs_review,
+PARENTS,64,needs_review,rule4_needs_review,
+PERFECTION,30,needs_review,rule4_needs_review,
+PILLAR,25,needs_review,rule4_needs_review,
+PLAGUE,21,needs_review,rule4_needs_review,
+POLYGAMY,39,needs_review,rule4_needs_review,
+PRESUMPTION,54,needs_review,rule4_needs_review,
+PRIDE,45,needs_review,rule4_needs_review,
+PRISONERS,59,too_narrow,manual_review,0
+PROPERTY,24,needs_review,rule4_needs_review,
+PRUDENCE,44,needs_review,rule4_needs_review,
+PURIFICATION,35,needs_review,rule4_needs_review,
+RAIN,27,too_narrow,manual_review,0
+"READINGS, SELECT",37,too_narrow,manual_review,0
+RELIGION,36,needs_review,rule4_needs_review,
+REPROBACY,22,needs_review,rule4_needs_review,
+REPROOF,83,needs_review,rule4_needs_review,
+RESIGNATION,41,needs_review,rule4_needs_review,
+RESPONSIBILITY,23,needs_review,rule4_needs_review,
+RETALIATION,21,needs_review,rule4_needs_review,
+REVENGE,23,needs_review,rule4_needs_review,
+"RICH, THE",21,needs_review,rule4_needs_review,
+RISING,24,needs_review,rule4_needs_review,
+RULERS,143,needs_review,rule4_needs_review,
+SALT,20,needs_review,rule4_needs_review,
+SALUTATIONS,26,needs_review,rule4_needs_review,
+SANITATION,33,needs_review,rule4_needs_review,
+SARCASM,25,needs_review,rule4_needs_review,
+SCOFFING,35,needs_review,rule4_needs_review,
+SEAL,24,needs_review,rule4_needs_review,
+SEEKERS,35,needs_review,rule4_needs_review,
+SELF-DELUSION,31,needs_review,rule4_needs_review,
+SELF-DENIAL,44,needs_review,rule4_needs_review,
+SELF-RIGHTEOUSNESS,26,needs_review,rule4_needs_review,
+SELF-WILL,42,needs_review,rule4_needs_review,
+SERPENT,30,needs_review,rule4_needs_review,
+SEVEN,84,needs_review,rule4_needs_review,
+SHEEP,30,needs_review,rule4_needs_review,
+SHEKEL,24,too_narrow,manual_review,0
+SHEWBREAD (SHOWBREAD),21,too_narrow,manual_review,0
+SHIELD,24,too_narrow,manual_review,0
+SHIP,41,too_narrow,manual_review,0
+SIEGE,20,too_narrow,manual_review,0
+SILVER,43,too_narrow,manual_review,0
+SINCERITY,29,needs_review,rule4_needs_review,
+SLANDER,65,needs_review,rule4_needs_review,
+SOLDIERS,22,too_narrow,manual_review,0
+SORCERY,45,too_narrow,manual_review,0
+SPEAKING,36,needs_review,rule4_needs_review,
+STARS,30,too_narrow,manual_review,0
+STONES,74,too_narrow,manual_review,0
+STRANGERS,26,needs_review,rule4_needs_review,
+STRIFE,33,too_narrow,manual_review,0
+SUN,32,too_narrow,manual_review,0
+SYMBOLS AND SIMILITUDES,153,needs_review,rule4_needs_review,
+SYNAGOGUE,21,needs_review,rule4_needs_review,
+SYRIA,31,too_narrow,manual_review,0
+TABLE,26,too_narrow,manual_review,0
+TACT,20,too_narrow,manual_review,0
+TAX,25,needs_review,rule4_needs_review,
+THEFT AND THIEVES,27,needs_review,rule4_needs_review,
+THRONE,24,needs_review,rule4_needs_review,
+TIMOTHY,34,too_narrow,manual_review,0
+TITHES,21,needs_review,rule4_needs_review,
+TOWER,20,needs_review,rule4_needs_review,
+TREASURE-HOUSES,22,too_narrow,manual_review,0
+TROUBLE,21,needs_review,rule4_needs_review,
+TRUMPET,45,needs_review,rule4_needs_review,
+TYPES,58,too_narrow,manual_review,0
+UNSELFISHNESS,29,needs_review,rule4_needs_review,
+VANITY,72,needs_review,rule4_needs_review,
+WAITING,57,needs_review,rule4_needs_review,
+WALKING,23,too_narrow,manual_review,0
+WAR,189,needs_review,rule4_needs_review,
+WATCHFULNESS,31,needs_review,rule4_needs_review,
+WEEPING,31,needs_review,rule4_needs_review,
+WICKED (PEOPLE),218,needs_review,rule4_needs_review,
+WIDOW,26,needs_review,rule4_needs_review,
+WIFE,34,needs_review,rule4_needs_review,
+WITNESS,24,needs_review,rule4_needs_review,
+WOMEN,232,needs_review,rule4_needs_review,
+WORDS,27,needs_review,rule4_needs_review,
+WORKS,66,needs_review,rule4_needs_review,
+WORLDLINESS,37,needs_review,rule4_needs_review,
+"ZEAL, RELIGIOUS",131,needs_review,rule4_needs_review,
+ZECHARIAH (ZECHARIAS),27,too_narrow,manual_review,0
