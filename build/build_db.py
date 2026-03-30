@@ -12,7 +12,9 @@ Usage:
 No external packages required — uses only the Python standard library.
 """
 
+import csv
 import os
+import re
 import sqlite3
 import sys
 import tempfile
@@ -411,6 +413,32 @@ CREATE TABLE IF NOT EXISTS app_state (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- ============================================================
+-- NAVE'S TOPICAL BIBLE
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS topics (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    name    TEXT NOT NULL,
+    entry   TEXT NOT NULL,
+    section TEXT NOT NULL,
+    display INTEGER NOT NULL DEFAULT 0  -- 1 = visible chip, 0 = searchable only
+);
+
+CREATE INDEX IF NOT EXISTS idx_topics_name    ON topics(name);
+CREATE INDEX IF NOT EXISTS idx_topics_display ON topics(display);
+
+CREATE TABLE IF NOT EXISTS topic_verses (
+    topic_id INTEGER NOT NULL,
+    verse_id INTEGER NOT NULL,
+    PRIMARY KEY (topic_id, verse_id),
+    FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE,
+    FOREIGN KEY (verse_id) REFERENCES verses(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_topic_verses_topic ON topic_verses(topic_id);
+CREATE INDEX IF NOT EXISTS idx_topic_verses_verse ON topic_verses(verse_id);
 """
 
 
@@ -548,6 +576,198 @@ def verify(conn, expected_verse_count):
 
 
 # ---------------------------------------------------------------------------
+# Phase 2: Nave's Topical Bible
+# ---------------------------------------------------------------------------
+
+NAVE_ABBREVS = {
+    'GEN':  1, 'EXO':  2, 'LEV':  3, 'NUM':  4, 'DEU':  5,
+    'JOS':  6, 'JDG':  7, 'RUT':  8, '1SA':  9, '2SA': 10,
+    '1KI': 11, '2KI': 12, '1CH': 13, '2CH': 14, 'EZR': 15,
+    'NEH': 16, 'EST': 17, 'JOB': 18, 'PSA': 19, 'PRO': 20,
+    'ECC': 21, 'SON': 22, 'SNG': 22, 'ISA': 23, 'JER': 24,
+    'LAM': 25, 'EZE': 26, 'EZK': 26, 'DAN': 27, 'HOS': 28,
+    'JOE': 29, 'JOL': 29, 'AMO': 30, 'OBA': 31, 'JON': 32,
+    'MIC': 33, 'NAH': 34, 'NAM': 34, 'HAB': 35, 'ZEP': 36,
+    'HAG': 37, 'ZEC': 38, 'MAL': 39,
+    'MAT': 40, 'MAR': 41, 'MRK': 41, 'LUK': 42, 'JOH': 43,
+    'JHN': 43, 'ACT': 44, 'ROM': 45, '1CO': 46, '2CO': 47,
+    'GAL': 48, 'EPH': 49, 'PHP': 50, 'PHI': 50, 'COL': 51,
+    '1TH': 52, '2TH': 53, '1TI': 54, '2TI': 55, 'TIT': 56,
+    'PHM': 57, 'HEB': 58, 'JAS': 59, '1PE': 60, '2PE': 61,
+    '1JO': 62, '1JN': 62, '1JHN': 62,
+    '2JO': 63, '2JN': 63,
+    '3JO': 64, '3JN': 64,
+    'JUD': 65, 'REV': 66,
+}
+
+_ANCHOR_RE = re.compile(
+    r'\b([1-3]?[A-Z]{2,4})(?![A-Za-z])\s+(\d+)(?::([\d,\-]+))?'
+)
+_BARE_RE = re.compile(r'(?<![:\d])(\d+):([\d,\-]+)')
+
+
+def _expand_spec(chapter, spec):
+    pairs = []
+    spec = spec.strip('.,;) ')
+    for part in spec.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if '-' in part:
+            halves = part.split('-', 1)
+            try:
+                start, end = int(halves[0]), int(halves[1])
+                for v in range(start, end + 1):
+                    pairs.append((chapter, v))
+            except (ValueError, IndexError):
+                pass
+        else:
+            try:
+                pairs.append((chapter, int(part)))
+            except ValueError:
+                pass
+    return pairs
+
+
+def parse_nave_refs(entry_text):
+    triples  = []
+    unparsed = []
+    current_book = None
+
+    for line in entry_text.splitlines():
+        line = line.strip().lstrip('-').strip()
+        if not line or re.match(r'^See\b', line, re.IGNORECASE):
+            continue
+
+        for seg in line.split(';'):
+            seg = seg.strip()
+            if not seg:
+                continue
+
+            anchor = _ANCHOR_RE.search(seg)
+            if anchor:
+                abbrev = anchor.group(1)
+                if abbrev in NAVE_ABBREVS:
+                    current_book = NAVE_ABBREVS[abbrev]
+                    chapter      = int(anchor.group(2))
+                    spec         = anchor.group(3)
+                    if spec:
+                        for ch, v in _expand_spec(chapter, spec):
+                            triples.append((current_book, ch, v))
+            else:
+                bare = _BARE_RE.search(seg)
+                if bare and current_book:
+                    chapter = int(bare.group(1))
+                    spec    = bare.group(2)
+                    for ch, v in _expand_spec(chapter, spec):
+                        triples.append((current_book, ch, v))
+                elif re.search(r'\d+:\d+', seg):
+                    unparsed.append(seg)
+
+    return triples, unparsed
+
+
+def _nave_display(name, ref_count, keywords, hitchcock):
+    key = name.lower()
+    if key in keywords:
+        return 1
+    if key in hitchcock:
+        return 0
+    if ref_count < 3 or ref_count > 300:
+        return 0
+    return 0
+
+
+def load_nave_sources(sources_dir):
+    kw_path = os.path.join(sources_dir, 'theological_keywords.txt')
+    with open(kw_path, encoding='utf-8') as f:
+        keywords = {line.strip().lower() for line in f if line.strip()}
+
+    hitch_path = os.path.join(sources_dir, 'HitchcocksBibleNamesDictionary.csv')
+    hitchcock = set()
+    with open(hitch_path, newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            clean = {k.lstrip('\ufeff'): v for k, v in row.items()}
+            hitchcock.add(clean['Name'].strip().lower())
+
+    return keywords, hitchcock
+
+
+def insert_naves(conn, script_dir):
+    print("Loading Nave's sources...")
+    sources_dir = os.path.join(script_dir, 'sources')
+    keywords, hitchcock = load_nave_sources(sources_dir)
+    print(f'  Keywords: {len(keywords)},  Hitchcock names: {len(hitchcock)}')
+
+    valid_ids = set(
+        row[0] for row in conn.execute('SELECT id FROM verses').fetchall()
+    )
+
+    nave_path = os.path.join(sources_dir, 'NavesTopicalDictionary.csv')
+    nave_rows = []
+    with open(nave_path, newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            nave_rows.append({k.lstrip('\ufeff'): v for k, v in row.items()})
+    print(f'  Nave topics: {len(nave_rows):,}')
+
+    print("Inserting topics and verse mappings...")
+    topic_count   = 0
+    visible_count = 0
+    mapping_count = 0
+    all_unparsed  = []
+
+    for row in nave_rows:
+        name    = row['subject'].strip()
+        entry   = row['entry'].strip()
+        section = row['section'].strip()
+
+        triples, unparsed = parse_nave_refs(entry)
+        all_unparsed.extend(unparsed)
+
+        verse_ids = set()
+        for book_id, chapter, verse in triples:
+            vid = book_id * 1_000_000 + chapter * 1_000 + verse
+            if vid in valid_ids:
+                verse_ids.add(vid)
+
+        ref_count = len(verse_ids)
+        display   = _nave_display(name, ref_count, keywords, hitchcock)
+
+        conn.execute(
+            'INSERT INTO topics (name, entry, section, display) VALUES (?, ?, ?, ?)',
+            (name, entry, section, display)
+        )
+        topic_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
+
+        if verse_ids:
+            conn.executemany(
+                'INSERT OR IGNORE INTO topic_verses (topic_id, verse_id) VALUES (?, ?)',
+                [(topic_id, vid) for vid in verse_ids]
+            )
+
+        topic_count   += 1
+        visible_count += display
+        mapping_count += len(verse_ids)
+
+    print(f"  Topics inserted:     {topic_count:,}")
+    print(f"  Visible (display=1): {visible_count:,}")
+    print(f"  Searchable-only:     {topic_count - visible_count:,}")
+    print(f"  Verse mappings:      {mapping_count:,}")
+
+    unique_unparsed = sorted(set(all_unparsed))
+    if unique_unparsed:
+        print(f"  Unparsed segments:   {len(unique_unparsed):,} unique")
+        for s in unique_unparsed[:10]:
+            print(f"    {s!r}")
+        if len(unique_unparsed) > 10:
+            print(f"    ... and {len(unique_unparsed) - 10} more")
+
+    return topic_count, visible_count, mapping_count
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -576,6 +796,9 @@ def main():
         conn.commit()
 
         build_fts(conn)
+        conn.commit()
+
+        insert_naves(conn, SCRIPT_DIR)
         conn.commit()
 
         passed = verify(conn, verse_count)
