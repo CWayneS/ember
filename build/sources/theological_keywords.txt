@@ -1,11 +1,11 @@
 abiding
 accountability
 adoption
+adultery
 advent
-affliction
+afflictions and adversities
 almighty
 altar
-angel
 anointing
 apostasy
 ark
@@ -16,7 +16,7 @@ atonement
 attributes of god
 authority
 awe
-backsliding
+backsliders
 baptism
 blessing
 blood
@@ -58,15 +58,15 @@ death
 death to self
 dedication
 deliverance
-demon
-depravity
+demons
+depravity of man
 devil
 devotion
 discernment
 discipleship
 discipline
 dominion
-doubt
+doubting
 earnestness
 elder
 election
@@ -81,16 +81,18 @@ exodus
 expiation
 faith
 faithfulness
-fall
+fall of man
+falsehood
 fasting
 fear of god
+feasts
 fellowship
 fire
 first fruits
 flesh
 forgiveness
 foundation
-free will
+free-will
 freedom
 fruit of the spirit
 garden
@@ -102,7 +104,7 @@ glory
 godliness
 goodness
 gospel
-grace
+grace of god
 gratitude
 great commission
 guilt
@@ -112,10 +114,10 @@ healing
 heart
 heaven
 hell
-hermeneutics
 high priest
 holiness
 holy of holies
+holy spirit
 honesty
 hope
 humiliation
@@ -139,13 +141,13 @@ intercession
 israel
 joy
 judgment
-judgment seat
+judgment-seat
 justice
 justification
-justification by faith
 kindness
-kingdom
+king
 kingdom of god
+kingdom of heaven
 lamb
 last judgment
 law
@@ -161,15 +163,16 @@ love of god
 loyalty
 majesty
 manna
+marriage
 mediation
 meditation
 meekness
 mercy
 messiah
 millennium
-mind
 ministry
-mission
+miracles
+missions
 mystery
 new birth
 new covenant
@@ -179,7 +182,7 @@ new heaven
 new life
 oath
 obedience
-offering
+offerings
 oil
 omnipotence
 omnipresence
@@ -194,21 +197,25 @@ patience
 peace
 penitence
 pentecost
+persecution
 perseverance
-perseverance of saints
 pilgrimage
+poor
 power
 praise
 prayer
 preaching
 predestination
+priest
 priesthood
 principalities
-promise
 promised land
+promises
 prophecy
+prophets
 propitiation
 providence
+punishment
 purity
 ransom
 rapture
@@ -226,21 +233,22 @@ resurrection
 revelation
 reverence
 reward
+righteous
 righteousness
 rock
 sabbath
 sacrament
-sacrifice
+sacrifices
 salvation
 sanctification
 sanctity of life
 satan
-scripture
+scriptures
 sealing
 second coming
 seed
 self-control
-seraphim
+servant
 servanthood
 service
 shepherd
@@ -248,7 +256,6 @@ sign
 sin
 soul
 sovereignty
-spiritual gifts
 spiritual warfare
 steadfastness
 stewardship
@@ -260,7 +267,9 @@ sword
 tabernacle
 temperance
 temple
+temptation
 testimony
+thankfulness
 tithing
 transcendence
 transgression
@@ -270,7 +279,8 @@ truth
 unbelief
 vine
 virgin birth
-vow
+vision
+vows
 water
 wickedness
 wilderness
