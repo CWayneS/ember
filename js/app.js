@@ -4,8 +4,7 @@ import { initDatabase, getState } from './db.js';
 
 import { initReader, navigateTo } from './reader.js';
 
-// Phase: selection
-// import { initSelection } from './selection.js';
+import { initSelection } from './selection.js';
 
 // Phase: notes
 // import { initNotes } from './notes.js';
@@ -24,7 +23,7 @@ async function init() {
         await initDatabase();
 
         initReader();
-        // initSelection();
+        initSelection();
         // initNotes();
         // initTags();
         // initPanels();
