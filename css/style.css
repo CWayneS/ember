@@ -1080,56 +1080,87 @@ textarea {
     padding: 12px;
 }
 
-.result-group {
-    margin-bottom: 16px;
+.search-result-section {
+    margin-bottom: 12px;
 }
 
-.result-group h4 {
+.search-result-heading {
     font-family: var(--font-ui);
     font-size: var(--size-xs);
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 6px;
+    padding: 4px 8px;
+    margin-bottom: 4px;
 }
 
-.result-item {
-    display: block;
-    width: 100%;
-    text-align: left;
+.search-result-item {
     padding: 8px 10px;
     border-radius: 4px;
-    font-size: var(--size-small);
     cursor: pointer;
 }
 
-.result-item:hover {
+.search-result-item:hover {
     background: var(--bg-hover);
 }
 
-.result-ref {
+.search-result-ref {
+    font-family: var(--font-ui);
+    font-size: var(--size-xs);
     font-weight: 700;
     color: var(--accent);
-    margin-right: 8px;
+    margin-bottom: 2px;
 }
 
-.result-preview {
+.search-result-text {
+    font-size: var(--size-small);
     color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.result-tags {
-    font-size: var(--size-xs);
-    color: var(--text-muted);
-    display: block;
-    margin-top: 2px;
+.search-result-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
 }
 
-.no-results {
+.search-no-results {
     text-align: center;
     color: var(--text-muted);
     font-size: var(--size-small);
     padding: 24px;
+}
+
+/* Tag autocomplete suggestions */
+.note-block-tag-suggestions:not(.hidden) {
+    position: absolute;
+    z-index: 100;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-medium);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    min-width: 140px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.note-block-tags {
+    position: relative;
+}
+
+.tag-suggestion-item {
+    padding: 6px 10px;
+    font-size: var(--size-small);
+    cursor: pointer;
+}
+
+.tag-suggestion-item:hover,
+.tag-suggestion-item.active {
+    background: var(--bg-hover);
 }
 
 /* ============================================================

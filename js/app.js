@@ -8,13 +8,9 @@ import { initSelection } from './selection.js';
 
 import { initNotes } from './notes.js';
 
-// Phase: tags
-// import { initTags } from './tags.js';
-
-import { initPanels } from './panels.js';
-
-// Phase: search
-// import { initSearch } from './search.js';
+import { initTags }   from './tags.js';
+import { initPanels }  from './panels.js';
+import { initSearch }  from './search.js';
 
 async function init() {
     try {
@@ -23,9 +19,9 @@ async function init() {
         initReader();
         initSelection();
         initNotes();
-        // initTags();
+        initTags();
         initPanels();
-        // initSearch();
+        initSearch();
 
         // Restore last reading position, default to Genesis 1
         const lastBook    = parseInt(getState('currentBook'))    || 1;
