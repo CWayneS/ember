@@ -66,12 +66,32 @@ function createUserTables() {
         CREATE INDEX IF NOT EXISTS idx_notes_study  ON notes(study_id);
     `);
 
+    // If the stored DB has a notes_fts table built with fts5 (which sql.js WASM
+    // does not support), drop it so we can recreate it as fts4 below.
+    try {
+        const row = db.exec(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='notes_fts'"
+        );
+        if ((row[0]?.values[0]?.[0] || '').toLowerCase().includes('fts5')) {
+            db.run('DROP TABLE notes_fts');
+        }
+    } catch (_) {}
+
     db.run(`
         CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts4(
             content="notes",
             body
         );
     `);
+
+    // Repopulate fts index after a migration (fts4 table existed but was empty)
+    try {
+        const ftsCount  = db.exec('SELECT COUNT(*) FROM notes_fts')[0].values[0][0];
+        const noteCount = db.exec('SELECT COUNT(*) FROM notes')[0].values[0][0];
+        if (ftsCount === 0 && noteCount > 0) {
+            db.run('INSERT INTO notes_fts(rowid, body) SELECT id, body FROM notes');
+        }
+    } catch (_) {}
 
     db.run(`
         CREATE TABLE IF NOT EXISTS note_anchors (
