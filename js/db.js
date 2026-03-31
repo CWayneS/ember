@@ -67,13 +67,16 @@ function createUserTables() {
     `);
 
     // If the stored DB has a notes_fts table built with fts5 (which sql.js WASM
-    // does not support), drop it so we can recreate it as fts4 below.
+    // does not support), migrate it to fts4. DROP TABLE requires the fts5 module
+    // (for xDestroy), so we bypass it by writing sqlite_master directly.
     try {
         const row = db.exec(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='notes_fts'"
         );
         if ((row[0]?.values[0]?.[0] || '').toLowerCase().includes('fts5')) {
-            db.run('DROP TABLE notes_fts');
+            db.run('PRAGMA writable_schema=ON');
+            db.run("DELETE FROM sqlite_master WHERE name='notes_fts' OR name LIKE 'notes_fts_%'");
+            db.run('PRAGMA writable_schema=OFF');
         }
     } catch (_) {}
 
