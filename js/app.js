@@ -2,8 +2,7 @@
 
 import { initDatabase, getState } from './db.js';
 
-// Phase: reader
-// import { initReader, navigateTo } from './reader.js';
+import { initReader, navigateTo } from './reader.js';
 
 // Phase: selection
 // import { initSelection } from './selection.js';
@@ -24,7 +23,7 @@ async function init() {
     try {
         await initDatabase();
 
-        // initReader();
+        initReader();
         // initSelection();
         // initNotes();
         // initTags();
@@ -35,7 +34,7 @@ async function init() {
         const lastBook    = parseInt(getState('currentBook'))    || 1;
         const lastChapter = parseInt(getState('currentChapter')) || 1;
 
-        // navigateTo(lastBook, lastChapter);
+        navigateTo(lastBook, lastChapter);
 
         // Hide loading screen
         document.getElementById('loading').classList.add('hidden');
