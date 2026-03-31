@@ -66,28 +66,30 @@ function createUserTables() {
         CREATE INDEX IF NOT EXISTS idx_notes_study  ON notes(study_id);
     `);
 
-    // If the stored DB has a notes_fts table built with fts5 (which sql.js WASM
-    // does not support), migrate it to fts4. DROP TABLE requires the fts5 module
-    // (for xDestroy), so we bypass it by writing sqlite_master directly.
-    try {
-        const row = db.exec(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='notes_fts'"
-        );
-        if ((row[0]?.values[0]?.[0] || '').toLowerCase().includes('fts5')) {
-            db.run('PRAGMA writable_schema=ON');
-            db.run("DELETE FROM sqlite_master WHERE name='notes_fts' OR name LIKE 'notes_fts_%'");
-            db.run('PRAGMA writable_schema=OFF');
-        }
-    } catch (_) {}
+    // Ensure notes_fts exists as fts4. If a previous version stored it as fts5
+    // (which sql.js WASM does not support), migrate it.
+    // Strategy: read the current schema, then create/recreate as needed.
+    const noteFtsRow = db.exec(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='notes_fts'"
+    );
+    const noteFtsSql = (noteFtsRow[0]?.values[0]?.[0] || '').toLowerCase();
 
-    db.run(`
-        CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts4(
-            content="notes",
-            body
-        );
-    `);
+    if (noteFtsSql.includes('fts5')) {
+        // DROP TABLE requires the fts5 module (xDestroy), which isn't available.
+        // Remove schema entries directly instead.
+        db.run('PRAGMA writable_schema=ON');
+        db.run("DELETE FROM sqlite_master WHERE name='notes_fts' OR name LIKE 'notes_fts_%'");
+        db.run('PRAGMA writable_schema=OFF');
+        // After writing sqlite_master directly the in-memory schema cache still
+        // reflects the old state — CREATE without IF NOT EXISTS forces it to run.
+        db.run(`CREATE VIRTUAL TABLE notes_fts USING fts4(content="notes", body)`);
+    } else if (!noteFtsSql) {
+        // First run — table doesn't exist yet.
+        db.run(`CREATE VIRTUAL TABLE notes_fts USING fts4(content="notes", body)`);
+    }
+    // else: already fts4 — nothing to do.
 
-    // Repopulate fts index after a migration (fts4 table existed but was empty)
+    // Repopulate fts index if it is empty but notes exist (post-migration).
     try {
         const ftsCount  = db.exec('SELECT COUNT(*) FROM notes_fts')[0].values[0][0];
         const noteCount = db.exec('SELECT COUNT(*) FROM notes')[0].values[0][0];
