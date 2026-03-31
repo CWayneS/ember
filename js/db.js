@@ -505,6 +505,19 @@ export function getStudies() {
     })) || [];
 }
 
+export function deleteStudy(studyId) {
+    // CASCADE on notes FK handles notes deletion, but notes_fts is a virtual
+    // table without CASCADE — clean it up manually first.
+    const noteIds = db.exec(
+        'SELECT id FROM notes WHERE study_id = ?', [studyId]
+    )[0]?.values.map(r => r[0]) || [];
+    for (const id of noteIds) {
+        db.run('DELETE FROM notes_fts WHERE rowid = ?', [id]);
+    }
+    db.run('DELETE FROM studies WHERE id = ?', [studyId]);
+    saveToStorage(db.export());
+}
+
 export function getNotesForStudy(studyId) {
     const stmt = db.prepare(
         `SELECT n.id, n.body, n.created_at, n.modified_at

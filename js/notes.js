@@ -3,11 +3,11 @@
 import {
     saveNote, updateNote, deleteNote,
     getNotesForStudy, getNotesForVerse, getStudies,
-    parseVerseId, getBooks, createStudy,
+    parseVerseId, getBooks, createStudy, deleteStudy,
     addNoteTag, removeNoteTag
 } from './db.js';
 import { navigateTo, getCurrentLocation }          from './reader.js';
-import { openStudy, getActiveStudyId, switchReferenceTab } from './panels.js';
+import { openStudy, closeStudy, getActiveStudyId, switchReferenceTab } from './panels.js';
 
 let currentVerseIds = [];       // verses currently selected in the reader
 let _books          = null;     // lazy cache — avoids re-querying 66 books per render
@@ -54,14 +54,14 @@ function renderStudyDocument(studyId) {
         container.appendChild(empty);
     } else {
         for (const note of notes) {
-            container.appendChild(buildNoteBlock(note));
+            container.appendChild(buildNoteBlock(note, studyId));
         }
     }
 
     container.appendChild(buildAddNoteButton(studyId));
 }
 
-function buildNoteBlock(note) {
+function buildNoteBlock(note, studyId) {
     const block = document.createElement('div');
     block.className      = 'note-block';
     block.dataset.noteId = note.id;
@@ -88,7 +88,7 @@ function buildNoteBlock(note) {
     footer.className = 'note-block-footer';
 
     footer.appendChild(buildTagsArea(note));
-    footer.appendChild(buildDeleteButton(note.id, block));
+    footer.appendChild(buildDeleteButton(note.id, studyId));
 
     block.appendChild(footer);
     return block;
@@ -143,7 +143,7 @@ function makeTagChip(name, noteId, tagsContainer) {
     return chip;
 }
 
-function buildDeleteButton(noteId, block) {
+function buildDeleteButton(noteId, studyId) {
     const btn     = document.createElement('button');
     btn.className = 'note-block-delete';
     btn.textContent = 'Delete';
@@ -152,8 +152,8 @@ function buildDeleteButton(noteId, block) {
         clearTimeout(saveTimers.get(noteId));
         saveTimers.delete(noteId);
         deleteNote(noteId);
-        block.remove();
-        refreshReaderDots();
+        renderStudyDocument(studyId);
+        refreshAfterWrite();
     });
     return btn;
 }
@@ -253,6 +253,10 @@ function renderAllStudies() {
         const item = document.createElement('div');
         item.className = 'study-list-item';
 
+        const info     = document.createElement('div');
+        info.className = 'study-list-info';
+        info.addEventListener('click', () => openStudy(study.id, study.name));
+
         const name     = document.createElement('div');
         name.className = 'study-list-name';
         name.textContent = study.name;
@@ -263,9 +267,26 @@ function renderAllStudies() {
         const modified = new Date(study.modified_at).toLocaleDateString();
         meta.textContent = `${count} note${count !== 1 ? 's' : ''} · ${modified}`;
 
-        item.appendChild(name);
-        item.appendChild(meta);
-        item.addEventListener('click', () => openStudy(study.id, study.name));
+        info.appendChild(name);
+        info.appendChild(meta);
+
+        const delBtn     = document.createElement('button');
+        delBtn.className = 'study-list-delete';
+        delBtn.textContent = '✕';
+        delBtn.setAttribute('title', 'Delete study');
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const label = study.note_count > 0
+                ? `Delete "${study.name}" and its ${study.note_count} note${study.note_count !== 1 ? 's' : ''}?`
+                : `Delete "${study.name}"?`;
+            if (!confirm(label)) return;
+            closeStudy(study.id);
+            deleteStudy(study.id);
+            renderAllStudies();
+        });
+
+        item.appendChild(info);
+        item.appendChild(delBtn);
         container.appendChild(item);
     }
 }
@@ -281,32 +302,23 @@ function addNote(studyId) {
     }] : [];
 
     const noteId = saveNote('', anchors, [], studyId);
-    const notes  = getNotesForStudy(studyId);
-    const note   = notes.find(n => n.id === noteId);
-    if (!note) return;
 
-    const container = document.getElementById('notes-active-view');
+    // Re-render the whole document — guarantees the new block is visible
+    renderStudyDocument(studyId);
 
-    // Remove empty-state placeholder if present
-    container.querySelector('.notes-empty')?.remove();
+    // Find the new block and focus it
+    const block = document.querySelector(`[data-note-id="${noteId}"]`);
+    block?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    block?.querySelector('.note-block-body')?.focus();
 
-    // Insert block before the Add Note button
-    const addBtn = container.querySelector('.add-note-btn');
-    const block  = buildNoteBlock(note);
-    container.insertBefore(block, addBtn);
-
-    // Scroll into view and focus
-    block.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    block.querySelector('.note-block-body').focus();
-
-    refreshReaderDots();
+    refreshAfterWrite();
 }
 
 function scheduleSave(noteId, bodyEl) {
     clearTimeout(saveTimers.get(noteId));
     saveTimers.set(noteId, setTimeout(() => {
         updateNote(noteId, bodyEl.textContent.trim());
-        refreshReaderDots();
+        refreshAfterWrite();
     }, 800));
 }
 
@@ -354,9 +366,13 @@ function autoCreateStudy(verseId) {
 // Helpers
 // ============================================================
 
-function refreshReaderDots() {
+// Called after any note write — refreshes reader note-dots and info tab
+function refreshAfterWrite() {
     const loc = getCurrentLocation();
     navigateTo(loc.book, loc.chapter);
+    if (currentVerseIds.length > 0) {
+        renderInfoTab(currentVerseIds[0]);
+    }
 }
 
 function formatAnchor(anchor) {

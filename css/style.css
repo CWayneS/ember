@@ -936,11 +936,12 @@ textarea {
 
 /* All Studies list */
 .study-list-item {
-    padding: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     border: 1px solid var(--border-light);
     border-radius: 6px;
     margin-bottom: 8px;
-    cursor: pointer;
     transition: background 0.1s;
 }
 
@@ -949,17 +950,44 @@ textarea {
     border-color: var(--border-medium);
 }
 
+.study-list-info {
+    flex: 1;
+    padding: 12px;
+    cursor: pointer;
+    min-width: 0;
+}
+
 .study-list-name {
     font-family: var(--font-ui);
     font-size: var(--size-small);
     font-weight: 700;
     margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .study-list-meta {
     font-family: var(--font-ui);
     font-size: var(--size-xs);
     color: var(--text-muted);
+}
+
+.study-list-delete {
+    flex-shrink: 0;
+    padding: 8px 10px;
+    color: var(--text-muted);
+    font-size: var(--size-small);
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.study-list-item:hover .study-list-delete {
+    opacity: 1;
+}
+
+.study-list-delete:hover {
+    color: var(--danger, #c0392b);
 }
 
 /* ============================================================
