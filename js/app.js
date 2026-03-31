@@ -12,8 +12,7 @@ import { initSelection } from './selection.js';
 // Phase: tags
 // import { initTags } from './tags.js';
 
-// Phase: panels
-// import { initPanels } from './panels.js';
+import { initPanels } from './panels.js';
 
 // Phase: search
 // import { initSearch } from './search.js';
@@ -26,7 +25,7 @@ async function init() {
         initSelection();
         // initNotes();
         // initTags();
-        // initPanels();
+        initPanels();
         // initSearch();
 
         // Restore last reading position, default to Genesis 1

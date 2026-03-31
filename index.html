@@ -23,7 +23,11 @@
 
             <section id="notes-panel">
                 <header class="panel-header">
-                    <button id="study-name-btn" aria-label="Toggle all studies view">My Study</button>
+                    <nav id="notes-tabs">
+                        <button class="notes-tab active" role="tab" aria-selected="true" data-study-id="all">All Studies</button>
+                        <!-- dynamic study tabs rendered by panels.js -->
+                        <button id="notes-tab-add" aria-label="New study" title="New study">+</button>
+                    </nav>
                     <div class="panel-header-actions">
                         <button class="panel-help-btn" aria-label="Notes help">?</button>
                         <button class="panel-settings-btn" aria-label="Notes settings">⚙</button>
