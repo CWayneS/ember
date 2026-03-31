@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ember Bible Study</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+
+    <header id="global-header">
+        <div id="search-bar">
+            <input type="text" id="search-input" placeholder="Search Scripture and notes…" autocomplete="off" />
+        </div>
+    </header>
+
+    <div id="template-bar" class="hidden"></div>
+
+    <div id="workspace">
+
+        <div id="study-panels">
+
+            <section id="notes-panel">
+                <header class="panel-header">
+                    <button id="study-name-btn" aria-label="Toggle all studies view">My Study</button>
+                    <div class="panel-header-actions">
+                        <button class="panel-help-btn" aria-label="Notes help">?</button>
+                        <button class="panel-settings-btn" aria-label="Notes settings">⚙</button>
+                    </div>
+                </header>
+                <div id="notes-active-view"></div>
+                <div id="notes-all-studies-view" class="hidden"></div>
+            </section>
+
+            <div id="panel-resize-handle" aria-hidden="true"></div>
+
+            <section id="reference-panel">
+                <header class="panel-header">
+                    <nav id="reference-tabs" role="tablist">
+                        <button class="tab-btn active" role="tab" aria-selected="true" data-tab="info">Info</button>
+                        <button class="tab-btn" role="tab" aria-selected="false" data-tab="tags">Tags</button>
+                        <button class="tab-btn" role="tab" aria-selected="false" data-tab="related">Related</button>
+                        <button class="tab-btn" role="tab" aria-selected="false" data-tab="language">Language</button>
+                    </nav>
+                    <div class="panel-header-actions">
+                        <button class="panel-help-btn" aria-label="Reference help">?</button>
+                        <button class="panel-settings-btn" aria-label="Reference settings">⚙</button>
+                    </div>
+                </header>
+                <div id="info-tab" class="tab-content active" role="tabpanel"></div>
+                <div id="tags-tab" class="tab-content hidden" role="tabpanel"></div>
+                <div id="related-tab" class="tab-content hidden" role="tabpanel"></div>
+                <div id="language-tab" class="tab-content hidden" role="tabpanel"></div>
+            </section>
+
+        </div>
+
+        <div id="workspace-resize-handle" aria-hidden="true"></div>
+
+        <section id="reader">
+            <header id="reader-header">
+                <button id="book-selector-btn" aria-label="Select book and chapter"></button>
+                <span id="current-location"></span>
+                <button id="prev-chapter" aria-label="Previous chapter">‹</button>
+                <button id="next-chapter" aria-label="Next chapter">›</button>
+                <div class="reader-header-spacer"></div>
+                <span id="translation-label">KJV</span>
+                <button id="bookmark-btn" aria-label="Bookmark this chapter">&#9673;</button>
+                <button id="reader-help-btn" aria-label="Reader help">?</button>
+                <button id="reader-settings-btn" aria-label="Reader settings">⚙</button>
+            </header>
+            <div id="reader-content">
+                <div id="scripture-text"></div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Book/chapter selector overlay -->
+    <div id="book-overlay" class="hidden">
+        <div id="book-list"></div>
+        <div id="chapter-grid" class="hidden"></div>
+    </div>
+
+    <!-- Search results overlay -->
+    <div id="search-results" class="hidden"></div>
+
+    <!-- PWA install prompt -->
+    <div id="install-overlay" class="hidden">
+        <div id="install-prompt">
+            <p>Install Ember for the full offline experience.</p>
+            <button id="install-accept-btn">Install</button>
+            <button id="install-dismiss-btn">Not now</button>
+        </div>
+    </div>
+
+    <!-- Loading screen -->
+    <div id="loading">Loading Scripture…</div>
+
+    <script src="js/vendor/sql-wasm.js"></script>
+    <script type="module" src="js/app.js"></script>
+
+</body>
+</html>
