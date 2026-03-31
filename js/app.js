@@ -21,29 +21,34 @@ import { initDatabase, getState } from './db.js';
 // import { initSearch } from './search.js';
 
 async function init() {
-    await initDatabase();
+    try {
+        await initDatabase();
 
-    // initReader();
-    // initSelection();
-    // initNotes();
-    // initTags();
-    // initPanels();
-    // initSearch();
+        // initReader();
+        // initSelection();
+        // initNotes();
+        // initTags();
+        // initPanels();
+        // initSearch();
 
-    // Restore last reading position, default to Genesis 1
-    const lastBook    = parseInt(getState('currentBook'))    || 1;
-    const lastChapter = parseInt(getState('currentChapter')) || 1;
+        // Restore last reading position, default to Genesis 1
+        const lastBook    = parseInt(getState('currentBook'))    || 1;
+        const lastChapter = parseInt(getState('currentChapter')) || 1;
 
-    // navigateTo(lastBook, lastChapter);
+        // navigateTo(lastBook, lastChapter);
 
-    // Hide loading screen
-    document.getElementById('loading').classList.add('hidden');
+        // Hide loading screen
+        document.getElementById('loading').classList.add('hidden');
 
-    // Register service worker (sw.js created in a later phase)
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js').catch(() => {
-            // sw.js not yet present — safe to ignore during development
-        });
+        // Register service worker (sw.js created in a later phase)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').catch(() => {
+                // sw.js not yet present — safe to ignore during development
+            });
+        }
+    } catch (err) {
+        document.getElementById('loading').textContent = `Failed to load: ${err.message}`;
+        console.error('Init failed:', err);
     }
 }
 
