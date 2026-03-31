@@ -2444,57 +2444,95 @@ These builds are additive. Nothing in Build 2 or 3 requires reworking Build 1 co
 
 ---
 
-## Design Revision: Notes Module
+## Decisions & Deviations
 
-The notes.js spec above (textarea editor, Save/Cancel buttons, panel-based display) was
-superseded during Build 1 implementation. The revised design is documented here.
+Changes from the original spec made during Build 1, and planned future work discovered
+during implementation.
 
-### Core principle: study as document
+---
+
+### Notes Module (supersedes original textarea spec)
+
+**Original plan**: textarea editor with Save/Cancel buttons, panel-based display.
+**Actual implementation**: document-style view with inline contenteditable note blocks.
+
+#### Core principle: study as document
 
 Every note belongs to a study — there are no freeform notes. A study works like a simple
 text document. Notes are displayed as inline editable blocks stacked vertically within the
 study document.
 
-### Note lifecycle
+#### Note lifecycle
 
 1. Open or create a study via the tab bar (+ button creates and opens immediately)
 2. Optionally select a verse in the reader (adds a verse anchor to the next note)
 3. Click "+ Add Note" at the bottom of the study document
 4. Type directly in the note block — contenteditable div, no separate overlay
 5. Autosave fires 800ms after the last keystroke (no Save button)
-6. Tags entered inline per note — type and press Enter to add a chip
-7. Delete button on each card; drag-to-reorder is a future feature
+6. Tags entered inline per note — type and press Enter to add a chip; click chip to remove
+   (chip turns red with strikethrough on hover to signal destructive action)
+7. Delete button on each note block
+8. Drag-to-reorder: `position REAL` column exists on notes (NULL until implemented)
 
-### Notes panel views
+#### Notes panel views
 
 - **Active study view** (`#notes-active-view`): the study document with note blocks
-- **All Studies view** (`#notes-all-studies-view`): list of all studies; clicking one opens
-  it in a new tab via `openStudy(id, name)` from panels.js
+- **All Studies view** (`#notes-all-studies-view`): list of all studies with note count
+  and last-modified date; clicking the row opens in a new tab; ✕ button (visible on hover)
+  deletes the study and all its notes after confirmation
 
-### Auto-create study
+#### Auto-create study
 
 When `showNoteEditor(verseIds)` is called with no study active (e.g. navigating from search
 results), a default study is auto-created named from the current passage and date:
 `"Genesis 1 — March 30"`. The new study is opened in a tab immediately.
 
-### notes.js exports
+#### notes.js exports
 
 - `initNotes()` — register listeners for selection-changed and study-changed events
 - `showNoteEditor(verseIds, options)` — ensure a study is open, scroll to or create a note
   for the given verses; used by search.js for navigation
 
-### tags.js interface (established by notes.js)
+#### tags.js interface
 
-Each note block contains a tag input. tags.js wires autocomplete by implementing:
+Each note block contains a tag input. `setupTagInput(inputEl, noteId, chipsEl, suggestionsEl)`
+is called via dynamic import after each block is built. Falls back gracefully if tags.js
+is unavailable. Tags are persisted via `addNoteTag` / `removeNoteTag` in db.js.
 
-    setupTagInput(inputEl, noteId, chipsEl)
-
-notes.js calls this after building each block. Until tags.js is live, Enter-to-add
-chips work without autocomplete; tags are persisted via `addNoteTag(noteId, tagName)`.
-
-### db.js additions required
+#### db.js additions
 
 - `addNoteTag(noteId, tagName)` — create tag if needed, assign to note, save
-- `removeNoteTag(noteId, tagName)` — remove tag assignment from note, save
-- `ALTER TABLE notes ADD COLUMN position REAL` — run idempotently at init for
-  future drag-to-reorder support (column is NULL until ordering is implemented)
+- `removeNoteTag(noteId, tagName)` — remove tag assignment, save
+- `deleteStudy(studyId)` — manually clears notes_fts (no CASCADE on virtual tables),
+  then deletes study row (FK CASCADE handles notes, anchors, tag_assignments)
+- `ALTER TABLE notes ADD COLUMN position REAL` — idempotent at init; NULL until ordering
+
+---
+
+### FTS4 instead of FTS5
+
+**Reason**: sql.js WASM build does not include the fts5 extension. fts4 is sufficient for
+31k verses. Path to upgrade: swap the WASM binary and change two `fts4` → `fts5` in
+`db.js` and `build/build_db.py`.
+
+---
+
+### Studies tab bar (browser-tab model)
+
+**Original plan**: binary toggle "All Studies / My Study".
+**Actual implementation**: browser-tab model. "All Studies" is a permanent leftmost tab.
+Each opened study gets its own closeable tab. Tabs shrink to fit with ellipsis on the name.
+New studies created via "+" button open immediately in a new tab.
+
+---
+
+### Planned for Build 2 (discovered during Build 1)
+
+- **Study rename**: double-click the study name in the tab or the All Studies list to edit
+  it inline. Currently studies can only be named at creation (auto-named from passage+date
+  or "Untitled Study"). No rename UI exists in Build 1.
+- **Verse anchor navigation**: clicking a verse reference label on a note block should
+  navigate the reader to that verse. Currently the anchor is display-only text.
+- **Info tab live refresh**: the Info tab (verse notes in the reference panel) currently
+  refreshes when a verse is selected or after a note write. It does not react to note
+  changes made while a different verse is selected in the reader.

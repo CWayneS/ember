@@ -13,6 +13,8 @@ export function initPanels() {
     initWorkspaceResize();
     initPanelResize();
     initSelectionListener();
+    // Ensure DOM state matches JS state and initial views are rendered
+    switchToStudy('all');
 }
 
 // ============================================================

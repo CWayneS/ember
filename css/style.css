@@ -740,7 +740,10 @@ textarea {
 }
 
 .tag-chip.removable:hover {
+    color: var(--danger);
     text-decoration: line-through;
+    text-decoration-color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 #tag-suggestions {
