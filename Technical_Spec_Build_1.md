@@ -695,6 +695,22 @@ function getCurrentTranslation() {
 }
 ```
 
+### Implementation Notes (db.js)
+
+The following deviations and decisions were made during Build 1 implementation:
+
+- **`window.initSqlJs` instead of `import`** — `sql-wasm.js` is loaded as a plain `<script>` tag (not a module), so it exposes `initSqlJs` as a browser global. ES modules must reference it as `window.initSqlJs`.
+
+- **`locateFile` path is `./js/vendor/${file}`** — the spec shows `./vendor/${file}`, but since files are served from the project root, the correct path to the WASM binary is `./js/vendor/sql-wasm.wasm`.
+
+- **`saveNote` accepts an optional `studyId`** — signature is `saveNote(body, anchors, tagNames, studyId = null)`. When a `studyId` is provided, the function also bumps `studies.modified_at`.
+
+- **`updateNote` propagates `modified_at` to parent study** — after updating a note, if it has a `study_id`, the study's `modified_at` is updated to keep the All Studies list sorted correctly.
+
+- **`getCurrentTranslation` is exported** — the spec marks it as a private function, but it is useful to other modules (e.g., reader) so it is exported.
+
+- **`createUserTables` runs on every init** — all `CREATE TABLE IF NOT EXISTS` statements run idempotently at startup. The shipped `core.db` already contains these tables, but this guards against schema drift across versions.
+
 ### Session Lifecycle Queries
 
 These queries support the template bar's session management. They are not wired to UI in Build 1 (templates are Build 3), but the schema must support them.
