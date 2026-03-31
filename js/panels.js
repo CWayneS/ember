@@ -247,16 +247,20 @@ export function togglePanelLayout() {
 }
 
 // ============================================================
-// Selection Listener
+// Selection Listener — switch to Info tab on verse selection
 // ============================================================
 
 function initSelectionListener() {
     document.addEventListener('selection-changed', (e) => {
-        const { verseIds } = e.detail;
-        if (verseIds.length > 0) {
-            console.log('Panels updating for verse', verseIds[0]);
+        if (e.detail.verseIds.length > 0) {
+            switchTab('info');
         }
     });
+}
+
+// Exported so notes.js (and future modules) can switch reference tabs
+export function switchReferenceTab(tabName) {
+    switchTab(tabName);
 }
 
 // ============================================================

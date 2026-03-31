@@ -799,6 +799,208 @@ textarea {
 }
 
 /* ============================================================
+   Note Blocks — inline document-style editing
+   ============================================================ */
+.note-block {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 10px;
+    transition: border-color 0.15s;
+}
+
+.note-block:focus-within {
+    border-color: var(--accent);
+}
+
+.note-block-anchor {
+    font-family: var(--font-ui);
+    font-size: var(--size-xs);
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 6px;
+    user-select: none;
+}
+
+.note-block-body {
+    font-size: var(--size-small);
+    line-height: 1.6;
+    min-height: 40px;
+    outline: none;
+    white-space: pre-wrap;
+}
+
+/* Placeholder when empty and not focused */
+.note-block-body:empty::before {
+    content: attr(data-placeholder);
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+.note-block-footer {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.note-block-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.note-block-tag-input {
+    border: none;
+    background: transparent;
+    font-size: var(--size-xs);
+    padding: 2px 4px;
+    min-width: 70px;
+    color: var(--text-secondary);
+}
+
+.note-block-tag-input:focus {
+    outline: none;
+    border-bottom: 1px solid var(--border-medium);
+}
+
+.note-block-tag-suggestions {
+    position: absolute;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-medium);
+    border-radius: 4px;
+    z-index: 50;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    min-width: 120px;
+}
+
+.note-block-tag-suggestions .suggestion {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 5px 10px;
+    font-size: var(--size-small);
+}
+
+.note-block-tag-suggestions .suggestion:hover {
+    background: var(--bg-hover);
+}
+
+.note-block-delete {
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.note-block-delete:hover {
+    color: var(--danger);
+    background: var(--bg-hover);
+}
+
+/* Add Note button — dashed invitation at the bottom of the study */
+.add-note-btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    text-align: center;
+    font-family: var(--font-ui);
+    font-size: var(--size-small);
+    color: var(--text-muted);
+    border: 1px dashed var(--border-medium);
+    border-radius: 6px;
+    margin-top: 4px;
+}
+
+.add-note-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-light);
+}
+
+/* Empty state messages */
+.notes-empty {
+    font-family: var(--font-ui);
+    font-size: var(--size-small);
+    color: var(--text-muted);
+    text-align: center;
+    padding: 32px 16px;
+}
+
+/* All Studies list */
+.study-list-item {
+    padding: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.study-list-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-medium);
+}
+
+.study-list-name {
+    font-family: var(--font-ui);
+    font-size: var(--size-small);
+    font-weight: 700;
+    margin-bottom: 3px;
+}
+
+.study-list-meta {
+    font-family: var(--font-ui);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+}
+
+/* ============================================================
+   Info Tab — verse notes reference view
+   ============================================================ */
+.info-note-card {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.info-note-card:last-child {
+    border-bottom: none;
+}
+
+.info-note-body {
+    font-size: var(--size-small);
+    line-height: 1.5;
+    margin-bottom: 6px;
+    white-space: pre-wrap;
+}
+
+.info-note-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.info-note-study {
+    font-family: var(--font-ui);
+    font-size: var(--size-xs);
+    color: var(--accent);
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.info-note-study:hover {
+    text-decoration: underline;
+}
+
+/* ============================================================
    Book / Chapter Selector Overlay
    ============================================================ */
 #book-overlay {

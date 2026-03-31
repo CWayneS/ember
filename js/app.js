@@ -6,8 +6,7 @@ import { initReader, navigateTo } from './reader.js';
 
 import { initSelection } from './selection.js';
 
-// Phase: notes
-// import { initNotes } from './notes.js';
+import { initNotes } from './notes.js';
 
 // Phase: tags
 // import { initTags } from './tags.js';
@@ -23,7 +22,7 @@ async function init() {
 
         initReader();
         initSelection();
-        // initNotes();
+        initNotes();
         // initTags();
         initPanels();
         // initSearch();

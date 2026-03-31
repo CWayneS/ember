@@ -178,10 +178,9 @@ CREATE INDEX IF NOT EXISTS idx_verses_location
 CREATE INDEX IF NOT EXISTS idx_verses_translation
     ON verses(translation_id, book_id, chapter);
 
-CREATE VIRTUAL TABLE IF NOT EXISTS verses_fts USING fts5(
-    text,
-    content='verses',
-    content_rowid='rowid'
+CREATE VIRTUAL TABLE IF NOT EXISTS verses_fts USING fts4(
+    content="verses",
+    text
 );
 
 CREATE TABLE IF NOT EXISTS verse_mappings (
@@ -299,10 +298,9 @@ CREATE TABLE IF NOT EXISTS notes (
 CREATE INDEX IF NOT EXISTS idx_notes_parent ON notes(parent_note_id);
 CREATE INDEX IF NOT EXISTS idx_notes_study  ON notes(study_id);
 
-CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-    body,
-    content='notes',
-    content_rowid='id'
+CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts4(
+    content="notes",
+    body
 );
 
 CREATE TABLE IF NOT EXISTS note_anchors (

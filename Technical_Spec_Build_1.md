@@ -2441,3 +2441,60 @@ Build 3 adds:
 - Export (JSON and Markdown)
 
 These builds are additive. Nothing in Build 2 or 3 requires reworking Build 1 code — only extending it.
+
+---
+
+## Design Revision: Notes Module
+
+The notes.js spec above (textarea editor, Save/Cancel buttons, panel-based display) was
+superseded during Build 1 implementation. The revised design is documented here.
+
+### Core principle: study as document
+
+Every note belongs to a study — there are no freeform notes. A study works like a simple
+text document. Notes are displayed as inline editable blocks stacked vertically within the
+study document.
+
+### Note lifecycle
+
+1. Open or create a study via the tab bar (+ button creates and opens immediately)
+2. Optionally select a verse in the reader (adds a verse anchor to the next note)
+3. Click "+ Add Note" at the bottom of the study document
+4. Type directly in the note block — contenteditable div, no separate overlay
+5. Autosave fires 800ms after the last keystroke (no Save button)
+6. Tags entered inline per note — type and press Enter to add a chip
+7. Delete button on each card; drag-to-reorder is a future feature
+
+### Notes panel views
+
+- **Active study view** (`#notes-active-view`): the study document with note blocks
+- **All Studies view** (`#notes-all-studies-view`): list of all studies; clicking one opens
+  it in a new tab via `openStudy(id, name)` from panels.js
+
+### Auto-create study
+
+When `showNoteEditor(verseIds)` is called with no study active (e.g. navigating from search
+results), a default study is auto-created named from the current passage and date:
+`"Genesis 1 — March 30"`. The new study is opened in a tab immediately.
+
+### notes.js exports
+
+- `initNotes()` — register listeners for selection-changed and study-changed events
+- `showNoteEditor(verseIds, options)` — ensure a study is open, scroll to or create a note
+  for the given verses; used by search.js for navigation
+
+### tags.js interface (established by notes.js)
+
+Each note block contains a tag input. tags.js wires autocomplete by implementing:
+
+    setupTagInput(inputEl, noteId, chipsEl)
+
+notes.js calls this after building each block. Until tags.js is live, Enter-to-add
+chips work without autocomplete; tags are persisted via `addNoteTag(noteId, tagName)`.
+
+### db.js additions required
+
+- `addNoteTag(noteId, tagName)` — create tag if needed, assign to note, save
+- `removeNoteTag(noteId, tagName)` — remove tag assignment from note, save
+- `ALTER TABLE notes ADD COLUMN position REAL` — run idempotently at init for
+  future drag-to-reorder support (column is NULL until ordering is implemented)

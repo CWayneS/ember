@@ -67,10 +67,9 @@ function createUserTables() {
     `);
 
     db.run(`
-        CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-            body,
-            content='notes',
-            content_rowid='id'
+        CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts4(
+            content="notes",
+            body
         );
     `);
 
@@ -119,6 +118,10 @@ function createUserTables() {
             value TEXT
         );
     `);
+
+    // Future drag-to-reorder: position column on notes (idempotent).
+    // NULL = use created_at order. Will be populated when ordering is implemented.
+    try { db.run('ALTER TABLE notes ADD COLUMN position REAL'); } catch (_) {}
 }
 
 // ============================================================
@@ -311,9 +314,11 @@ export function deleteNote(noteId) {
 
 export function getNotesForVerse(verseId) {
     const stmt = db.prepare(
-        `SELECT DISTINCT n.id, n.body, n.created_at, n.modified_at
+        `SELECT DISTINCT n.id, n.body, n.created_at, n.modified_at,
+                n.study_id, s.name AS study_name
          FROM notes n
          JOIN note_anchors a ON a.note_id = n.id
+         LEFT JOIN studies s ON s.id = n.study_id
          WHERE a.verse_start <= ? AND (a.verse_end >= ? OR a.verse_end IS NULL)
          AND n.parent_note_id IS NULL
          ORDER BY n.created_at DESC`
@@ -366,6 +371,24 @@ export function getAllTags() {
     return db.exec('SELECT id, name, type FROM tags ORDER BY name')[0]?.values.map(
         row => ({ id: row[0], name: row[1], type: row[2] })
     ) || [];
+}
+
+export function addNoteTag(noteId, tagName) {
+    const normalized = tagName.trim().toLowerCase();
+    if (!normalized) return;
+    db.run('INSERT OR IGNORE INTO tags (name) VALUES (?)', [normalized]);
+    const tagId = db.exec('SELECT id FROM tags WHERE name = ?', [normalized])[0].values[0][0];
+    db.run('INSERT OR IGNORE INTO tag_assignments (tag_id, note_id) VALUES (?, ?)', [tagId, noteId]);
+    saveToStorage(db.export());
+}
+
+export function removeNoteTag(noteId, tagName) {
+    const normalized = tagName.trim().toLowerCase();
+    const result = db.exec('SELECT id FROM tags WHERE name = ?', [normalized]);
+    const tagId  = result[0]?.values[0]?.[0];
+    if (!tagId) return;
+    db.run('DELETE FROM tag_assignments WHERE tag_id = ? AND note_id = ?', [tagId, noteId]);
+    saveToStorage(db.export());
 }
 
 // ============================================================
