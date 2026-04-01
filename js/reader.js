@@ -86,6 +86,27 @@ export function getCurrentLocation() {
     return { book: currentBook, chapter: currentChapter };
 }
 
+// Update note-indicator dots without re-rendering verses.
+// Called after note writes so selection state is preserved.
+export function refreshNoteDots() {
+    const container = document.getElementById('scripture-text');
+    for (const verseEl of container.querySelectorAll('.verse')) {
+        const verseId  = parseInt(verseEl.dataset.verseId);
+        const notes    = getNotesForVerse(verseId);
+        const existing = verseEl.querySelector('.note-indicator');
+        if (notes.length > 0 && !existing) {
+            const dot = document.createElement('span');
+            dot.className = 'note-indicator';
+            dot.title = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
+            verseEl.appendChild(dot);
+        } else if (notes.length === 0 && existing) {
+            existing.remove();
+        } else if (existing) {
+            existing.title = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
+        }
+    }
+}
+
 // ============================================================
 // Prev / Next
 // ============================================================

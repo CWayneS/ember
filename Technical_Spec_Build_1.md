@@ -2536,3 +2536,7 @@ New studies created via "+" button open immediately in a new tab.
 - **Info tab live refresh**: the Info tab (verse notes in the reference panel) currently
   refreshes when a verse is selected or after a note write. It does not react to note
   changes made while a different verse is selected in the reader.
+- **Info tab auto-switch on verse select**: currently selecting a verse always switches
+  the reference panel to the Info tab. This is jarring if the user is reading another
+  tab (Tags, Related, Language). Remove or make conditional — one line in
+  `initSelectionListener()` in panels.js.

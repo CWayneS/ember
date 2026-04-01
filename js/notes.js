@@ -6,7 +6,7 @@ import {
     parseVerseId, getBooks, createStudy, deleteStudy,
     addNoteTag, removeNoteTag
 } from './db.js';
-import { navigateTo, getCurrentLocation }          from './reader.js';
+import { refreshNoteDots }                          from './reader.js';
 import { openStudy, closeStudy, getActiveStudyId, switchReferenceTab } from './panels.js';
 
 let currentVerseIds = [];       // verses currently selected in the reader
@@ -368,8 +368,7 @@ function autoCreateStudy(verseId) {
 
 // Called after any note write — refreshes reader note-dots and info tab
 function refreshAfterWrite() {
-    const loc = getCurrentLocation();
-    navigateTo(loc.book, loc.chapter);
+    refreshNoteDots();
     if (currentVerseIds.length > 0) {
         renderInfoTab(currentVerseIds[0]);
     }
