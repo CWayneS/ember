@@ -344,7 +344,7 @@ export function getNotesForVerse(verseId) {
          FROM notes n
          JOIN note_anchors a ON a.note_id = n.id
          LEFT JOIN studies s ON s.id = n.study_id
-         WHERE a.verse_start <= ? AND (a.verse_end >= ? OR a.verse_end IS NULL)
+         WHERE a.verse_start <= ? AND COALESCE(a.verse_end, a.verse_start) >= ?
          AND n.parent_note_id IS NULL
          ORDER BY n.created_at DESC`
     );
