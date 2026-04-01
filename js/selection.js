@@ -5,8 +5,12 @@ let selectedVerses = [];
 export function initSelection() {
     document.getElementById('scripture-text').addEventListener('click', handleVerseClick);
 
-    // Clear selection when clicking outside the reader text and outside the panels
+    // Clear selection when clicking outside the reader text and outside the panels.
+    // Guard: if the target was removed from the DOM during its own click handler
+    // (e.g. renderStudyDocument wiping innerHTML), e.target.isConnected is false
+    // and closest() returns null — treat detached clicks as non-clearing.
     document.addEventListener('click', (e) => {
+        if (!e.target.isConnected) return;
         if (
             !e.target.closest('#scripture-text') &&
             !e.target.closest('#notes-panel') &&

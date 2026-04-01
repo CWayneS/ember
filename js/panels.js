@@ -253,11 +253,9 @@ export function togglePanelLayout() {
 // ============================================================
 
 function initSelectionListener() {
-    document.addEventListener('selection-changed', (e) => {
-        if (e.detail.verseIds.length > 0) {
-            switchTab('info');
-        }
-    });
+    // Auto-switching to the Info tab on verse select was removed — jarring when
+    // the user is reading another reference tab. Re-add switchTab('info') here
+    // if a smarter trigger is wanted later (e.g. only on first selection).
 }
 
 // Exported so notes.js (and future modules) can switch reference tabs
