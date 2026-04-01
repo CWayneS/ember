@@ -248,7 +248,7 @@ function addNote(studyId) {
 function scheduleSave(noteId, bodyEl) {
     clearTimeout(saveTimers.get(noteId));
     saveTimers.set(noteId, setTimeout(() => {
-        updateNote(noteId, bodyEl.textContent.trim());
+        updateNote(noteId, bodyEl.innerText.trim());
         refreshAfterWrite();
     }, 800));
 }
