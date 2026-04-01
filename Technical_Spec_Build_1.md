@@ -1,5 +1,13 @@
 # Bible Study Software — Technical Specification: Build 1
 
+> **⚠️ STATUS: This spec reflects Build 1 as originally planned,
+> not as built.** During implementation, the architecture evolved
+> significantly — the panel layout, selection model, study/note
+> relationship, and other details changed based on real design
+> decisions. For the actual state of the codebase, refer to
+> `BUILD_1_ACTUAL_STATE.md`. When this spec and the code disagree,
+> **the code is correct.**
+
 ---
 
 ## Overview
