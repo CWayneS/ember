@@ -11,6 +11,7 @@ import { initNotes } from './notes.js';
 import { initTags }          from './tags.js';
 import { initPanels, togglePanelLayout } from './panels.js';
 import { initSearch }        from './search.js';
+import { initReference }     from './reference.js';
 
 async function init() {
     try {
@@ -22,6 +23,7 @@ async function init() {
         initTags();
         initPanels();
         initSearch();
+        initReference();
 
         // Restore last reading position, default to Genesis 1
         const lastBook    = parseInt(getState('currentBook'))    || 1;

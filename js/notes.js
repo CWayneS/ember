@@ -2,12 +2,13 @@
 
 import {
     saveNote, updateNote, deleteNote,
-    getNotesForStudy, getNotesForVerse, getStudies,
+    getNotesForStudy, getStudies,
     parseVerseId, getBooks, createStudy, deleteStudy,
     addNoteTag, removeNoteTag
 } from './db.js';
 import { refreshNoteDots }                          from './reader.js';
-import { openStudy, closeStudy, getActiveStudyId, switchReferenceTab } from './panels.js';
+import { openStudy, closeStudy, getActiveStudyId } from './panels.js';
+import { refreshReference }                         from './reference.js';
 
 let currentVerseIds = [];       // verses currently selected in the reader
 let _books          = null;     // lazy cache — avoids re-querying 66 books per render
@@ -20,11 +21,6 @@ const saveTimers    = new Map(); // noteId → debounce timer
 export function initNotes() {
     document.addEventListener('selection-changed', (e) => {
         currentVerseIds = e.detail.verseIds;
-        if (currentVerseIds.length > 0) {
-            renderInfoTab(currentVerseIds[0]);
-        } else {
-            clearInfoTab();
-        }
     });
 
     document.addEventListener('study-changed', (e) => {
@@ -167,71 +163,6 @@ function buildAddNoteButton(studyId) {
 }
 
 // ============================================================
-// Info tab — verse notes (read-only, click to navigate to study)
-// ============================================================
-
-function renderInfoTab(verseId) {
-    const container = document.getElementById('info-tab');
-    const notes     = getNotesForVerse(verseId);
-
-    container.innerHTML = '';
-
-    if (notes.length === 0) {
-        const empty = document.createElement('p');
-        empty.className   = 'notes-empty';
-        empty.textContent = 'No notes for this verse.';
-        container.appendChild(empty);
-        return;
-    }
-
-    for (const note of notes) {
-        container.appendChild(buildInfoNoteCard(note));
-    }
-}
-
-function clearInfoTab() {
-    const container = document.getElementById('info-tab');
-    container.innerHTML = '';
-    const empty = document.createElement('p');
-    empty.className   = 'notes-empty';
-    empty.textContent = 'Select a verse to see notes.';
-    container.appendChild(empty);
-}
-
-function buildInfoNoteCard(note) {
-    const card     = document.createElement('div');
-    card.className = 'info-note-card';
-
-    const body     = document.createElement('div');
-    body.className = 'info-note-body';
-    body.textContent = note.body || '(empty note)';
-    card.appendChild(body);
-
-    const meta     = document.createElement('div');
-    meta.className = 'info-note-meta';
-
-    if (note.tags && note.tags.length > 0) {
-        for (const tag of note.tags) {
-            const chip     = document.createElement('span');
-            chip.className = 'tag-chip';
-            chip.textContent = tag.name;
-            meta.appendChild(chip);
-        }
-    }
-
-    if (note.study_id) {
-        const link     = document.createElement('button');
-        link.className = 'info-note-study';
-        link.textContent = `${note.study_name || 'Study'} →`;
-        link.addEventListener('click', () => openStudy(note.study_id, note.study_name || 'Study'));
-        meta.appendChild(link);
-    }
-
-    card.appendChild(meta);
-    return card;
-}
-
-// ============================================================
 // All Studies view
 // ============================================================
 
@@ -369,9 +300,7 @@ function autoCreateStudy(verseId) {
 // Called after any note write — refreshes reader note-dots and info tab
 function refreshAfterWrite() {
     refreshNoteDots();
-    if (currentVerseIds.length > 0) {
-        renderInfoTab(currentVerseIds[0]);
-    }
+    if (currentVerseIds.length > 0) refreshReference(currentVerseIds[0]);
 }
 
 function formatAnchor(anchor) {

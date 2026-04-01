@@ -994,32 +994,95 @@ textarea {
 }
 
 /* ============================================================
-   Info Tab — verse notes reference view
+   Reference Panel — Info / Tags / Related / Language tabs
    ============================================================ */
-.info-note-card {
-    padding: 10px 0;
+.ref-placeholder {
+    font-family: var(--font-ui);
+    font-size: var(--size-small);
+    color: var(--text-muted);
+    padding: 16px;
+    margin: 0;
+}
+
+.ref-section {
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border-light);
 }
 
-.info-note-card:last-child {
+.ref-section:last-child {
     border-bottom: none;
 }
 
-.info-note-body {
+.ref-book-name {
+    font-family: var(--font-ui);
+    font-size: var(--size-base);
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.ref-chapter-label {
+    font-family: var(--font-ui);
+    font-size: var(--size-small);
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.ref-meta {
+    font-family: var(--font-ui);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+}
+
+.ref-section-heading {
+    font-family: var(--font-ui);
+    font-size: var(--size-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 10px 16px 4px;
+}
+
+.ref-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px 16px 10px;
+}
+
+.tag-chip.system-tag {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
+.ref-note-card {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.ref-note-card:last-child {
+    border-bottom: none;
+}
+
+.ref-note-body {
     font-size: var(--size-small);
     line-height: 1.5;
     margin-bottom: 6px;
     white-space: pre-wrap;
+    color: var(--text-primary);
 }
 
-.info-note-meta {
+.ref-note-meta {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 6px;
 }
 
-.info-note-study {
+.ref-note-study-link {
     font-family: var(--font-ui);
     font-size: var(--size-xs);
     color: var(--accent);
@@ -1027,7 +1090,7 @@ textarea {
     flex-shrink: 0;
 }
 
-.info-note-study:hover {
+.ref-note-study-link:hover {
     text-decoration: underline;
 }
 

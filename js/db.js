@@ -265,6 +265,35 @@ export function getBook(bookId) {
     return book;
 }
 
+export function getChapterVerseCount(bookId, chapter) {
+    return db.exec(
+        'SELECT COUNT(*) FROM verses WHERE book_id = ? AND chapter = ? AND translation_id = "KJV"',
+        [bookId, chapter]
+    )[0]?.values[0][0] || 0;
+}
+
+export function getTopicsForVerse(verseId) {
+    return db.exec(
+        `SELECT t.id, t.name FROM topics t
+         JOIN topic_verses tv ON tv.topic_id = t.id
+         WHERE tv.verse_id = ? AND t.display = 1
+         ORDER BY t.name`,
+        [verseId]
+    )[0]?.values.map(r => ({ id: r[0], name: r[1] })) || [];
+}
+
+export function getUserTagsForVerse(verseId) {
+    return db.exec(
+        `SELECT DISTINCT tg.name FROM tags tg
+         JOIN tag_assignments ta ON ta.tag_id = tg.id
+         JOIN notes n ON n.id = ta.note_id
+         JOIN note_anchors a ON a.note_id = n.id
+         WHERE a.verse_start <= ? AND COALESCE(a.verse_end, a.verse_start) >= ?
+         ORDER BY tg.name`,
+        [verseId, verseId]
+    )[0]?.values.map(r => r[0]) || [];
+}
+
 // ============================================================
 // Note Queries
 // ============================================================
