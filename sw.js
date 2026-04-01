@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v1';
+const CACHE_NAME = 'ember-v2';
 
 // Files that must be cached on install for the app to work offline.
 // core.db is NOT included here — it is large (18 MB) and already persisted
@@ -19,6 +19,7 @@ const PRECACHE = [
     './js/search.js',
     './js/panels.js',
     './js/state.js',
+    './js/storage-worker.js',
     './js/vendor/sql-wasm.js',
     './js/vendor/sql-wasm.wasm'
 ];

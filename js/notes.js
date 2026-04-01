@@ -11,7 +11,6 @@ import { openStudy, closeStudy, getActiveStudyId } from './panels.js';
 import { refreshReference }                         from './reference.js';
 
 let currentVerseIds = [];       // verses currently selected in the reader
-let _books          = null;     // lazy cache — avoids re-querying 66 books per render
 const saveTimers    = new Map(); // noteId → debounce timer
 
 // ============================================================
@@ -248,7 +247,8 @@ function addNote(studyId) {
 function scheduleSave(noteId, bodyEl) {
     clearTimeout(saveTimers.get(noteId));
     saveTimers.set(noteId, setTimeout(() => {
-        updateNote(noteId, bodyEl.innerText.trim());
+        const raw = bodyEl.innerText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        updateNote(noteId, raw);
         refreshAfterWrite();
     }, 800));
 }
@@ -283,7 +283,7 @@ function autoCreateStudy(verseId) {
 
     if (verseId) {
         const parsed = parseVerseId(verseId);
-        const book   = books().find(b => b.id === parsed.book);
+        const book   = getBooks().find(b => b.id === parsed.book);
         const date   = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
         name = `${book?.name || 'Study'} ${parsed.chapter} — ${date}`;
     }
@@ -305,7 +305,7 @@ function refreshAfterWrite() {
 
 function formatAnchor(anchor) {
     const parsed = parseVerseId(anchor.verse_start);
-    const book   = books().find(b => b.id === parsed.book);
+    const book   = getBooks().find(b => b.id === parsed.book);
     const label  = `${book?.name || ''} ${parsed.chapter}:${parsed.verse}`;
 
     if (anchor.verse_end && anchor.verse_end !== anchor.verse_start) {
@@ -315,7 +315,3 @@ function formatAnchor(anchor) {
     return label;
 }
 
-function books() {
-    if (!_books) _books = getBooks();
-    return _books;
-}

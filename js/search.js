@@ -4,28 +4,24 @@ import { search, parseVerseId, getBooks } from './db.js';
 import { navigateTo }                      from './reader.js';
 import { showNoteEditor }                  from './notes.js';
 
-let _books = null;
-
-function books() {
-    if (!_books) _books = getBooks();
-    return _books;
-}
-
 // ============================================================
 // Init
 // ============================================================
+
+let _searchTimer = null;
 
 export function initSearch() {
     const input   = document.getElementById('search-input');
     const overlay = document.getElementById('search-results');
 
     input.addEventListener('input', () => {
+        clearTimeout(_searchTimer);
         const q = input.value.trim();
         if (q.length < 2) {
             hideOverlay();
             return;
         }
-        runSearch(q);
+        _searchTimer = setTimeout(() => runSearch(q), 200);
     });
 
     input.addEventListener('keydown', (e) => {
@@ -77,7 +73,7 @@ function runSearch(query) {
 // ============================================================
 
 function renderVerseResult(verse) {
-    const book    = books().find(b => b.id === verse.book_id);
+    const book    = getBooks().find(b => b.id === verse.book_id);
     const ref     = `${book?.name || ''} ${verse.chapter}:${verse.verse}`;
     const verseId = verse.id;
 
@@ -115,7 +111,7 @@ function renderNoteResult(note) {
     if (note.anchors && note.anchors.length > 0) {
         const anchor = note.anchors[0];
         const parsed = parseVerseId(anchor.verse_start);
-        const book   = books().find(b => b.id === parsed.book);
+        const book   = getBooks().find(b => b.id === parsed.book);
         label.textContent = `${book?.name || 'Note'} ${parsed.chapter}:${parsed.verse}`;
     }
 

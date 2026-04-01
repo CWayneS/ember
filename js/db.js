@@ -1,6 +1,15 @@
 // db.js — Database initialization, queries, and persistence
 
-let db = null;
+let db             = null;
+let _booksCache    = null;
+let _storageWorker = null;
+
+function getStorageWorker() {
+    if (!_storageWorker) {
+        _storageWorker = new Worker('./js/storage-worker.js');
+    }
+    return _storageWorker;
+}
 
 // ============================================================
 // Initialization
@@ -153,33 +162,12 @@ function createUserTables() {
 // Persistence — OPFS with IndexedDB fallback
 // ============================================================
 
-async function saveToStorage(data) {
-    if ('storage' in navigator && 'getDirectory' in navigator.storage) {
-        try {
-            const root = await navigator.storage.getDirectory();
-            const handle = await root.getFileHandle('core.db', { create: true });
-            const writable = await handle.createWritable();
-            await writable.write(data);
-            await writable.close();
-            return;
-        } catch (e) {
-            // Fall through to IndexedDB
-        }
-    }
-
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open('ScriptureStudy', 1);
-        request.onupgradeneeded = () => {
-            request.result.createObjectStore('db');
-        };
-        request.onsuccess = () => {
-            const tx = request.result.transaction('db', 'readwrite');
-            tx.objectStore('db').put(data, 'core');
-            tx.oncomplete = resolve;
-            tx.onerror = reject;
-        };
-        request.onerror = reject;
-    });
+// Offload the I/O-bound write to a storage worker so the main thread never
+// blocks on OPFS/IndexedDB. db.export() (WASM serialization) still runs
+// synchronously here, but the actual disk write is off-thread.
+function saveToStorage(data) {
+    // Transfer the underlying ArrayBuffer — zero-copy, no clone needed.
+    getStorageWorker().postMessage(data, [data.buffer]);
 }
 
 async function loadFromStorage() {
@@ -244,14 +232,17 @@ export function getChapter(bookId, chapter, translationId = 'KJV') {
 }
 
 export function getBooks() {
-    return db.exec('SELECT * FROM books ORDER BY id')[0]?.values.map(row => ({
-        id:        row[0],
-        name:      row[1],
-        abbrev:    row[2],
-        testament: row[3],
-        genre:     row[4],
-        chapters:  row[5]
-    })) || [];
+    if (!_booksCache) {
+        _booksCache = db.exec('SELECT * FROM books ORDER BY id')[0]?.values.map(row => ({
+            id:        row[0],
+            name:      row[1],
+            abbrev:    row[2],
+            testament: row[3],
+            genre:     row[4],
+            chapters:  row[5]
+        })) || [];
+    }
+    return _booksCache;
 }
 
 export function getBook(bookId) {
