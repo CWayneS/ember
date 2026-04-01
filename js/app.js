@@ -32,11 +32,10 @@ async function init() {
         // Hide loading screen
         document.getElementById('loading').classList.add('hidden');
 
-        // Register service worker (sw.js created in a later phase)
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js').catch(() => {
-                // sw.js not yet present — safe to ignore during development
-            });
+        // Register service worker for production only.
+        // Skip on localhost so development refreshes always load fresh files.
+        if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
+            navigator.serviceWorker.register('./sw.js').catch(() => {});
         }
     } catch (err) {
         document.getElementById('loading').textContent = `Failed to load: ${err.message}`;
