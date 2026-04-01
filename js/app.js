@@ -8,9 +8,9 @@ import { initSelection } from './selection.js';
 
 import { initNotes } from './notes.js';
 
-import { initTags }   from './tags.js';
-import { initPanels }  from './panels.js';
-import { initSearch }  from './search.js';
+import { initTags }          from './tags.js';
+import { initPanels, togglePanelLayout } from './panels.js';
+import { initSearch }        from './search.js';
 
 async function init() {
     try {
@@ -28,6 +28,9 @@ async function init() {
         const lastChapter = parseInt(getState('currentChapter')) || 1;
 
         navigateTo(lastBook, lastChapter);
+
+        document.getElementById('layout-toggle-btn')
+            .addEventListener('click', togglePanelLayout);
 
         // Hide loading screen
         document.getElementById('loading').classList.add('hidden');
