@@ -877,6 +877,32 @@ textarea {
     font-weight: 400;
 }
 
+.note-block-anchors {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.note-block-attach-btn {
+    font-size: var(--size-xsmall);
+    color: var(--text-muted);
+    border: 1px dashed var(--border-medium);
+    border-radius: 4px;
+    padding: 2px 7px;
+    background: none;
+    cursor: pointer;
+    font-family: var(--font-ui);
+}
+
+.note-block-attach-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.note-block-attach-btn.hidden { display: none; }
+
 .note-block-body {
     font-size: var(--size-small);
     line-height: 1.6;

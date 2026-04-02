@@ -432,6 +432,14 @@ export function getAnchorsForNote(noteId) {
     return results;
 }
 
+export function addAnchorToNote(noteId, verseStart, verseEnd = null) {
+    db.run(
+        'INSERT INTO note_anchors (note_id, verse_start, verse_end) VALUES (?, ?, ?)',
+        [noteId, verseStart, verseEnd]
+    );
+    saveToStorage(db.export());
+}
+
 // ============================================================
 // Tag Queries
 // ============================================================

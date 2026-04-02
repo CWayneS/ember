@@ -4,7 +4,7 @@ import {
     saveNote, updateNote, deleteNote,
     getNotesForStudy, getStudies, getNotesForTag, getVersesForTopic, getTopicVerseCount,
     parseVerseId, getBooks, createStudy, deleteStudy, renameStudy, getStudyName,
-    addNoteTag, removeNoteTag
+    addNoteTag, removeNoteTag, addAnchorToNote
 } from './db.js';
 import { refreshNoteDots, navigateTo }              from './reader.js';
 import { openStudy, closeStudy, getActiveStudyId, openTagView, renameStudyTab } from './panels.js';
@@ -20,6 +20,7 @@ const saveTimers    = new Map(); // noteId → debounce timer
 export function initNotes() {
     document.addEventListener('selection-changed', (e) => {
         currentVerseIds = e.detail.verseIds;
+        updateAttachButtons();
     });
 
     document.addEventListener('study-changed', (e) => {
@@ -72,6 +73,21 @@ function renderStudyDocument(studyId) {
     }
 
     container.appendChild(buildAddNoteButton(studyId));
+    updateAttachButtons();
+}
+
+function updateAttachButtons() {
+    document.querySelectorAll('.note-block-attach-btn').forEach(btn => {
+        if (currentVerseIds.length === 0) {
+            btn.classList.add('hidden');
+            return;
+        }
+        const verseStart = Math.min(...currentVerseIds);
+        const parsed     = parseVerseId(verseStart);
+        const book       = getBooks().find(b => b.id === parsed.book);
+        btn.textContent  = `+ ${book?.name || ''} ${parsed.chapter}:${parsed.verse}`;
+        btn.classList.remove('hidden');
+    });
 }
 
 function buildNoteBlock(note, studyId) {
@@ -79,18 +95,34 @@ function buildNoteBlock(note, studyId) {
     block.className      = 'note-block';
     block.dataset.noteId = note.id;
 
-    // Verse anchor label — click to navigate and highlight the verse
-    if (note.anchors && note.anchors.length > 0) {
-        const anchor     = document.createElement('div');
-        anchor.className = 'note-block-anchor note-block-anchor-link';
-        anchor.textContent = formatAnchor(note.anchors[0]);
-        anchor.addEventListener('click', () => {
-            const a      = note.anchors[0];
-            const parsed = parseVerseId(a.verse_start);
-            navigateTo(parsed.book, parsed.chapter, a.verse_start);
+    // Anchor chips + attach button
+    const anchorsArea     = document.createElement('div');
+    anchorsArea.className = 'note-block-anchors';
+
+    for (const anchor of (note.anchors || [])) {
+        const chip       = document.createElement('div');
+        chip.className   = 'note-block-anchor note-block-anchor-link';
+        chip.textContent = formatAnchor(anchor);
+        chip.addEventListener('click', () => {
+            const parsed = parseVerseId(anchor.verse_start);
+            navigateTo(parsed.book, parsed.chapter, anchor.verse_start);
         });
-        block.appendChild(anchor);
+        anchorsArea.appendChild(chip);
     }
+
+    const attachBtn     = document.createElement('button');
+    attachBtn.className = 'note-block-attach-btn hidden';
+    attachBtn.addEventListener('click', () => {
+        if (currentVerseIds.length === 0) return;
+        const verseStart = Math.min(...currentVerseIds);
+        const verseEnd   = currentVerseIds.length > 1 ? Math.max(...currentVerseIds) : null;
+        if (note.anchors.some(a => a.verse_start === verseStart)) return;
+        addAnchorToNote(note.id, verseStart, verseEnd);
+        renderStudyDocument(studyId);
+        refreshAfterWrite();
+    });
+    anchorsArea.appendChild(attachBtn);
+    block.appendChild(anchorsArea);
 
     // Body — contenteditable, click anywhere to edit, autosave on input
     const body = document.createElement('div');
