@@ -56,6 +56,18 @@ function initNotesTabs() {
     });
 }
 
+// Open a tag filter tab. If already open, switch to it.
+export function openTagView(tagName) {
+    const tabId = `tag:${tagName}`;
+    if (openStudies.find(s => s.id === tabId)) {
+        switchToStudy(tabId);
+        return;
+    }
+    openStudies.push({ id: tabId, name: tagName, type: 'tag' });
+    renderStudyTabs();
+    switchToStudy(tabId);
+}
+
 // Open a study in a tab. If already open, switch to it.
 export function openStudy(studyId, studyName) {
     if (openStudies.find(s => s.id === studyId)) {
@@ -122,7 +134,7 @@ function renderStudyTabs() {
 
         const nameSpan = document.createElement('span');
         nameSpan.className   = 'notes-tab-name';
-        nameSpan.textContent = study.name;
+        nameSpan.textContent = study.type === 'tag' ? `#${study.name}` : study.name;
 
         const closeBtn = document.createElement('span');
         closeBtn.className   = 'notes-tab-close';

@@ -32,7 +32,7 @@ export function initReader() {
 // Navigation
 // ============================================================
 
-export function navigateTo(bookId, chapter) {
+export function navigateTo(bookId, chapter, highlightVerseId = null) {
     currentBook    = bookId;
     currentChapter = chapter;
 
@@ -74,8 +74,16 @@ export function navigateTo(bookId, chapter) {
         container.appendChild(el);
     }
 
-    // Scroll reader back to top
-    document.getElementById('reader-content').scrollTop = 0;
+    // Scroll to highlighted verse, or back to top
+    if (highlightVerseId) {
+        const target = container.querySelector(`[data-verse-id="${highlightVerseId}"]`);
+        if (target) {
+            target.scrollIntoView({ block: 'center' });
+            target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        }
+    } else {
+        document.getElementById('reader-content').scrollTop = 0;
+    }
 
     // Persist location
     setState('currentBook', bookId);

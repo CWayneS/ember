@@ -826,6 +826,38 @@ textarea {
     user-select: none;
 }
 
+.note-block-anchor-link {
+    cursor: pointer;
+}
+
+.note-block-anchor-link:hover {
+    text-decoration: underline;
+}
+
+.tag-note-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+}
+
+.tag-note-card-header .note-block-anchor {
+    margin-bottom: 0;
+}
+
+.tag-note-study-link {
+    font-family: var(--font-ui);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+.tag-note-study-link:hover {
+    color: var(--accent);
+}
+
 .note-block-body {
     font-size: var(--size-small);
     line-height: 1.6;
@@ -1227,6 +1259,44 @@ textarea {
     color: var(--text-muted);
     font-size: var(--size-small);
     padding: 24px;
+}
+
+.search-shortcuts {
+    padding: 4px 0;
+}
+
+.search-shortcuts-heading {
+    font-family: var(--font-ui);
+    font-size: var(--size-xs);
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 4px 8px 8px;
+}
+
+.search-shortcut-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 5px 8px;
+    font-family: var(--font-ui);
+    font-size: var(--size-small);
+}
+
+.search-shortcut-prefix {
+    font-family: var(--font-mono, monospace);
+    font-size: var(--size-small);
+    color: var(--accent);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: 3px;
+    padding: 1px 5px;
+    flex-shrink: 0;
+}
+
+.search-shortcut-desc {
+    color: var(--text-secondary);
 }
 
 /* Tag autocomplete suggestions */

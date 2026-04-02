@@ -3,6 +3,7 @@
 import { search, parseVerseId, getBooks } from './db.js';
 import { navigateTo }                      from './reader.js';
 import { showNoteEditor }                  from './notes.js';
+import { openTagView }                     from './panels.js';
 
 // ============================================================
 // Init
@@ -14,9 +15,19 @@ export function initSearch() {
     const input   = document.getElementById('search-input');
     const overlay = document.getElementById('search-results');
 
+    input.addEventListener('focus', () => {
+        if (input.value.trim() === '') {
+            showOverlay(renderShortcuts());
+        }
+    });
+
     input.addEventListener('input', () => {
         clearTimeout(_searchTimer);
         const q = input.value.trim();
+        if (q.length === 0) {
+            showOverlay(renderShortcuts());
+            return;
+        }
         if (q.length < 2) {
             hideOverlay();
             return;
@@ -165,9 +176,8 @@ function renderTagResult(tag) {
     item.appendChild(label);
     item.appendChild(name_el);
 
-    // Clicking a tag opens the note editor with the tag filter pre-filled
     item.addEventListener('click', () => {
-        showNoteEditor([], { focusTag: true });
+        openTagView(tag.name);
         hideOverlay();
         document.getElementById('search-input').value = '';
     });
@@ -179,6 +189,41 @@ function renderEmpty(query) {
     const el       = document.createElement('div');
     el.className   = 'search-no-results';
     el.textContent = `No results for "${query}"`;
+    return el;
+}
+
+function renderShortcuts() {
+    const el       = document.createElement('div');
+    el.className   = 'search-shortcuts';
+
+    const heading       = document.createElement('div');
+    heading.className   = 'search-shortcuts-heading';
+    heading.textContent = 'Search prefixes';
+    el.appendChild(heading);
+
+    const prefixes = [
+        { prefix: 'b:', desc: 'Scripture verses only' },
+        { prefix: 'n:', desc: 'Notes only'            },
+        { prefix: 's:', desc: 'Studies only'          },
+    ];
+
+    for (const { prefix, desc } of prefixes) {
+        const row       = document.createElement('div');
+        row.className   = 'search-shortcut-row';
+
+        const code       = document.createElement('span');
+        code.className   = 'search-shortcut-prefix';
+        code.textContent = prefix;
+
+        const label       = document.createElement('span');
+        label.className   = 'search-shortcut-desc';
+        label.textContent = desc;
+
+        row.appendChild(code);
+        row.appendChild(label);
+        el.appendChild(row);
+    }
+
     return el;
 }
 

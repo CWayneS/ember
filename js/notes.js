@@ -2,11 +2,11 @@
 
 import {
     saveNote, updateNote, deleteNote,
-    getNotesForStudy, getStudies,
+    getNotesForStudy, getStudies, getNotesForTag,
     parseVerseId, getBooks, createStudy, deleteStudy,
     addNoteTag, removeNoteTag
 } from './db.js';
-import { refreshNoteDots }                          from './reader.js';
+import { refreshNoteDots, navigateTo }              from './reader.js';
 import { openStudy, closeStudy, getActiveStudyId } from './panels.js';
 import { refreshReference }                         from './reference.js';
 
@@ -26,6 +26,8 @@ export function initNotes() {
         const { studyId } = e.detail;
         if (studyId === 'all') {
             renderAllStudies();
+        } else if (typeof studyId === 'string' && studyId.startsWith('tag:')) {
+            renderTagView(studyId.slice(4));
         } else {
             renderStudyDocument(studyId);
         }
@@ -159,6 +161,81 @@ function buildAddNoteButton(studyId) {
     btn.textContent = '+ Add Note';
     btn.addEventListener('click', () => addNote(studyId));
     return btn;
+}
+
+// ============================================================
+// Tag filter view
+// ============================================================
+
+function renderTagView(tagName) {
+    const container = document.getElementById('notes-active-view');
+    const notes     = getNotesForTag(tagName);
+
+    container.innerHTML = '';
+
+    if (notes.length === 0) {
+        const empty       = document.createElement('p');
+        empty.className   = 'notes-empty';
+        empty.textContent = `No notes tagged "${tagName}".`;
+        container.appendChild(empty);
+        return;
+    }
+
+    for (const note of notes) {
+        container.appendChild(buildTagNoteCard(note));
+    }
+}
+
+function buildTagNoteCard(note) {
+    const block     = document.createElement('div');
+    block.className = 'note-block';
+
+    // Header row: verse anchor (left) + study link (right)
+    const header     = document.createElement('div');
+    header.className = 'tag-note-card-header';
+
+    if (note.anchors && note.anchors.length > 0) {
+        const anchor       = document.createElement('div');
+        anchor.className   = 'note-block-anchor note-block-anchor-link';
+        anchor.textContent = formatAnchor(note.anchors[0]);
+        anchor.addEventListener('click', () => {
+            const a = note.anchors[0];
+            const parsed = parseVerseId(a.verse_start);
+            navigateTo(parsed.book, parsed.chapter, a.verse_start);
+        });
+        header.appendChild(anchor);
+    }
+
+    if (note.study_id && note.study_name) {
+        const link       = document.createElement('div');
+        link.className   = 'tag-note-study-link';
+        link.textContent = `→ ${note.study_name}`;
+        link.addEventListener('click', () => openStudy(note.study_id, note.study_name));
+        header.appendChild(link);
+    }
+
+    block.appendChild(header);
+
+    // Body — read-only
+    const body       = document.createElement('div');
+    body.className   = 'note-block-body';
+    body.textContent = note.body || '';
+    block.appendChild(body);
+
+    // Tags — display only, no remove/add controls
+    if (note.tags && note.tags.length > 0) {
+        const tags     = document.createElement('div');
+        tags.className = 'note-block-tags note-block-tags-readonly';
+        for (const tag of note.tags) {
+            const chip       = document.createElement('span');
+            chip.className   = 'tag-chip';
+            chip.textContent = tag.name;
+            tags.appendChild(chip);
+        }
+        block.appendChild(tags);
+    }
+
+    return block;
 }
 
 // ============================================================

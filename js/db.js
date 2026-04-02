@@ -436,6 +436,28 @@ export function removeNoteTag(noteId, tagName) {
     saveToStorage(db.export());
 }
 
+export function getNotesForTag(tagName) {
+    const stmt = db.prepare(
+        `SELECT n.id, n.body, n.study_id, s.name AS study_name
+         FROM notes n
+         JOIN tag_assignments ta ON ta.note_id = n.id
+         JOIN tags t ON t.id = ta.tag_id
+         LEFT JOIN studies s ON s.id = n.study_id
+         WHERE t.name = ?
+         ORDER BY n.created_at`
+    );
+    stmt.bind([tagName]);
+    const results = [];
+    while (stmt.step()) {
+        const note   = stmt.getAsObject();
+        note.anchors = getAnchorsForNote(note.id);
+        note.tags    = getTagsForNote(note.id);
+        results.push(note);
+    }
+    stmt.free();
+    return results;
+}
+
 // ============================================================
 // Search
 // ============================================================
@@ -444,14 +466,13 @@ export function search(query) {
     const verseResults = [];
     const noteResults  = [];
 
-    // Scripture full-text search
+    // Scripture full-text search — FTS first, LIKE fallback
     try {
         const vstmt = db.prepare(
             `SELECT v.id, v.book_id, v.chapter, v.verse, v.text, b.name AS book_name
-             FROM verses_fts fts
-             JOIN verses v ON v.rowid = fts.rowid
+             FROM verses v
              JOIN books b ON b.id = v.book_id
-             WHERE verses_fts MATCH ?
+             WHERE v.rowid IN (SELECT rowid FROM verses_fts WHERE verses_fts MATCH ?)
              AND v.translation_id = ?
              LIMIT 50`
         );
@@ -461,7 +482,24 @@ export function search(query) {
         }
         vstmt.free();
     } catch (e) {
-        // FTS query syntax error — skip verse results
+        console.error('FTS verse search failed, trying LIKE fallback:', e);
+        try {
+            const vstmt = db.prepare(
+                `SELECT v.id, v.book_id, v.chapter, v.verse, v.text, b.name AS book_name
+                 FROM verses v
+                 JOIN books b ON b.id = v.book_id
+                 WHERE v.text LIKE ?
+                 AND v.translation_id = ?
+                 LIMIT 50`
+            );
+            vstmt.bind([`%${query}%`, getCurrentTranslation()]);
+            while (vstmt.step()) {
+                verseResults.push({ type: 'verse', ...vstmt.getAsObject() });
+            }
+            vstmt.free();
+        } catch (e2) {
+            console.error('LIKE verse search also failed:', e2);
+        }
     }
 
     // Notes full-text search
@@ -483,7 +521,7 @@ export function search(query) {
         }
         nstmt.free();
     } catch (e) {
-        // FTS query syntax error — skip note results
+        console.error('FTS note search failed:', e);
     }
 
     // Tag name search
