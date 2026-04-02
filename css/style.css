@@ -960,6 +960,28 @@ textarea {
     background: var(--accent-light);
 }
 
+/* Load more button */
+.load-more-btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    text-align: center;
+    font-family: var(--font-ui);
+    font-size: var(--size-small);
+    color: var(--text-muted);
+    border: 1px solid var(--border-medium);
+    border-radius: 6px;
+    margin-top: 4px;
+    background: none;
+    cursor: pointer;
+}
+
+.load-more-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-light);
+}
+
 /* Empty state messages */
 .notes-empty {
     font-family: var(--font-ui);

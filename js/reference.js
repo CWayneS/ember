@@ -5,7 +5,7 @@ import {
     getChapterVerseCount, getTopicsForVerse, getUserTagsForVerse,
     getNotesForVerse
 } from './db.js';
-import { openStudy } from './panels.js';
+import { openStudy, openTagView } from './panels.js';
 
 const EMPTY_MSG = 'Select a verse to see reference material.';
 
@@ -115,6 +115,7 @@ function appendVerseNotes(container, verseId) {
                 const chip     = document.createElement('span');
                 chip.className = 'tag-chip';
                 chip.textContent = tag.name;
+                chip.addEventListener('click', () => openTagView(tag.name));
                 meta.appendChild(chip);
             }
         }
@@ -156,6 +157,7 @@ function renderTagsTab(verseId) {
             const chip     = document.createElement('span');
             chip.className = 'tag-chip system-tag';
             chip.textContent = topic.name;
+            chip.addEventListener('click', () => openTagView(topic.name));
             chips.appendChild(chip);
         }
         container.appendChild(chips);
@@ -169,6 +171,7 @@ function renderTagsTab(verseId) {
             const chip     = document.createElement('span');
             chip.className = 'tag-chip';
             chip.textContent = name;
+            chip.addEventListener('click', () => openTagView(name));
             chips.appendChild(chip);
         }
         container.appendChild(chips);

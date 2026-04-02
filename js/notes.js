@@ -2,12 +2,12 @@
 
 import {
     saveNote, updateNote, deleteNote,
-    getNotesForStudy, getStudies, getNotesForTag,
+    getNotesForStudy, getStudies, getNotesForTag, getVersesForTopic, getTopicVerseCount,
     parseVerseId, getBooks, createStudy, deleteStudy,
     addNoteTag, removeNoteTag
 } from './db.js';
 import { refreshNoteDots, navigateTo }              from './reader.js';
-import { openStudy, closeStudy, getActiveStudyId } from './panels.js';
+import { openStudy, closeStudy, getActiveStudyId, openTagView } from './panels.js';
 import { refreshReference }                         from './reference.js';
 
 let currentVerseIds = [];       // verses currently selected in the reader
@@ -136,12 +136,9 @@ function buildTagsArea(note) {
 
 function makeTagChip(name, noteId, tagsContainer) {
     const chip     = document.createElement('span');
-    chip.className = 'tag-chip removable';
+    chip.className = 'tag-chip';
     chip.textContent = name;
-    chip.addEventListener('click', () => {
-        removeNoteTag(noteId, name);
-        chip.remove();
-    });
+    chip.addEventListener('click', () => openTagView(name));
     return chip;
 }
 
@@ -172,23 +169,96 @@ function buildAddNoteButton(studyId) {
 // Tag filter view
 // ============================================================
 
+const TOPIC_PAGE = 100;
+
 function renderTagView(tagName) {
     const container = document.getElementById('notes-active-view');
     const notes     = getNotesForTag(tagName);
+    const total     = getTopicVerseCount(tagName);
+    const verses    = getVersesForTopic(tagName, TOPIC_PAGE, 0);
 
     container.innerHTML = '';
 
-    if (notes.length === 0) {
+    if (notes.length === 0 && total === 0) {
         const empty       = document.createElement('p');
         empty.className   = 'notes-empty';
-        empty.textContent = `No notes tagged "${tagName}".`;
+        empty.textContent = `No notes or verses tagged "${tagName}".`;
         container.appendChild(empty);
         return;
     }
 
-    for (const note of notes) {
-        container.appendChild(buildTagNoteCard(note));
+    if (verses.length > 0) {
+        const appendFooter = () => {
+            for (const note of notes) {
+                container.appendChild(buildTagNoteCard(note));
+            }
+            if (total > verses.length) {
+                container.appendChild(buildLoadMoreButton(tagName, TOPIC_PAGE, total, container, notes));
+            }
+        };
+        renderInChunks(container, verses, buildTopicVerseCard, appendFooter);
+    } else {
+        for (const note of notes) {
+            container.appendChild(buildTagNoteCard(note));
+        }
     }
+}
+
+function buildLoadMoreButton(tagName, offset, total, container, notes) {
+    const remaining = total - offset;
+    const btn       = document.createElement('button');
+    btn.className   = 'load-more-btn';
+    btn.textContent = `Load ${Math.min(remaining, TOPIC_PAGE)} more of ${remaining} remaining`;
+    btn.addEventListener('click', () => {
+        btn.remove();
+        // Remove note cards so they re-append after new verses
+        for (const note of notes) {
+            container.querySelector(`[data-note-id="${note.id}"]`)?.remove();
+        }
+        const newVerses = getVersesForTopic(tagName, TOPIC_PAGE, offset);
+        const newOffset = offset + newVerses.length;
+        const appendFooter = () => {
+            for (const note of notes) {
+                container.appendChild(buildTagNoteCard(note));
+            }
+            if (newOffset < total) {
+                container.appendChild(buildLoadMoreButton(tagName, newOffset, total, container, notes));
+            }
+        };
+        renderInChunks(container, newVerses, buildTopicVerseCard, appendFooter);
+    });
+    return btn;
+}
+
+function renderInChunks(container, items, buildFn, onDone, startIndex = 0) {
+    const CHUNK = 30;
+    const end   = Math.min(startIndex + CHUNK, items.length);
+    for (let i = startIndex; i < end; i++) {
+        container.appendChild(buildFn(items[i]));
+    }
+    if (end < items.length) {
+        requestAnimationFrame(() => renderInChunks(container, items, buildFn, onDone, end));
+    } else {
+        onDone?.();
+    }
+}
+
+function buildTopicVerseCard(verse) {
+    const block     = document.createElement('div');
+    block.className = 'note-block';
+
+    const anchor     = document.createElement('div');
+    anchor.className = 'note-block-anchor note-block-anchor-link';
+    anchor.textContent = `${verse.book_name} ${verse.chapter}:${verse.verse}`;
+    anchor.addEventListener('click', () => navigateTo(verse.book_id, verse.chapter, verse.id));
+    block.appendChild(anchor);
+
+    const body       = document.createElement('div');
+    body.className   = 'note-block-body';
+    body.textContent = verse.text;
+    block.appendChild(body);
+
+    return block;
 }
 
 function buildTagNoteCard(note) {

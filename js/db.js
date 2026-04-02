@@ -273,6 +273,30 @@ export function getTopicsForVerse(verseId) {
     )[0]?.values.map(r => ({ id: r[0], name: r[1] })) || [];
 }
 
+export function getVersesForTopic(topicName, limit = 100, offset = 0) {
+    return db.exec(
+        `SELECT v.id, v.book_id, v.chapter, v.verse, v.text, b.name AS book_name
+         FROM verses v
+         JOIN books b ON b.id = v.book_id
+         JOIN topic_verses tv ON tv.verse_id = v.id
+         JOIN topics t ON t.id = tv.topic_id
+         WHERE t.name = ? AND t.display = 1 AND v.translation_id = ?
+         ORDER BY v.id LIMIT ? OFFSET ?`,
+        [topicName, getCurrentTranslation(), limit, offset]
+    )[0]?.values.map(r => ({
+        id: r[0], book_id: r[1], chapter: r[2], verse: r[3], text: r[4], book_name: r[5]
+    })) || [];
+}
+
+export function getTopicVerseCount(topicName) {
+    return db.exec(
+        `SELECT COUNT(*) FROM topic_verses tv
+         JOIN topics t ON t.id = tv.topic_id
+         WHERE t.name = ? AND t.display = 1`,
+        [topicName]
+    )[0]?.values[0][0] || 0;
+}
+
 export function getUserTagsForVerse(verseId) {
     return db.exec(
         `SELECT DISTINCT tg.name FROM tags tg
@@ -525,14 +549,17 @@ export function search(query) {
         console.error('FTS note search failed:', e);
     }
 
-    // Tag name search
+    // Tag name search — user tags + system topics
     const tagResults = [];
     const tstmt = db.prepare(
-        'SELECT id, name, type FROM tags WHERE name LIKE ? LIMIT 20'
+        `SELECT name FROM tags WHERE name LIKE ?
+         UNION
+         SELECT name FROM topics WHERE name LIKE ? AND display = 1
+         LIMIT 20`
     );
-    tstmt.bind([`%${query.toLowerCase()}%`]);
+    tstmt.bind([`%${query.toLowerCase()}%`, `%${query}%`]);
     while (tstmt.step()) {
-        tagResults.push({ type: 'tag', ...tstmt.getAsObject() });
+        tagResults.push({ type: 'tag', name: tstmt.getAsObject().name });
     }
     tstmt.free();
 
