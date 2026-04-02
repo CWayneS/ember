@@ -14,7 +14,7 @@ export function initReader() {
     document.getElementById('next-chapter').addEventListener('click', nextChapter);
     document.getElementById('book-selector-btn').addEventListener('click', toggleBookOverlay);
 
-    // Close overlay when clicking outside of it
+    // Close overlay when clicking outside of it or pressing Escape
     document.addEventListener('click', (e) => {
         const overlay = document.getElementById('book-overlay');
         if (
@@ -22,9 +22,12 @@ export function initReader() {
             !overlay.contains(e.target) &&
             e.target.id !== 'book-selector-btn'
         ) {
-            overlay.classList.add('hidden');
-            document.getElementById('chapter-grid').classList.add('hidden');
+            closeBookOverlay();
         }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeBookOverlay();
     });
 }
 
@@ -143,6 +146,11 @@ function nextChapter() {
 // Book / Chapter Overlay
 // ============================================================
 
+function closeBookOverlay() {
+    document.getElementById('book-overlay').classList.add('hidden');
+    document.getElementById('chapter-grid').classList.add('hidden');
+}
+
 function toggleBookOverlay() {
     const overlay = document.getElementById('book-overlay');
     overlay.classList.toggle('hidden');
@@ -153,18 +161,59 @@ function toggleBookOverlay() {
     }
 }
 
+const GENRE_LABELS = {
+    law:        'Law',
+    history:    'History',
+    poetry:     'Poetry & Wisdom',
+    prophecy:   'Prophecy',
+    gospel:     'Gospels',
+    epistle:    'Epistles',
+    apocalyptic:'Apocalyptic',
+};
+
 function renderBookList() {
     const books     = getBooks();
     const container = document.getElementById('book-list');
     container.innerHTML = '';
 
+    // Group by testament → genre, preserving canonical order
+    const groups = [];
+    let lastKey  = null;
     for (const book of books) {
-        const btn = document.createElement('button');
-        btn.className  = 'book-item';
-        btn.textContent = book.abbrev;
-        btn.title      = book.name;
-        btn.addEventListener('click', () => showChapterGrid(book));
-        container.appendChild(btn);
+        const key = `${book.testament}:${book.genre}`;
+        if (key !== lastKey) {
+            groups.push({ testament: book.testament, genre: book.genre, books: [] });
+            lastKey = key;
+        }
+        groups[groups.length - 1].books.push(book);
+    }
+
+    let lastTestament = null;
+    for (const group of groups) {
+        if (group.testament !== lastTestament) {
+            const divider     = document.createElement('div');
+            divider.className = 'book-testament-divider';
+            divider.textContent = group.testament === 'OT' ? 'Old Testament' : 'New Testament';
+            container.appendChild(divider);
+            lastTestament = group.testament;
+        }
+
+        const heading     = document.createElement('div');
+        heading.className = 'book-genre-heading';
+        heading.textContent = GENRE_LABELS[group.genre] || group.genre;
+        container.appendChild(heading);
+
+        const row     = document.createElement('div');
+        row.className = 'book-genre-row';
+        for (const book of group.books) {
+            const btn = document.createElement('button');
+            btn.className   = 'book-item';
+            btn.textContent = book.abbrev;
+            btn.title       = book.name;
+            btn.addEventListener('click', () => showChapterGrid(book));
+            row.appendChild(btn);
+        }
+        container.appendChild(row);
     }
 }
 
@@ -179,8 +228,7 @@ function showChapterGrid(book) {
         btn.textContent = c;
         btn.addEventListener('click', () => {
             navigateTo(book.id, c);
-            document.getElementById('book-overlay').classList.add('hidden');
-            grid.classList.add('hidden');
+            closeBookOverlay();
         });
         grid.appendChild(btn);
     }

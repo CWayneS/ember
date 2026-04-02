@@ -53,31 +53,35 @@ export function initSearch() {
 // Search execution
 // ============================================================
 
-function runSearch(query) {
-    const results = search(query);
-    const total   = results.verses.length + results.notes.length + results.tags.length + results.studies.length;
+const PREFIXES = { 'b:': 'verses', 'n:': 'notes', 's:': 'studies', 't:': 'tags' };
 
-    if (total === 0) {
-        showOverlay(renderEmpty(query));
-        return;
+function runSearch(query) {
+    let filter = null;
+    let q      = query;
+    for (const [prefix, key] of Object.entries(PREFIXES)) {
+        if (query.toLowerCase().startsWith(prefix)) {
+            filter = key;
+            q      = query.slice(prefix.length).trim();
+            break;
+        }
     }
+
+    if (q.length < (filter ? 1 : 2)) { showOverlay(renderShortcuts()); return; }
+
+    const results = search(q);
+    const show    = (key) => !filter || filter === key;
+
+    const sections = [];
+    if (show('verses')  && results.verses.length  > 0) sections.push(renderSection('Scripture', results.verses.map(renderVerseResult)));
+    if (show('notes')   && results.notes.length   > 0) sections.push(renderSection('Notes',     results.notes.map(renderNoteResult)));
+    if (show('studies') && results.studies.length > 0) sections.push(renderSection('Studies',   results.studies.map(renderStudyResult)));
+    if (show('tags')    && results.tags.length    > 0) sections.push(renderSection('Tags',       results.tags.map(renderTagResult)));
+
+    if (sections.length === 0) { showOverlay(renderEmpty(query)); return; }
 
     const container = document.createElement('div');
     container.id = 'search-results-inner';
-
-    if (results.verses.length > 0) {
-        container.appendChild(renderSection('Scripture', results.verses.map(renderVerseResult)));
-    }
-    if (results.notes.length > 0) {
-        container.appendChild(renderSection('Notes', results.notes.map(renderNoteResult)));
-    }
-    if (results.studies.length > 0) {
-        container.appendChild(renderSection('Studies', results.studies.map(renderStudyResult)));
-    }
-    if (results.tags.length > 0) {
-        container.appendChild(renderSection('Tags', results.tags.map(renderTagResult)));
-    }
-
+    sections.forEach(s => container.appendChild(s));
     showOverlay(container);
 }
 
@@ -229,7 +233,8 @@ function renderShortcuts() {
     const prefixes = [
         { prefix: 'b:', desc: 'Scripture verses only' },
         { prefix: 'n:', desc: 'Notes only'            },
-        { prefix: 's:', desc: 'Studies only'           },
+        { prefix: 's:', desc: 'Studies only'          },
+        { prefix: 't:', desc: 'Tags only'             },
     ];
 
     for (const { prefix, desc } of prefixes) {
@@ -246,6 +251,13 @@ function renderShortcuts() {
 
         row.appendChild(code);
         row.appendChild(label);
+        row.addEventListener('click', () => {
+            const input   = document.getElementById('search-input');
+            input.value   = prefix;
+            input.focus();
+            // position cursor at end
+            input.setSelectionRange(prefix.length, prefix.length);
+        });
         el.appendChild(row);
     }
 
