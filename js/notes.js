@@ -63,11 +63,16 @@ function buildNoteBlock(note, studyId) {
     block.className      = 'note-block';
     block.dataset.noteId = note.id;
 
-    // Verse anchor label
+    // Verse anchor label — click to navigate and highlight the verse
     if (note.anchors && note.anchors.length > 0) {
         const anchor     = document.createElement('div');
-        anchor.className = 'note-block-anchor';
+        anchor.className = 'note-block-anchor note-block-anchor-link';
         anchor.textContent = formatAnchor(note.anchors[0]);
+        anchor.addEventListener('click', () => {
+            const a      = note.anchors[0];
+            const parsed = parseVerseId(a.verse_start);
+            navigateTo(parsed.book, parsed.chapter, a.verse_start);
+        });
         block.appendChild(anchor);
     }
 

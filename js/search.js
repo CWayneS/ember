@@ -2,8 +2,7 @@
 
 import { search, parseVerseId, getBooks } from './db.js';
 import { navigateTo }                      from './reader.js';
-import { showNoteEditor }                  from './notes.js';
-import { openTagView }                     from './panels.js';
+import { openTagView, openStudy }          from './panels.js';
 
 // ============================================================
 // Init
@@ -146,14 +145,13 @@ function renderNoteResult(note) {
     }
 
     item.addEventListener('click', () => {
-        const verseIds = note.anchors.length > 0
-            ? [note.anchors[0].verse_start]
-            : [];
-        if (verseIds.length > 0) {
-            const parsed = parseVerseId(verseIds[0]);
-            navigateTo(parsed.book, parsed.chapter, verseIds[0]);
+        if (note.anchors.length > 0) {
+            const parsed = parseVerseId(note.anchors[0].verse_start);
+            navigateTo(parsed.book, parsed.chapter, note.anchors[0].verse_start);
         }
-        showNoteEditor(verseIds);
+        if (note.study_id && note.study_name) {
+            openStudy(note.study_id, note.study_name);
+        }
         hideOverlay();
         document.getElementById('search-input').value = '';
     });

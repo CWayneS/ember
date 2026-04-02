@@ -505,9 +505,10 @@ export function search(query) {
     // Notes full-text search
     try {
         const nstmt = db.prepare(
-            `SELECT n.id, n.body, n.created_at
+            `SELECT n.id, n.body, n.created_at, n.study_id, s.name AS study_name
              FROM notes_fts fts
              JOIN notes n ON n.id = fts.rowid
+             LEFT JOIN studies s ON s.id = n.study_id
              WHERE notes_fts MATCH ?
              LIMIT 50`
         );
