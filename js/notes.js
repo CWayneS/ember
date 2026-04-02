@@ -3,11 +3,11 @@
 import {
     saveNote, updateNote, deleteNote,
     getNotesForStudy, getStudies, getNotesForTag, getVersesForTopic, getTopicVerseCount,
-    parseVerseId, getBooks, createStudy, deleteStudy,
+    parseVerseId, getBooks, createStudy, deleteStudy, renameStudy, getStudyName,
     addNoteTag, removeNoteTag
 } from './db.js';
 import { refreshNoteDots, navigateTo }              from './reader.js';
-import { openStudy, closeStudy, getActiveStudyId, openTagView } from './panels.js';
+import { openStudy, closeStudy, getActiveStudyId, openTagView, renameStudyTab } from './panels.js';
 import { refreshReference }                         from './reference.js';
 
 let currentVerseIds = [];       // verses currently selected in the reader
@@ -43,6 +43,22 @@ function renderStudyDocument(studyId) {
     const notes     = getNotesForStudy(studyId);
 
     container.innerHTML = '';
+
+    // Editable study title
+    const title           = document.createElement('div');
+    title.className       = 'study-title';
+    title.contentEditable = 'true';
+    title.setAttribute('data-placeholder', 'Untitled Study');
+    title.textContent     = getStudyName(studyId);
+    title.addEventListener('input', () => {
+        const name = title.textContent.trim();
+        renameStudy(studyId, name);
+        renameStudyTab(studyId, name || 'Untitled Study');
+    });
+    title.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); title.blur(); }
+    });
+    container.appendChild(title);
 
     if (notes.length === 0) {
         const empty = document.createElement('p');

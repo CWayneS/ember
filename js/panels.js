@@ -118,6 +118,13 @@ export function getActiveStudyId() {
     return activeStudyId;
 }
 
+export function renameStudyTab(studyId, name) {
+    const entry = openStudies.find(s => s.id === studyId);
+    if (entry) entry.name = name;
+    const tab = document.querySelector(`#notes-tabs [data-study-id="${studyId}"] .notes-tab-name`);
+    if (tab) tab.textContent = name;
+}
+
 function renderStudyTabs() {
     // Remove all dynamic study tabs (leave "All Studies" and "+" in place)
     document.querySelectorAll('#notes-tabs .notes-tab:not([data-study-id="all"])').forEach(el => el.remove());

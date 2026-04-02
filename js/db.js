@@ -563,7 +563,18 @@ export function search(query) {
     }
     tstmt.free();
 
-    return { verses: verseResults, notes: noteResults, tags: tagResults };
+    // Study name search
+    const studyResults = [];
+    const sstmt = db.prepare(
+        `SELECT id, name FROM studies WHERE name LIKE ? ORDER BY modified_at DESC LIMIT 20`
+    );
+    sstmt.bind([`%${query}%`]);
+    while (sstmt.step()) {
+        studyResults.push({ type: 'study', ...sstmt.getAsObject() });
+    }
+    sstmt.free();
+
+    return { verses: verseResults, notes: noteResults, tags: tagResults, studies: studyResults };
 }
 
 // ============================================================
@@ -596,6 +607,15 @@ export function createStudy(name = 'Untitled Study') {
     const studyId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
     saveToStorage(db.export());
     return studyId;
+}
+
+export function getStudyName(studyId) {
+    return db.exec('SELECT name FROM studies WHERE id = ?', [studyId])[0]?.values[0][0] || '';
+}
+
+export function renameStudy(studyId, name) {
+    db.run('UPDATE studies SET name = ?, modified_at = datetime(\'now\') WHERE id = ?', [name, studyId]);
+    saveToStorage(db.export());
 }
 
 export function getStudies() {

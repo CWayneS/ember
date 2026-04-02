@@ -2,7 +2,7 @@
 
 import { search, parseVerseId, getBooks } from './db.js';
 import { navigateTo }                      from './reader.js';
-import { openTagView, openStudy }          from './panels.js';
+import { openTagView, openStudy }           from './panels.js';
 
 // ============================================================
 // Init
@@ -55,7 +55,7 @@ export function initSearch() {
 
 function runSearch(query) {
     const results = search(query);
-    const total   = results.verses.length + results.notes.length + results.tags.length;
+    const total   = results.verses.length + results.notes.length + results.tags.length + results.studies.length;
 
     if (total === 0) {
         showOverlay(renderEmpty(query));
@@ -70,6 +70,9 @@ function runSearch(query) {
     }
     if (results.notes.length > 0) {
         container.appendChild(renderSection('Notes', results.notes.map(renderNoteResult)));
+    }
+    if (results.studies.length > 0) {
+        container.appendChild(renderSection('Studies', results.studies.map(renderStudyResult)));
     }
     if (results.tags.length > 0) {
         container.appendChild(renderSection('Tags', results.tags.map(renderTagResult)));
@@ -159,6 +162,30 @@ function renderNoteResult(note) {
     return item;
 }
 
+function renderStudyResult(study) {
+    const item     = document.createElement('div');
+    item.className = 'search-result-item';
+
+    const label       = document.createElement('div');
+    label.className   = 'search-result-ref';
+    label.textContent = 'Study';
+
+    const name_el       = document.createElement('div');
+    name_el.className   = 'search-result-text';
+    name_el.textContent = study.name;
+
+    item.appendChild(label);
+    item.appendChild(name_el);
+
+    item.addEventListener('click', () => {
+        openStudy(study.id, study.name);
+        hideOverlay();
+        document.getElementById('search-input').value = '';
+    });
+
+    return item;
+}
+
 function renderTagResult(tag) {
     const item     = document.createElement('div');
     item.className = 'search-result-item';
@@ -202,7 +229,7 @@ function renderShortcuts() {
     const prefixes = [
         { prefix: 'b:', desc: 'Scripture verses only' },
         { prefix: 'n:', desc: 'Notes only'            },
-        { prefix: 's:', desc: 'Studies only'          },
+        { prefix: 's:', desc: 'Studies only'           },
     ];
 
     for (const { prefix, desc } of prefixes) {

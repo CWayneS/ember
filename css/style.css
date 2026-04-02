@@ -858,6 +858,25 @@ textarea {
     color: var(--accent);
 }
 
+.study-title {
+    font-size: var(--size-base);
+    font-weight: 600;
+    color: var(--text-primary);
+    outline: none;
+    padding: 4px 0 8px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border-light);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.study-title:empty::before {
+    content: attr(data-placeholder);
+    color: var(--text-muted);
+    pointer-events: none;
+    font-weight: 400;
+}
+
 .note-block-body {
     font-size: var(--size-small);
     line-height: 1.6;
