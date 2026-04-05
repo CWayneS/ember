@@ -34,6 +34,17 @@ async function init() {
         document.getElementById('layout-toggle-btn')
             .addEventListener('click', togglePanelLayout);
 
+        // Dark mode toggle — persist preference in localStorage
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const savedTheme  = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+            document.body.classList.add('theme-dark');
+        }
+        document.getElementById('theme-toggle').addEventListener('click', () => {
+            const isDark = document.body.classList.toggle('theme-dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        });
+
         // Hide loading screen
         document.getElementById('loading').classList.add('hidden');
 
