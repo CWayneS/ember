@@ -2,25 +2,48 @@
 
 import { getChapter, getBooks, getBook, setState, getNotesForVerse } from './db.js';
 
-let currentBook    = 1;
-let currentChapter = 1;
+// ============================================================
+// State
+// ============================================================
+
+const panes = {
+    a: { bookId: 1, chapter: 1 },
+    b: { bookId: 1, chapter: 1 },
+};
+
+let activePaneId = 'a';
+let splitActive  = false;
+let splitRatio   = 50;    // pane A percentage width when split
+let overlayPane  = 'a';   // which pane triggered the book overlay
+
+// ============================================================
+// DOM helpers
+// ============================================================
+
+function getPaneEl(id)    { return document.getElementById(`reader-pane-${id}`); }
+function getTextEl(id)    { return getPaneEl(id).querySelector('.scripture-text'); }
+function getContentEl(id) { return getPaneEl(id).querySelector('.pane-content'); }
+function navEl(id, sel)   { return getPaneEl(id).querySelector(sel); }
 
 // ============================================================
 // Init
 // ============================================================
 
 export function initReader() {
-    document.getElementById('prev-chapter').addEventListener('click', prevChapter);
-    document.getElementById('next-chapter').addEventListener('click', nextChapter);
-    document.getElementById('book-selector-btn').addEventListener('click', toggleBookOverlay);
+    for (const id of ['a', 'b']) {
+        navEl(id, '.pane-book-btn').addEventListener('click', () => openBookOverlay(id));
+        navEl(id, '.pane-prev').addEventListener('click', () => prevChapter(id));
+        navEl(id, '.pane-next').addEventListener('click', () => nextChapter(id));
+    }
 
-    // Close overlay when clicking outside of it or pressing Escape
+    document.getElementById('split-toggle-btn').addEventListener('click', toggleSplit);
+
     document.addEventListener('click', (e) => {
         const overlay = document.getElementById('book-overlay');
         if (
             !overlay.classList.contains('hidden') &&
             !overlay.contains(e.target) &&
-            e.target.id !== 'book-selector-btn'
+            !e.target.closest('.pane-book-btn')
         ) {
             closeBookOverlay();
         }
@@ -29,26 +52,58 @@ export function initReader() {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeBookOverlay();
     });
+
+    initSplitResize();
 }
 
 // ============================================================
-// Navigation
+// Public navigation API
 // ============================================================
 
+// External callers navigate the active pane.
 export function navigateTo(bookId, chapter, highlightVerseId = null) {
-    currentBook    = bookId;
-    currentChapter = chapter;
+    renderPane(activePaneId, bookId, chapter, highlightVerseId);
+    if (activePaneId === 'a') {
+        setState('currentBook', bookId);
+        setState('currentChapter', chapter);
+    }
+}
+
+export function getCurrentLocation() {
+    return { book: panes[activePaneId].bookId, chapter: panes[activePaneId].chapter };
+}
+
+// ============================================================
+// Active pane
+// ============================================================
+
+export function setActivePane(paneId) {
+    if (paneId === activePaneId) return;
+    activePaneId = paneId;
+    getPaneEl('a').classList.toggle('active', paneId === 'a');
+    getPaneEl('b').classList.toggle('active', paneId === 'b');
+}
+
+export function getActivePaneId() {
+    return activePaneId;
+}
+
+// ============================================================
+// Render
+// ============================================================
+
+function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
+    panes[paneId].bookId  = bookId;
+    panes[paneId].chapter = chapter;
 
     const book   = getBook(bookId);
     const verses = getChapter(bookId, chapter);
-    const container = document.getElementById('scripture-text');
+    const textEl = getTextEl(paneId);
 
-    // Update reader header
-    document.getElementById('current-location').textContent = `${book.name} ${chapter}`;
-    document.getElementById('book-selector-btn').textContent = book.abbrev;
+    navEl(paneId, '.pane-book-btn').textContent = book.abbrev;
+    navEl(paneId, '.pane-location').textContent = `${book.name} ${chapter}`;
 
-    // Render verses
-    container.innerHTML = '';
+    textEl.innerHTML = '';
     for (const v of verses) {
         const el = document.createElement('div');
         el.className = 'verse';
@@ -65,7 +120,6 @@ export function navigateTo(bookId, chapter, highlightVerseId = null) {
         el.appendChild(numSpan);
         el.appendChild(textSpan);
 
-        // Note indicator — appended after text so it trails the verse
         const notes = getNotesForVerse(v.id);
         if (notes.length > 0) {
             const indicator = document.createElement('span');
@@ -74,46 +128,40 @@ export function navigateTo(bookId, chapter, highlightVerseId = null) {
             el.appendChild(indicator);
         }
 
-        container.appendChild(el);
+        textEl.appendChild(el);
     }
 
-    // Scroll to highlighted verse, or back to top
     if (highlightVerseId) {
-        const target = container.querySelector(`[data-verse-id="${highlightVerseId}"]`);
+        const target = textEl.querySelector(`[data-verse-id="${highlightVerseId}"]`);
         if (target) {
             target.scrollIntoView({ block: 'center' });
             target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         }
     } else {
-        document.getElementById('reader-content').scrollTop = 0;
+        getContentEl(paneId).scrollTop = 0;
     }
-
-    // Persist location
-    setState('currentBook', bookId);
-    setState('currentChapter', chapter);
 }
 
-export function getCurrentLocation() {
-    return { book: currentBook, chapter: currentChapter };
-}
+// ============================================================
+// Note dots refresh — updates both panes
+// ============================================================
 
-// Update note-indicator dots without re-rendering verses.
-// Called after note writes so selection state is preserved.
 export function refreshNoteDots() {
-    const container = document.getElementById('scripture-text');
-    for (const verseEl of container.querySelectorAll('.verse')) {
-        const verseId  = parseInt(verseEl.dataset.verseId);
-        const notes    = getNotesForVerse(verseId);
-        const existing = verseEl.querySelector('.note-indicator');
-        if (notes.length > 0 && !existing) {
-            const dot = document.createElement('span');
-            dot.className = 'note-indicator';
-            dot.title = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
-            verseEl.appendChild(dot);
-        } else if (notes.length === 0 && existing) {
-            existing.remove();
-        } else if (existing) {
-            existing.title = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
+    for (const id of ['a', 'b']) {
+        for (const verseEl of getTextEl(id).querySelectorAll('.verse')) {
+            const verseId  = parseInt(verseEl.dataset.verseId);
+            const notes    = getNotesForVerse(verseId);
+            const existing = verseEl.querySelector('.note-indicator');
+            if (notes.length > 0 && !existing) {
+                const dot = document.createElement('span');
+                dot.className = 'note-indicator';
+                dot.title = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
+                verseEl.appendChild(dot);
+            } else if (notes.length === 0 && existing) {
+                existing.remove();
+            } else if (existing) {
+                existing.title = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
+            }
         }
     }
 }
@@ -122,53 +170,87 @@ export function refreshNoteDots() {
 // Prev / Next
 // ============================================================
 
-function prevChapter() {
-    if (currentChapter > 1) {
-        navigateTo(currentBook, currentChapter - 1);
-    } else if (currentBook > 1) {
-        const prevBook = getBook(currentBook - 1);
-        navigateTo(currentBook - 1, prevBook.chapters);
+function prevChapter(paneId) {
+    const { bookId, chapter } = panes[paneId];
+    if (chapter > 1) {
+        renderPane(paneId, bookId, chapter - 1);
+    } else if (bookId > 1) {
+        const prevBook = getBook(bookId - 1);
+        renderPane(paneId, bookId - 1, prevBook.chapters);
     }
-    // Genesis 1 → do nothing
+    if (paneId === 'a') {
+        setState('currentBook', panes.a.bookId);
+        setState('currentChapter', panes.a.chapter);
+    }
 }
 
-function nextChapter() {
-    const book = getBook(currentBook);
-    if (currentChapter < book.chapters) {
-        navigateTo(currentBook, currentChapter + 1);
-    } else if (currentBook < 66) {
-        navigateTo(currentBook + 1, 1);
+function nextChapter(paneId) {
+    const { bookId, chapter } = panes[paneId];
+    const book = getBook(bookId);
+    if (chapter < book.chapters) {
+        renderPane(paneId, bookId, chapter + 1);
+    } else if (bookId < 66) {
+        renderPane(paneId, bookId + 1, 1);
     }
-    // Revelation 22 → do nothing
+    if (paneId === 'a') {
+        setState('currentBook', panes.a.bookId);
+        setState('currentChapter', panes.a.chapter);
+    }
+}
+
+// ============================================================
+// Split toggle
+// ============================================================
+
+function toggleSplit() {
+    splitActive = !splitActive;
+
+    const paneB  = getPaneEl('b');
+    const handle = document.getElementById('reader-split-handle');
+    const btn    = document.getElementById('split-toggle-btn');
+    const reader = document.getElementById('reader');
+
+    paneB.classList.toggle('hidden', !splitActive);
+    handle.classList.toggle('hidden', !splitActive);
+    btn.classList.toggle('active', splitActive);
+    reader.classList.toggle('split-active', splitActive);
+
+    if (splitActive) {
+        // Apply percentage flex so panes scale proportionally with container
+        applyRatio(splitRatio);
+        renderPane('b', panes.a.bookId, panes.a.chapter);
+    } else {
+        // Clear explicit flex so pane A fills the reader naturally
+        getPaneEl('a').style.flex = '';
+        getPaneEl('b').style.flex = '';
+        if (activePaneId === 'b') setActivePane('a');
+    }
 }
 
 // ============================================================
 // Book / Chapter Overlay
 // ============================================================
 
+function openBookOverlay(paneId) {
+    overlayPane = paneId;
+    document.getElementById('book-overlay').classList.remove('hidden');
+    document.getElementById('chapter-grid').classList.add('hidden');
+    renderBookList();
+}
+
 function closeBookOverlay() {
     document.getElementById('book-overlay').classList.add('hidden');
     document.getElementById('chapter-grid').classList.add('hidden');
 }
 
-function toggleBookOverlay() {
-    const overlay = document.getElementById('book-overlay');
-    overlay.classList.toggle('hidden');
-
-    if (!overlay.classList.contains('hidden')) {
-        document.getElementById('chapter-grid').classList.add('hidden');
-        renderBookList();
-    }
-}
-
 const GENRE_LABELS = {
-    law:        'Law',
-    history:    'History',
-    poetry:     'Poetry & Wisdom',
-    prophecy:   'Prophecy',
-    gospel:     'Gospels',
-    epistle:    'Epistles',
-    apocalyptic:'Apocalyptic',
+    law:         'Law',
+    history:     'History',
+    poetry:      'Poetry & Wisdom',
+    prophecy:    'Prophecy',
+    gospel:      'Gospels',
+    epistle:     'Epistles',
+    apocalyptic: 'Apocalyptic',
 };
 
 function renderBookList() {
@@ -176,7 +258,6 @@ function renderBookList() {
     const container = document.getElementById('book-list');
     container.innerHTML = '';
 
-    // Group by testament → genre, preserving canonical order
     const groups = [];
     let lastKey  = null;
     for (const book of books) {
@@ -227,9 +308,63 @@ function showChapterGrid(book) {
         btn.className   = 'chapter-item';
         btn.textContent = c;
         btn.addEventListener('click', () => {
-            navigateTo(book.id, c);
+            renderPane(overlayPane, book.id, c);
+            if (overlayPane === 'a') {
+                setState('currentBook', book.id);
+                setState('currentChapter', c);
+            }
             closeBookOverlay();
         });
         grid.appendChild(btn);
     }
+}
+
+// ============================================================
+// Split resize handle
+// ============================================================
+
+function initSplitResize() {
+    const handle = document.getElementById('reader-split-handle');
+    const paneA  = getPaneEl('a');
+    const body   = document.getElementById('reader-body');
+
+    let dragging   = false;
+    let startX     = 0;
+    let startWidth = 0;
+
+    handle.addEventListener('mousedown', (e) => {
+        if (!splitActive) return;
+        dragging   = true;
+        startX     = e.clientX;
+        startWidth = paneA.getBoundingClientRect().width;
+        document.body.style.cursor     = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const delta      = e.clientX - startX;
+        const totalWidth = body.getBoundingClientRect().width;
+        const newWidth   = clamp(startWidth + delta, 200, totalWidth - 200);
+        splitRatio = newWidth / totalWidth * 100;
+        applyRatio(splitRatio);
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        document.body.style.cursor     = '';
+        document.body.style.userSelect = '';
+    });
+}
+
+function applyRatio(ratio) {
+    const pct = ratio.toFixed(2);
+    getPaneEl('a').style.flex = `1 1 ${pct}%`;
+    getPaneEl('b').style.flex = `1 1 ${(100 - parseFloat(pct)).toFixed(2)}%`;
+}
+
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(value, max));
 }

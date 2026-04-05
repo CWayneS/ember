@@ -1,9 +1,14 @@
 // selection.js — Verse selection and contextual toolbar
 
+import { setActivePane } from './reader.js';
+
 let selectedVerses = [];
 
 export function initSelection() {
-    document.getElementById('scripture-text').addEventListener('click', handleVerseClick);
+    // Attach to each pane's scripture-text so pane-nav clicks don't interfere
+    document.querySelectorAll('.scripture-text').forEach(el => {
+        el.addEventListener('click', handleVerseClick);
+    });
 
     // Clear selection when clicking outside the reader text and outside the panels.
     // Guard: if the target was removed from the DOM during its own click handler
@@ -12,7 +17,7 @@ export function initSelection() {
     document.addEventListener('click', (e) => {
         if (!e.target.isConnected) return;
         if (
-            !e.target.closest('#scripture-text') &&
+            !e.target.closest('.scripture-text') &&
             !e.target.closest('#notes-panel') &&
             !e.target.closest('#reference-panel')
         ) {
@@ -28,9 +33,13 @@ function handleVerseClick(e) {
         return;
     }
 
+    // Activate whichever pane this click came from
+    const paneEl = e.target.closest('.reader-pane');
+    if (paneEl) setActivePane(paneEl.id.replace('reader-pane-', ''));
+
     const verseId = parseInt(verseEl.dataset.verseId);
 
-    // Clear previous selection
+    // Clear previous selection across all panes
     document.querySelectorAll('.verse.selected').forEach(el => el.classList.remove('selected'));
 
     // Select this verse and flash the glow animation

@@ -306,7 +306,8 @@ body.theme-dark #theme-icon-moon { display: none;  }
     flex-direction: column;
     flex: 1;
     overflow: hidden;
-    min-height: 0;
+    min-height: 80px;
+    min-width: 80px;
 }
 
 #study-name-btn {
@@ -362,7 +363,8 @@ body.theme-dark #theme-icon-moon { display: none;  }
     flex-direction: column;
     flex: 1;
     overflow: hidden;
-    min-height: 0;
+    min-height: 80px;
+    min-width: 80px;
 }
 
 /* Notes tabs — tabs shrink as more open, browser-style */
@@ -511,47 +513,41 @@ body.theme-dark #theme-icon-moon { display: none;  }
     gap: 6px;
 }
 
-#book-selector-btn {
-    padding: 4px 10px;
+#split-toggle-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+#split-toggle-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+#split-toggle-btn:hover {
     background: var(--bg-hover);
-    border-radius: 4px;
-    font-weight: 600;
-    font-size: var(--size-small);
-    font-family: var(--font-ui);
-    white-space: nowrap;
-}
-
-#book-selector-btn:hover {
-    background: var(--border-light);
-}
-
-#current-location {
-    font-size: var(--size-small);
-    font-weight: 600;
-    color: var(--text-secondary);
-    white-space: nowrap;
-}
-
-#prev-chapter,
-#next-chapter {
-    padding: 4px 8px;
-    font-size: var(--size-large);
-    border-radius: 4px;
-    line-height: 1;
     color: var(--text-secondary);
 }
 
-#prev-chapter:hover,
-#next-chapter:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
+#split-toggle-btn.active {
+    color: var(--accent);
+    background: var(--accent-light);
 }
 
 .reader-header-spacer {
     flex: 1;
 }
 
-#translation-label {
+.pane-nav-spacer {
+    flex: 1;
+}
+
+.translation-label {
     font-size: var(--size-xs);
     font-weight: 700;
     color: var(--text-muted);
@@ -559,6 +555,7 @@ body.theme-dark #theme-icon-moon { display: none;  }
     background: var(--bg-hover);
     border-radius: 4px;
     letter-spacing: 0.5px;
+    white-space: nowrap;
 }
 
 #bookmark-btn,
@@ -581,15 +578,101 @@ body.theme-dark #theme-icon-moon { display: none;  }
     color: var(--text-secondary);
 }
 
-#reader-content {
+/* ============================================================
+   Reader Body — split pane container
+   ============================================================ */
+#reader-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.reader-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 200px;
+    overflow: hidden;
+}
+
+/* Per-pane navigation bar */
+.pane-nav {
+    display: flex;
+    align-items: center;
+    height: var(--reader-header-height);
+    padding: 0 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+    font-family: var(--font-ui);
+    font-size: var(--size-small);
+    gap: 6px;
+}
+
+/* Active pane indicator in split mode */
+#reader.split-active .reader-pane.active .pane-nav {
+    border-bottom-color: var(--accent);
+}
+
+.pane-book-btn {
+    padding: 4px 10px;
+    background: var(--bg-hover);
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: var(--size-small);
+    font-family: var(--font-ui);
+    white-space: nowrap;
+}
+
+.pane-book-btn:hover {
+    background: var(--border-light);
+}
+
+.pane-location {
+    font-size: var(--size-small);
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.pane-prev,
+.pane-next {
+    padding: 4px 8px;
+    font-size: var(--size-large);
+    border-radius: 4px;
+    line-height: 1;
+    color: var(--text-secondary);
+}
+
+.pane-prev:hover,
+.pane-next:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* Per-pane content / scripture */
+.pane-content {
     flex: 1;
     overflow-y: auto;
     padding: 32px 32px 64px;
 }
 
-#scripture-text {
+.scripture-text {
     max-width: var(--content-max-width);
     margin: 0 auto;
+}
+
+/* Split resize handle */
+#reader-split-handle {
+    width: var(--resize-handle-size);
+    background: var(--border-light);
+    cursor: col-resize;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+
+#reader-split-handle:hover {
+    background: var(--accent);
 }
 
 /* ============================================================

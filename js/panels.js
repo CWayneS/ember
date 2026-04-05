@@ -204,10 +204,19 @@ function initWorkspaceResize() {
 // Vertical drag in default (column) layout; horizontal in stacked (row) layout.
 // ============================================================
 
+let panelRatio = 50;   // notes panel percentage of study-panels container
+
+function applyPanelRatio(ratio) {
+    const pct = ratio.toFixed(2);
+    const rem = (100 - parseFloat(pct)).toFixed(2);
+    document.getElementById('notes-panel').style.flex     = `1 1 ${pct}%`;
+    document.getElementById('reference-panel').style.flex = `1 1 ${rem}%`;
+}
+
 function initPanelResize() {
-    const handle       = document.getElementById('panel-resize-handle');
-    const notesPanel   = document.getElementById('notes-panel');
-    const studyPanels  = document.getElementById('study-panels');
+    const handle      = document.getElementById('panel-resize-handle');
+    const notesPanel  = document.getElementById('notes-panel');
+    const studyPanels = document.getElementById('study-panels');
 
     let dragging  = false;
     let startPos  = 0;
@@ -219,34 +228,27 @@ function initPanelResize() {
         startPos  = stacked ? e.clientX : e.clientY;
         const rect = notesPanel.getBoundingClientRect();
         startSize = stacked ? rect.width : rect.height;
-        document.body.style.cursor    = stacked ? 'col-resize' : 'row-resize';
+        document.body.style.cursor     = stacked ? 'col-resize' : 'row-resize';
         document.body.style.userSelect = 'none';
         e.preventDefault();
     });
 
     document.addEventListener('mousemove', (e) => {
         if (!dragging) return;
-        const stacked      = studyPanels.classList.contains('stacked');
-        const current      = stacked ? e.clientX : e.clientY;
-        const delta        = current - startPos;
+        const stacked       = studyPanels.classList.contains('stacked');
+        const current       = stacked ? e.clientX : e.clientY;
+        const delta         = current - startPos;
         const containerRect = studyPanels.getBoundingClientRect();
-        const totalSize    = stacked ? containerRect.width : containerRect.height;
-        const newSize      = clamp(startSize + delta, 80, totalSize - 80);
-
-        notesPanel.style.flex = 'none';
-        if (stacked) {
-            notesPanel.style.width  = `${newSize}px`;
-            notesPanel.style.height = '';
-        } else {
-            notesPanel.style.height = `${newSize}px`;
-            notesPanel.style.width  = '';
-        }
+        const totalSize     = stacked ? containerRect.width : containerRect.height;
+        const newSize       = clamp(startSize + delta, 80, totalSize - 80);
+        panelRatio = newSize / totalSize * 100;
+        applyPanelRatio(panelRatio);
     });
 
     document.addEventListener('mouseup', () => {
         if (!dragging) return;
         dragging = false;
-        document.body.style.cursor    = '';
+        document.body.style.cursor     = '';
         document.body.style.userSelect = '';
     });
 }
@@ -256,15 +258,18 @@ function initPanelResize() {
 // ============================================================
 
 export function togglePanelLayout() {
-    const studyPanels = document.getElementById('study-panels');
-    const notesPanel  = document.getElementById('notes-panel');
+    const studyPanels    = document.getElementById('study-panels');
+    const notesPanel     = document.getElementById('notes-panel');
+    const referencePanel = document.getElementById('reference-panel');
 
     studyPanels.classList.toggle('stacked');
 
-    // Reset any explicit sizing so flex takes over cleanly
-    notesPanel.style.flex   = '';
-    notesPanel.style.height = '';
-    notesPanel.style.width  = '';
+    // Reset explicit sizing and ratio so both panels start at 50/50 in the new orientation
+    panelRatio = 50;
+    notesPanel.style.flex     = '';
+    notesPanel.style.height   = '';
+    notesPanel.style.width    = '';
+    referencePanel.style.flex = '';
 }
 
 // ============================================================
