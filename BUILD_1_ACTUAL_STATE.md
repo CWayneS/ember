@@ -27,7 +27,7 @@ ember/
 │   ├── app.js                        # Entry point
 │   ├── db.js                         # Database layer (sql.js wrapper)
 │   ├── reader.js                     # Scripture rendering & navigation
-│   ├── selection.js                  # Verse selection & context toolbar
+│   ├── selection.js                  # Verse selection
 │   ├── notes.js                      # Note CRUD & study document UI
 │   ├── tags.js                       # Tag autocomplete
 │   ├── search.js                     # Full-text search UI
@@ -470,8 +470,6 @@ From `index.html`:
 
   #search-results.hidden (floating dropdown, z-index 150)
 
-  #context-toolbar (fixed, z-index 100, dark bg — injected by selection.js)
-
   #install-overlay.hidden (bottom-right PWA prompt, z-index 300)
     #install-prompt
       <p> install message
@@ -540,8 +538,7 @@ From `index.html`:
 ### Creating a Note
 
 1. User selects a verse (step above)
-2. User clicks "Add Note" in context toolbar (rendered by `selection.js`)
-   — or search result click calls `showNoteEditor(verseIds)`
+2. Search result click calls `showNoteEditor(verseIds)`
 3. If no active study: `notes.js` calls `createStudy(name)`, then `openStudy(studyId, name)` (panels.js), which emits `study-changed`
 4. `notes.js` receives `study-changed`, calls `getNotesForStudy(studyId)`, renders note blocks
 5. `saveNote(body, anchors, tagNames, studyId)` is called on first input (after 800ms debounce)

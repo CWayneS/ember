@@ -1,4 +1,4 @@
-// selection.js — Verse selection and contextual toolbar
+// selection.js — Verse selection
 
 import { setActivePane } from './reader.js';
 
