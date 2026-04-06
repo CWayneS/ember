@@ -49,6 +49,7 @@
     --size-large: 22px;
 
     --scripture-font-size: 18px;
+    --notes-font-size:     18px;
 
     --line-height-body: 1.65;
     --line-height-ui:   1.4;
@@ -1059,7 +1060,7 @@ body.theme-dark #theme-icon-moon { display: none;  }
 }
 
 .note-body {
-    font-size: var(--size-base);
+    font-size: var(--notes-font-size);
     line-height: 1.5;
     margin-bottom: 8px;
     white-space: pre-wrap;
