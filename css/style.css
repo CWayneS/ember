@@ -748,6 +748,91 @@ body.theme-dark #theme-icon-moon { display: none;  }
 
 
 /* ============================================================
+   Bookmark Button & Prompt
+   ============================================================ */
+
+#bookmark-btn {
+    font-size: 1.1rem;
+    line-height: 1;
+    color: var(--text-muted);
+    transition: color 0.15s;
+}
+
+#bookmark-btn.bookmarked {
+    color: var(--accent);
+}
+
+#bookmark-prompt {
+    position: fixed;
+    z-index: 200;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 220px;
+    transform: translateX(-100%); /* right-align to button edge */
+}
+
+#bookmark-prompt.hidden {
+    display: none;
+}
+
+#bookmark-comment {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: var(--size-small);
+    font-family: var(--font-ui);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+#bookmark-comment:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.bookmark-prompt-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.bookmark-prompt-actions button {
+    padding: 4px 12px;
+    font-size: var(--size-xs);
+    font-family: var(--font-ui);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#bookmark-save {
+    background: var(--accent);
+    color: var(--text-on-dark);
+    border: none;
+}
+
+#bookmark-save:hover {
+    opacity: 0.9;
+}
+
+#bookmark-cancel {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border-light);
+}
+
+#bookmark-cancel:hover {
+    color: var(--text-primary);
+}
+
+/* ============================================================
    Notes List
    ============================================================ */
 .notes-header {

@@ -19,7 +19,9 @@ export function initSelection() {
         if (
             !e.target.closest('.scripture-text') &&
             !e.target.closest('#notes-panel') &&
-            !e.target.closest('#reference-panel')
+            !e.target.closest('#reference-panel') &&
+            !e.target.closest('#bookmark-btn') &&
+            !e.target.closest('#bookmark-prompt')
         ) {
             clearSelection();
         }

@@ -84,7 +84,7 @@
                     </svg>
                 </button>
                 <div class="reader-header-spacer"></div>
-                <button id="bookmark-btn" aria-label="Bookmark this chapter">&#9673;</button>
+                <button id="bookmark-btn" aria-label="Bookmark verse">☆</button>
                 <button id="reader-help-btn" aria-label="Reader help">?</button>
                 <button id="reader-settings-btn" aria-label="Reader settings">⚙</button>
             </header>
@@ -129,6 +129,15 @@
 
     <!-- Search results overlay -->
     <div id="search-results" class="hidden"></div>
+
+    <!-- Bookmark prompt -->
+    <div id="bookmark-prompt" class="hidden">
+        <input type="text" id="bookmark-comment" placeholder="Add comment…" maxlength="200" autocomplete="off">
+        <div class="bookmark-prompt-actions">
+            <button id="bookmark-save">Save</button>
+            <button id="bookmark-cancel">Cancel</button>
+        </div>
+    </div>
 
     <!-- PWA install prompt -->
     <div id="install-overlay" class="hidden">

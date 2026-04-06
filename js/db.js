@@ -507,6 +507,35 @@ export function getNotesForTag(tagName) {
 // Search
 // ============================================================
 
+// ============================================================
+// Bookmark Queries
+// ============================================================
+
+export function getBookmarkForVerse(verseId) {
+    const result = db.exec(
+        'SELECT id, verse_id, label, created_at FROM bookmarks WHERE verse_id = ? LIMIT 1',
+        [verseId]
+    );
+    if (!result[0]) return null;
+    const [id, verse_id, label, created_at] = result[0].values[0];
+    return { id, verse_id, label, created_at };
+}
+
+export function addBookmark(verseId, label) {
+    const trimmed = (label || '').trim() || null;
+    db.run('INSERT INTO bookmarks (verse_id, label) VALUES (?, ?)', [verseId, trimmed]);
+    saveToStorage(db.export());
+    const result = db.exec('SELECT last_insert_rowid()');
+    return result[0].values[0][0];
+}
+
+export function removeBookmark(bookmarkId) {
+    db.run('DELETE FROM bookmarks WHERE id = ?', [bookmarkId]);
+    saveToStorage(db.export());
+}
+
+// ============================================================
+
 export function search(query) {
     const verseResults = [];
     const noteResults  = [];
