@@ -48,6 +48,8 @@
     --size-xs:    12px;
     --size-large: 22px;
 
+    --scripture-font-size: 18px;
+
     --line-height-body: 1.65;
     --line-height-ui:   1.4;
     --measure:          68ch;
@@ -723,9 +725,13 @@ body.theme-dark #theme-icon-moon { display: none;  }
     animation: verse-select-glow 0.4s ease-out forwards;
 }
 
+.verse-text {
+    font-size: var(--scripture-font-size);
+}
+
 .verse-number {
     font-family: var(--font-ui);
-    font-size: var(--size-xs);
+    font-size: calc(var(--scripture-font-size) * 0.67);
     font-weight: 400;
     font-variant-numeric: tabular-nums;
     color: var(--text-muted);
@@ -833,6 +839,74 @@ body.theme-dark #theme-icon-moon { display: none;  }
 
 .help-more-link:hover {
     color: var(--text-muted);
+}
+
+/* ── Reader settings popover ────────────────────────────────────── */
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 10px;
+}
+
+.settings-label {
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.font-size-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.font-size-controls button {
+    width: 30px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    font-size: var(--size-small);
+    font-family: var(--font-ui);
+    color: var(--text-secondary);
+}
+
+.font-size-controls button:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.font-size-controls button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+#font-size-display {
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+    min-width: 32px;
+    text-align: center;
+}
+
+.settings-reset-btn {
+    display: block;
+    width: 100%;
+    padding: 5px 0;
+    text-align: center;
+    font-size: var(--size-xs);
+    font-family: var(--font-ui);
+    color: var(--text-muted);
+    border-radius: 4px;
+}
+
+.settings-reset-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
 }
 
 #bookmark-comment {
