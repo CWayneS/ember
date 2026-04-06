@@ -1,6 +1,6 @@
 // search.js — Full-text search UI
 
-import { search, parseVerseId, getBooks } from './db.js';
+import { search, parseVerseId, getBooks, getAllBookmarks } from './db.js';
 import { navigateTo }                      from './reader.js';
 import { openTagView, openStudy }           from './panels.js';
 
@@ -53,7 +53,7 @@ export function initSearch() {
 // Search execution
 // ============================================================
 
-const PREFIXES = { 'b:': 'verses', 'n:': 'notes', 's:': 'studies', 't:': 'tags' };
+const PREFIXES = { 'b:': 'verses', 'n:': 'notes', 's:': 'studies', 't:': 'tags', 'k:': 'bookmarks' };
 
 function runSearch(query) {
     let filter = null;
@@ -68,6 +68,12 @@ function runSearch(query) {
 
     if (q.length < (filter ? 1 : 2)) { showOverlay(renderShortcuts()); return; }
 
+    // Bookmark search — JS-side filter, no FTS
+    if (filter === 'bookmarks') {
+        runBookmarkSearch(q);
+        return;
+    }
+
     const results = search(q);
     const show    = (key) => !filter || filter === key;
 
@@ -76,6 +82,12 @@ function runSearch(query) {
     if (show('notes')   && results.notes.length   > 0) sections.push(renderSection('Notes',     results.notes.map(renderNoteResult)));
     if (show('studies') && results.studies.length > 0) sections.push(renderSection('Studies',   results.studies.map(renderStudyResult)));
     if (show('tags')    && results.tags.length    > 0) sections.push(renderSection('Tags',       results.tags.map(renderTagResult)));
+
+    // Bookmarks — always included in unfiltered results, JS-side match
+    if (!filter) {
+        const bmMatches = matchBookmarks(q);
+        if (bmMatches.length > 0) sections.push(renderSection('Bookmarks', bmMatches.map(renderBookmarkResult)));
+    }
 
     if (sections.length === 0) { showOverlay(renderEmpty(query)); return; }
 
@@ -214,6 +226,51 @@ function renderTagResult(tag) {
     return item;
 }
 
+function matchBookmarks(q) {
+    const lq = q.toLowerCase();
+    return getAllBookmarks().filter(bm => {
+        if (bm.label) return bm.label.toLowerCase().includes(lq);
+        return `${bm.book_name} ${bm.chapter}:${bm.verse}`.toLowerCase().includes(lq);
+    });
+}
+
+function runBookmarkSearch(q) {
+    const matches = matchBookmarks(q);
+
+    if (matches.length === 0) { showOverlay(renderEmpty(q)); return; }
+
+    const container = document.createElement('div');
+    container.id = 'search-results-inner';
+    container.appendChild(renderSection('Bookmarks', matches.map(renderBookmarkResult)));
+    showOverlay(container);
+}
+
+function renderBookmarkResult(bm) {
+    const item     = document.createElement('div');
+    item.className = 'search-result-item';
+
+    const ref_el       = document.createElement('div');
+    ref_el.className   = 'search-result-ref';
+    ref_el.textContent = `${bm.book_name} ${bm.chapter}:${bm.verse}`;
+
+    item.appendChild(ref_el);
+
+    if (bm.label) {
+        const label_el       = document.createElement('div');
+        label_el.className   = 'search-result-text';
+        label_el.textContent = bm.label;
+        item.appendChild(label_el);
+    }
+
+    item.addEventListener('click', () => {
+        navigateTo(Math.floor(bm.verse_id / 1000000), bm.chapter);
+        hideOverlay();
+        document.getElementById('search-input').value = '';
+    });
+
+    return item;
+}
+
 function renderEmpty(query) {
     const el       = document.createElement('div');
     el.className   = 'search-no-results';
@@ -235,6 +292,7 @@ function renderShortcuts() {
         { prefix: 'n:', desc: 'Notes only'            },
         { prefix: 's:', desc: 'Studies only'          },
         { prefix: 't:', desc: 'Tags only'             },
+        { prefix: 'k:', desc: 'Bookmarks'             },
     ];
 
     for (const { prefix, desc } of prefixes) {
