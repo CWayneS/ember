@@ -511,6 +511,25 @@ export function getNotesForTag(tagName) {
 // Bookmark Queries
 // ============================================================
 
+export function getAllBookmarks() {
+    const result = db.exec(`
+        SELECT b.id, b.verse_id, b.label, b.created_at, bk.name AS book_name
+        FROM bookmarks b
+        JOIN books bk ON bk.id = (b.verse_id / 1000000)
+        ORDER BY b.created_at DESC
+    `);
+    if (!result[0]) return [];
+    return result[0].values.map(([id, verse_id, label, created_at, book_name]) => ({
+        id,
+        verse_id,
+        label,
+        created_at,
+        book_name,
+        chapter: Math.floor((verse_id % 1000000) / 1000),
+        verse:   verse_id % 1000,
+    }));
+}
+
 export function getBookmarkForVerse(verseId) {
     const result = db.exec(
         'SELECT id, verse_id, label, created_at FROM bookmarks WHERE verse_id = ? LIMIT 1',

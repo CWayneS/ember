@@ -21,7 +21,8 @@ export function initSelection() {
             !e.target.closest('#notes-panel') &&
             !e.target.closest('#reference-panel') &&
             !e.target.closest('#bookmark-btn') &&
-            !e.target.closest('#bookmark-prompt')
+            !e.target.closest('#bookmark-prompt') &&
+            !e.target.closest('#bookmark-dropdown')
         ) {
             clearSelection();
         }
