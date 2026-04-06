@@ -781,6 +781,60 @@ body.theme-dark #theme-icon-moon { display: none;  }
     display: none;
 }
 
+/* ── Help popovers ──────────────────────────────────────────────── */
+
+.help-popover {
+    position: fixed;
+    z-index: 170;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    max-width: 280px;
+    width: max-content;
+}
+
+.help-popover.hidden {
+    display: none;
+}
+
+.help-popover-lead {
+    font-size: var(--size-small);
+    color: var(--text-primary);
+    margin: 0 0 10px;
+    line-height: 1.5;
+}
+
+.help-popover ul {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.help-popover li {
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.help-more-link {
+    display: block;
+    margin-top: 12px;
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    font-style: italic;
+    text-decoration: none;
+    cursor: default;
+    line-height: 1.5;
+}
+
+.help-more-link:hover {
+    color: var(--text-muted);
+}
+
 #bookmark-comment {
     width: 100%;
     padding: 6px 8px;
