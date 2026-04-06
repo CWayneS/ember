@@ -910,6 +910,35 @@ body.theme-dark #theme-icon-moon { display: none;  }
     color: var(--text-secondary);
 }
 
+.tab-toggle-group {
+    display: flex;
+    border: 1px solid var(--border-light);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.tab-toggle-btn {
+    padding: 4px 10px;
+    font-size: var(--size-xs);
+    font-family: var(--font-ui);
+    color: var(--text-secondary);
+    border-right: 1px solid var(--border-light);
+}
+
+.tab-toggle-btn:last-child {
+    border-right: none;
+}
+
+.tab-toggle-btn:hover {
+    background: var(--bg-hover);
+}
+
+.tab-toggle-btn.active {
+    background: var(--bg-selected);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
 #bookmark-comment {
     width: 100%;
     padding: 6px 8px;
