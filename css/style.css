@@ -1313,7 +1313,7 @@ body.theme-dark #theme-icon-moon { display: none;  }
 .note-block-attach-btn.hidden { display: none; }
 
 .note-block-body {
-    font-size: var(--size-base);
+    font-size: var(--notes-font-size);
     line-height: 1.6;
     min-height: 40px;
     outline: none;
