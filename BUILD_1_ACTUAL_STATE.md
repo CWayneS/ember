@@ -662,7 +662,7 @@ After every write operation: `db.export()` → transfer buffer → `storage-work
 - OPFS persistence with IndexedDB fallback
 - Service worker offline caching (cache-first for all assets)
 - PWA install prompt (shown on `beforeinstallprompt` event)
-- Dark mode CSS (`.theme-dark` class — styles complete; UI toggle not wired)
+- Dark mode (`.theme-dark` class — styles complete; toggle button wired in app.js; preference persisted to `localStorage`)
 
 ### Partially Wired / Incomplete
 
@@ -671,7 +671,7 @@ After every write operation: `db.export()` → transfer buffer → `storage-work
 - **`#reader-help-btn` / `#reader-settings-btn`**: Rendered in reader header; no handlers
 - **`#translation-label`**: Shows "KJV"; no translation switching UI
 - **`#template-bar`**: Exists in DOM as hidden; no logic connected
-- **Dark mode toggle**: CSS is complete; no button or toggle in UI to activate it
+- **Dark mode toggle**: Fully wired — `#theme-toggle` button in search bar toggles `.theme-dark` on `<body>`; preference persisted to `localStorage`
 - **`deleteStudy()`**: Implemented in db.js; not exposed in UI
 - **Study renaming**: Not implemented in UI
 

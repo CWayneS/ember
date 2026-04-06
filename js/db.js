@@ -147,6 +147,19 @@ function createUserTables() {
     `);
 
     db.run(`
+        CREATE TABLE IF NOT EXISTS bookmarks (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            verse_id   INTEGER NOT NULL,
+            label      TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+    `);
+
+    db.run(`
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_verse ON bookmarks(verse_id);
+    `);
+
+    db.run(`
         CREATE TABLE IF NOT EXISTS app_state (
             key   TEXT PRIMARY KEY,
             value TEXT
