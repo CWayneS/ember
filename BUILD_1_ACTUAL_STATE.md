@@ -33,6 +33,7 @@ ember/
 │   ├── search.js                     # Full-text search UI
 │   ├── panels.js                     # Panel tabs, resize handles, layout
 │   ├── reference.js                  # Reference panel tabs
+│   ├── bookmarks.js                  # Bookmark button, prompt, dropdown
 │   ├── state.js                      # Reactive state (imported but unused)
 │   ├── storage-worker.js             # Web Worker: OPFS/IndexedDB persistence
 │   └── vendor/
@@ -322,18 +323,21 @@ Index: `idx_tagassign_note`
 
 ### `js/search.js` — Full-Text Search
 
-**Imports:** `search`, `parseVerseId`, `getBooks` from db.js; `navigateTo` from reader.js; `showNoteEditor` from notes.js
+**Imports:** `search`, `parseVerseId`, `getBooks`, `getAllBookmarks` from db.js; `navigateTo` from reader.js; `openTagView`, `openStudy` from panels.js
 
 **Exports:** `initSearch()`
 
 **Events emitted:** None
 
 **Events listened:**
-- `#search-input` input → 200ms debounce → `search()` if query ≥ 2 chars
+- `#search-input` focus → show shortcuts panel if empty
+- `#search-input` input → 200ms debounce → `runSearch()` if query ≥ 2 chars
 - `#search-input` keydown Escape → hide overlay, blur input
 - `document` click → hide overlay if outside search bar and results
 
-**Summary:** Runs FTS query and renders results in a floating dropdown with three sections: Verses (≤50), Notes (≤50), Tags (≤20). Clicking a verse navigates there; clicking a note navigates and opens the note editor; clicking a tag opens the note editor with tag focus.
+**Search prefixes:** `b:` verses, `n:` notes, `s:` studies, `t:` tags, `k:` bookmarks
+
+**Summary:** Runs FTS query and renders results in a floating dropdown. Unfiltered results show up to four sections: Scripture, Notes, Studies, Tags, plus a Bookmarks section at the bottom (JS-side match). `k:` prefix bypasses FTS entirely and filters bookmarks by label (or verse reference for unlabeled bookmarks). Empty input shows a shortcuts panel listing all prefixes. Clicking a shortcut row types the prefix into the search field.
 
 ---
 
@@ -371,6 +375,24 @@ Index: `idx_tagassign_note`
 - `document` `selection-changed` → render all tabs for selected verse, or clear all
 
 **Summary:** Populates four tabs in the reference panel when a verse is selected. Info tab shows book/chapter metadata and linked notes. Tags tab shows Nave's topics and user tags as read-only chips. Related and Language tabs are stubs.
+
+---
+
+### `js/bookmarks.js` — Bookmark Button
+
+**Imports:** `getBookmarkForVerse`, `addBookmark`, `removeBookmark`, `getAllBookmarks` from db.js; `getSelectedVerses` from selection.js; `navigateTo` from reader.js
+
+**Exports:** `initBookmarks()`
+
+**Events emitted:** None
+
+**Events listened:**
+- `#bookmark-btn` click → context-dependent (see summary)
+- `document` `selection-changed` → update `currentBookmark` state and button visual
+- `document` click → close prompt or dropdown if outside
+- `document` keydown Escape → close prompt or dropdown
+
+**Summary:** Three click behaviors on `#bookmark-btn`: (1) verse selected + no bookmark → open inline comment prompt anchored below button; (2) verse selected + bookmarked → remove bookmark immediately; (3) no verse selected → toggle bookmark dropdown. Prompt has a text field ("Add comment…"), Save, and Cancel. Dropdown lists all bookmarks newest-first; each row shows the verse reference and optional label, with a hover-reveal ✕ delete button; clicking a row navigates to that verse. Button displays ☆ (outline) or ★ (filled, via `.bookmarked` class) based on whether the selected verse is bookmarked.
 
 ---
 
@@ -451,24 +473,41 @@ From `index.html`:
 
     #reader (flex 1)
       #reader-header (44px)
-        #book-selector-btn
-        #current-location
-        #prev-chapter "‹"
-        #next-chapter "›"
+        #split-toggle-btn (SVG icon)
         .reader-header-spacer
-        #translation-label "KJV"
-        #bookmark-btn "◯"
+        #bookmark-btn "☆" (★ when verse is bookmarked)
         #reader-help-btn "?"
         #reader-settings-btn "⚙"
-      #reader-content
-        #scripture-text
-          [.verse elements rendered here]
+      #reader-body (flex row)
+        #reader-pane-a.reader-pane.active
+          .pane-nav
+            .pane-book-btn
+            .pane-location
+            .pane-prev "‹"
+            .pane-next "›"
+            .pane-nav-spacer
+            .translation-label "KJV"
+          .pane-content
+            .scripture-text
+              [.verse elements rendered here]
+        #reader-split-handle.hidden (4px drag separator)
+        #reader-pane-b.reader-pane.hidden
+          [same structure as pane-a]
 
   #book-overlay.hidden (full-screen, z-index 200)
     #book-list (grid of book abbreviation buttons)
     #chapter-grid.hidden (grid of chapter number buttons)
 
   #search-results.hidden (floating dropdown, z-index 150)
+
+  #bookmark-dropdown.hidden (fixed, z-index 160 — bookmark list, no verse selected)
+    #bookmark-list
+
+  #bookmark-prompt.hidden (fixed, z-index 200 — inline comment prompt)
+    #bookmark-comment (text input)
+    .bookmark-prompt-actions
+      #bookmark-save
+      #bookmark-cancel
 
   #install-overlay.hidden (bottom-right PWA prompt, z-index 300)
     #install-prompt
@@ -499,7 +538,7 @@ From `index.html`:
    d. Falls back to network fetch of `data/core.db` if both fail
    e. Initializes sql.js `Database` object from the loaded bytes
    f. Instantiates `storage-worker.js` Web Worker
-4. `initReader()`, `initSelection()`, `initNotes()`, `initTags()`, `initPanels()`, `initSearch()`, `initReference()` — all synchronous, attach event listeners
+4. `initReader()`, `initSelection()`, `initNotes()`, `initTags()`, `initPanels()`, `initSearch()`, `initReference()`, `initBookmarks()` — all synchronous, attach event listeners
 5. Restore location: `getState('currentBook')` + `getState('currentChapter')` from `app_state` table; default to book 1, chapter 1
 6. `navigateTo(book, chapter)` — renders first chapter
 7. `#loading` hidden; app is live
@@ -623,12 +662,13 @@ Key variable groups: `--bg-*`, `--text-*`, `--border-*`, `--accent*`, `--tag-*`,
 app.js
   → db.js (no imports)
   → reader.js → db.js
-  → selection.js (no imports)
+  → selection.js → reader.js
   → notes.js → db.js, reader.js, panels.js, reference.js
   → tags.js → db.js
   → panels.js → db.js
-  → search.js → db.js, reader.js, notes.js
+  → search.js → db.js, reader.js, panels.js
   → reference.js → db.js, panels.js
+  → bookmarks.js → db.js, selection.js, reader.js
   → state.js (no imports — unused)
 ```
 
@@ -654,7 +694,8 @@ After every write operation: `db.export()` → transfer buffer → `storage-work
 - Tag creation, autocomplete, removal
 - Study creation and tab management
 - All Studies view (note counts, last-modified date)
-- Full-text search (verses + notes + tags)
+- Full-text search (verses + notes + tags + bookmarks; `b:` `n:` `s:` `t:` `k:` prefixes)
+- Bookmarks (add with optional comment, remove, browse dropdown, navigate from dropdown or search)
 - Reference panel Info tab (book metadata, chapter info, notes list)
 - Reference panel Tags tab (Nave's topics + user tags)
 - Panel resize handles (notes↔reference vertical, workspace horizontal)
@@ -666,12 +707,10 @@ After every write operation: `db.export()` → transfer buffer → `storage-work
 
 ### Partially Wired / Incomplete
 
-- **`#bookmark-btn`**: Rendered in reader header; click handler not wired; `bookmarks` table is empty
 - **`.panel-help-btn` / `.panel-settings-btn`**: Rendered in both panel headers; no handlers
 - **`#reader-help-btn` / `#reader-settings-btn`**: Rendered in reader header; no handlers
 - **`#translation-label`**: Shows "KJV"; no translation switching UI
 - **`#template-bar`**: Exists in DOM as hidden; no logic connected
-- **Dark mode toggle**: Fully wired — `#theme-toggle` button in search bar toggles `.theme-dark` on `<body>`; preference persisted to `localStorage`
 - **`deleteStudy()`**: Implemented in db.js; not exposed in UI
 - **Study renaming**: Not implemented in UI
 
@@ -683,7 +722,7 @@ After every write operation: `db.export()` → transfer buffer → `storage-work
 ### Schema Tables with No Runtime Code
 
 The following tables exist in the schema and are unpopulated; no JS code reads or writes to them:
-`verse_mappings`, `cross_references`, `original_words`, `lexicon`, `study_templates`, `template_steps`, `session_records`, `note_quotes`, `text_markups`, `bookmarks`, `plans`, `plan_days`, `plan_progress`, `memory_verses`, `memory_reviews`
+`verse_mappings`, `cross_references`, `original_words`, `lexicon`, `study_templates`, `template_steps`, `session_records`, `note_quotes`, `text_markups`, `plans`, `plan_days`, `plan_progress`, `memory_verses`, `memory_reviews`
 
 ### Other
 
