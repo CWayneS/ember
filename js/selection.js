@@ -5,27 +5,10 @@ import { setActivePane } from './reader.js';
 let selectedVerses = [];
 
 export function initSelection() {
-    // Attach to each pane's scripture-text so pane-nav clicks don't interfere
+    // Deselect only when clicking within scripture text but not on a verse.
+    // All other clicks (panels, toolbar, resize handles, etc.) are neutral.
     document.querySelectorAll('.scripture-text').forEach(el => {
         el.addEventListener('click', handleVerseClick);
-    });
-
-    // Clear selection when clicking outside the reader text and outside the panels.
-    // Guard: if the target was removed from the DOM during its own click handler
-    // (e.g. renderStudyDocument wiping innerHTML), e.target.isConnected is false
-    // and closest() returns null — treat detached clicks as non-clearing.
-    document.addEventListener('click', (e) => {
-        if (!e.target.isConnected) return;
-        if (
-            !e.target.closest('.scripture-text') &&
-            !e.target.closest('#notes-panel') &&
-            !e.target.closest('#reference-panel') &&
-            !e.target.closest('#bookmark-btn') &&
-            !e.target.closest('#bookmark-prompt') &&
-            !e.target.closest('#bookmark-dropdown')
-        ) {
-            clearSelection();
-        }
     });
 }
 

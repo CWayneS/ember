@@ -15,7 +15,10 @@ export function initSearch() {
     const overlay = document.getElementById('search-results');
 
     input.addEventListener('focus', () => {
-        if (input.value.trim() === '') {
+        const q = input.value.trim();
+        if (q.length >= 2) {
+            runSearch(q);
+        } else if (q.length === 0) {
             showOverlay(renderShortcuts());
         }
     });

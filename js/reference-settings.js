@@ -42,10 +42,11 @@ export function initReferenceSettings() {
         setState(STATE_KEY, DEFAULT_TAB);
     });
 
-    // Switch to chosen default tab on verse selection
+    // Switch to chosen default tab on verse selection (skip if set to keep)
     document.addEventListener('selection-changed', (e) => {
         if (e.detail.verseIds.length > 0) {
-            switchReferenceTab(getState(STATE_KEY) || DEFAULT_TAB);
+            const tab = getState(STATE_KEY) || DEFAULT_TAB;
+            if (tab !== 'keep') switchReferenceTab(tab);
         }
     });
 

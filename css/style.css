@@ -848,7 +848,8 @@ body.theme-dark #theme-icon-moon { display: none;  }
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    flex-wrap: wrap;
+    gap: 8px;
     margin-bottom: 10px;
 }
 
