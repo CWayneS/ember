@@ -5,10 +5,15 @@ import { setActivePane } from './reader.js';
 let selectedVerses = [];
 
 export function initSelection() {
-    // Deselect only when clicking within scripture text but not on a verse.
-    // All other clicks (panels, toolbar, resize handles, etc.) are neutral.
+    // Verse selection — bubbling stopped at .verse so clicks don't reach .pane-content.
     document.querySelectorAll('.scripture-text').forEach(el => {
         el.addEventListener('click', handleVerseClick);
+    });
+
+    // Margin deselect — any click that reaches .pane-content (i.e. did not land on a verse)
+    // clears the selection and fires selection-changed so dependent panels go idle.
+    document.querySelectorAll('.pane-content').forEach(el => {
+        el.addEventListener('click', clearSelection);
     });
 }
 
@@ -18,6 +23,8 @@ function handleVerseClick(e) {
         clearSelection();
         return;
     }
+
+    e.stopPropagation(); // prevent bubbling to .pane-content deselect handler
 
     // Activate whichever pane this click came from
     const paneEl = e.target.closest('.reader-pane');
