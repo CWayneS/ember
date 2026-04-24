@@ -56,6 +56,14 @@
     --measure:          68ch;
 
     --line-height: var(--line-height-body);
+
+    /* Markup palette */
+    --markup-yellow: #fff2a8;
+    --markup-green:  #c8e6c0;
+    --markup-blue:   #c0d8ec;
+    --markup-pink:   #f0c8d8;
+    --markup-orange: #ffd8a0;
+    --markup-ink:    var(--text-primary);
 }
 
 /* Dark theme */
@@ -83,6 +91,14 @@
     --tag-text: #a0b48e;
 
     --note-indicator: #c4a35a;
+
+    /* Markup palette */
+    --markup-yellow: #6a5a1a;
+    --markup-green:  #3a5c3a;
+    --markup-blue:   #2a4a6a;
+    --markup-pink:   #5a3a48;
+    --markup-orange: #6a4a20;
+    --markup-ink:    var(--text-primary);
 }
 
 /* ============================================================
