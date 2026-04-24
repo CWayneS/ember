@@ -153,6 +153,7 @@ export function setActivePane(paneId) {
     activePaneId = paneId;
     getPaneEl('a').classList.toggle('active', paneId === 'a');
     getPaneEl('b').classList.toggle('active', paneId === 'b');
+    document.dispatchEvent(new CustomEvent('pane-changed', { detail: { paneId } }));
 }
 
 export function getActivePaneId() {

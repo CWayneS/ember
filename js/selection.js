@@ -17,6 +17,14 @@ export function initSelection() {
     document.querySelectorAll('.pane-content').forEach(el => {
         el.addEventListener('click', clearSelection);
     });
+
+    // Pane switch — clear any selection that belongs to the outgoing pane so both
+    // panes can never show highlighted verses simultaneously.
+    document.addEventListener('pane-changed', (e) => {
+        if (anchorPaneId !== null && anchorPaneId !== e.detail.paneId) {
+            clearSelection();
+        }
+    });
 }
 
 function handleVerseClick(e) {
