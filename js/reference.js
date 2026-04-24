@@ -3,7 +3,7 @@
 import {
     getBook, parseVerseId,
     getChapterVerseCount, getTopicsForVerse, getUserTagsForVerse,
-    getNotesForVerse
+    getNotesForVerse, getCrossReferencesForVerse
 } from './db.js';
 import { openStudy, openTagView } from './panels.js';
 
@@ -31,7 +31,7 @@ function renderAll(verseId) {
     const book   = getBook(parsed.book);
     renderInfoTab(book, parsed.chapter, verseId);
     renderTagsTab(verseId);
-    renderRelatedTab();
+    renderRelatedTab(verseId, book, parsed);
     renderLanguageTab();
 }
 
@@ -179,12 +179,135 @@ function renderTagsTab(verseId) {
 }
 
 // ============================================================
-// Related tab — placeholder
+// Related tab — cross-references
 // ============================================================
 
-function renderRelatedTab() {
-    setPlaceholder(document.getElementById('related-tab'),
-        'Cross-references will be available in Build 2.');
+function renderRelatedTab(verseId, book, parsed) {
+    const container = document.getElementById('related-tab');
+    container.innerHTML = '';
+
+    const label = `${book.name} ${parsed.chapter}:${parsed.verse}`;
+
+    const header = document.createElement('div');
+    header.className   = 'ref-related-header';
+    header.textContent = `Related to ${label}`;
+    container.appendChild(header);
+
+    const topRefs = getCrossReferencesForVerse(verseId);
+
+    if (topRefs.length === 0) {
+        const msg = document.createElement('p');
+        msg.className   = 'ref-placeholder';
+        msg.textContent = 'No high-signal cross-references for this verse.';
+        container.appendChild(msg);
+
+        // Check for sub-floor refs and show hint + button if any exist.
+        const anyRefs = getCrossReferencesForVerse(verseId, { showAll: true });
+        if (anyRefs.length > 0) {
+            const hint = document.createElement('p');
+            hint.className   = 'ref-placeholder';
+            hint.textContent = 'Tap Show all to see the long tail.';
+            container.appendChild(hint);
+            container.appendChild(makeShowAllBtn(() =>
+                renderRelatedShowAll(container, verseId, book, parsed)
+            ));
+        }
+        return;
+    }
+
+    container.appendChild(renderRefList(topRefs));
+    container.appendChild(makeShowAllBtn(() =>
+        renderRelatedShowAll(container, verseId, book, parsed)
+    ));
+}
+
+function renderRelatedShowAll(container, verseId, book, parsed) {
+    container.innerHTML = '';
+
+    const label = `${book.name} ${parsed.chapter}:${parsed.verse}`;
+
+    const header = document.createElement('div');
+    header.className   = 'ref-related-header';
+    header.textContent = `Related to ${label}`;
+    container.appendChild(header);
+
+    const allRefs = getCrossReferencesForVerse(verseId, { showAll: true });
+
+    // Group by target book in canonical (book ID) order.
+    const groups = new Map();
+    for (const ref of allRefs) {
+        const bookId = Math.floor(ref.target_start / 1_000_000);
+        if (!groups.has(bookId)) {
+            const b = getBook(bookId);
+            groups.set(bookId, { name: b ? b.name : `Book ${bookId}`, refs: [] });
+        }
+        groups.get(bookId).refs.push(ref);
+    }
+
+    for (const [, { name, refs }] of [...groups].sort(([a], [b]) => a - b)) {
+        const details = document.createElement('details');
+        details.className = 'ref-crossref-group';
+        details.open      = true;
+
+        const summary = document.createElement('summary');
+        summary.className   = 'ref-crossref-group-header';
+        summary.textContent = `${name} (${refs.length})`;
+        details.appendChild(summary);
+        details.appendChild(renderRefList(refs));
+        container.appendChild(details);
+    }
+
+    const showTopBtn = document.createElement('button');
+    showTopBtn.className   = 'ref-show-all-btn';
+    showTopBtn.textContent = 'Show top 25';
+    showTopBtn.addEventListener('click', () => renderRelatedTab(verseId, book, parsed));
+    container.appendChild(showTopBtn);
+}
+
+// Builds an <ul> of cross-reference buttons (click nav wired in next step).
+function renderRefList(refs) {
+    const list = document.createElement('ul');
+    list.className = 'ref-crossref-list';
+    for (const ref of refs) {
+        const li  = document.createElement('li');
+        li.className = 'ref-crossref-item';
+        const btn = document.createElement('button');
+        btn.className            = 'ref-crossref-btn';
+        btn.textContent          = refLabel(ref.target_start, ref.target_end);
+        btn.dataset.targetStart  = ref.target_start;
+        btn.dataset.targetEnd    = ref.target_end ?? '';
+        li.appendChild(btn);
+        list.appendChild(li);
+    }
+    return list;
+}
+
+function makeShowAllBtn(onClick) {
+    const btn = document.createElement('button');
+    btn.className   = 'ref-show-all-btn';
+    btn.textContent = 'Show all';
+    btn.addEventListener('click', onClick);
+    return btn;
+}
+
+// Converts BBCCCVVV pair to "Book Chapter:Verse" or "Book Chapter:Start–End".
+function refLabel(startId, endId) {
+    const s     = parseVerseId(startId);
+    const sBook = getBook(s.book);
+    const name  = sBook ? sBook.name : `Book ${s.book}`;
+
+    if (!endId) return `${name} ${s.chapter}:${s.verse}`;
+
+    const e = parseVerseId(endId);
+    if (s.book === e.book && s.chapter === e.chapter) {
+        return `${name} ${s.chapter}:${s.verse}–${e.verse}`;
+    }
+    if (s.book === e.book) {
+        return `${name} ${s.chapter}:${s.verse}–${e.chapter}:${e.verse}`;
+    }
+    const eBook = getBook(e.book);
+    const eName = eBook ? eBook.name : `Book ${e.book}`;
+    return `${name} ${s.chapter}:${s.verse}–${eName} ${e.chapter}:${e.verse}`;
 }
 
 // ============================================================

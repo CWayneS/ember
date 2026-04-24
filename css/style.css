@@ -1779,6 +1779,104 @@ body.markup-mode-on .verse.selected.markup-highlight-orange {
 }
 
 /* ============================================================
+   Related tab — cross-references
+   ============================================================ */
+
+.ref-related-header {
+    font-family: var(--font-ui);
+    font-size: var(--size-small);
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 10px 16px 6px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.ref-crossref-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.ref-crossref-item {
+    border-bottom: 1px solid var(--border-light);
+}
+
+.ref-crossref-item:last-child {
+    border-bottom: none;
+}
+
+.ref-crossref-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 7px 16px;
+    font-family: var(--font-ui);
+    font-size: var(--size-small);
+    color: var(--accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.ref-crossref-btn:hover {
+    background: var(--bg-secondary);
+}
+
+/* Show all / Show top 25 button */
+.ref-show-all-btn {
+    display: block;
+    width: 100%;
+    padding: 10px 16px;
+    font-family: var(--font-ui);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    border-top: 1px solid var(--border-light);
+    cursor: pointer;
+    text-align: center;
+}
+
+.ref-show-all-btn:hover {
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+}
+
+/* Show-all grouped view */
+.ref-crossref-group {
+    border-bottom: 1px solid var(--border-light);
+}
+
+.ref-crossref-group:last-of-type {
+    border-bottom: none;
+}
+
+.ref-crossref-group-header {
+    font-family: var(--font-ui);
+    font-size: var(--size-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 8px 16px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+}
+
+.ref-crossref-group-header::-webkit-details-marker { display: none; }
+
+.ref-crossref-group-header::before {
+    content: '▾ ';
+    font-size: 0.75em;
+    opacity: 0.6;
+}
+
+details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
+    content: '▸ ';
+}
+
+/* ============================================================
    Book / Chapter Selector Overlay
    ============================================================ */
 #book-overlay {
