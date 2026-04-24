@@ -19,6 +19,12 @@ import { initNotesSettings }      from './notes-settings.js';
 import { initReferenceSettings }  from './reference-settings.js';
 import { initMarkups }            from './markups.js';
 
+// Dev tuning hook — lets crossrefFloor / crossrefTopN be adjusted from the
+// browser console without reloading. getCrossReferencesForVerse reads these
+// live; update them, then re-select a verse to see the effect immediately.
+// Harmless in production if window.emberDebug is never touched.
+window.emberDebug = window.emberDebug || {};
+
 async function init() {
     try {
         await initDatabase();

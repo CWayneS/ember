@@ -1,5 +1,8 @@
 // db.js — Database initialization, queries, and persistence
 
+const CROSSREF_VOTE_FLOOR_DEFAULT = 5;
+const CROSSREF_TOP_N_DEFAULT      = 25;
+
 let db             = null;
 let _booksCache    = null;
 let _storageWorker = null;
@@ -822,4 +825,42 @@ export function getExistingMarkup(verseStart, verseEnd, type) {
     const row = stmt.step() ? stmt.getAsObject() : null;
     stmt.free();
     return row;
+}
+
+// Returns cross-references for a single verse (use verse_start for ranges).
+// Options:
+//   floor   — minimum votes to include (default: window.emberDebug.crossrefFloor ?? 5)
+//   limit   — max rows to return (default: window.emberDebug.crossrefTopN ?? 25)
+//   showAll — if true, ignore floor and limit entirely
+// Returns [] when no results.
+export function getCrossReferencesForVerse(verseId, options = {}) {
+    const floor = options.showAll ? null
+        : (options.floor   ?? window.emberDebug?.crossrefFloor  ?? CROSSREF_VOTE_FLOOR_DEFAULT);
+    const limit = options.showAll ? null
+        : (options.limit   ?? window.emberDebug?.crossrefTopN   ?? CROSSREF_TOP_N_DEFAULT);
+
+    let stmt;
+    if (options.showAll) {
+        stmt = db.prepare(
+            `SELECT target_start, target_end, votes
+             FROM cross_references
+             WHERE source_verse = ?
+             ORDER BY votes DESC, target_start ASC`
+        );
+        stmt.bind([verseId]);
+    } else {
+        stmt = db.prepare(
+            `SELECT target_start, target_end, votes
+             FROM cross_references
+             WHERE source_verse = ? AND votes >= ?
+             ORDER BY votes DESC, target_start ASC
+             LIMIT ?`
+        );
+        stmt.bind([verseId, floor, limit]);
+    }
+
+    const results = [];
+    while (stmt.step()) results.push(stmt.getAsObject());
+    stmt.free();
+    return results;
 }
