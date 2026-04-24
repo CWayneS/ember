@@ -38,32 +38,37 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 ## Reader
 
-17. KJV Bible text, all 66 books — db.js:getChapter
+17. 6 bundled translations (KJV, ASV, WEB, YLT, Darby, BSB), all 66 books — db.js:getChapter; each translation stored in its own SQLite file under `data/translations/`
 18. Verses rendered inline (`.verse` elements, `display: inline`) with superscript verse numbers
 19. Scripture text max-width 680px, centered — style.css
 20. Reader header contains: split toggle button, spacer, bookmark button (☆), help button (?), settings button (⚙)
-21. Current location displayed as "Book Chapter" (e.g. "Genesis 1") in pane nav — reader.js:47
-22. Book abbreviation shown in book selector button in pane nav — reader.js:48
-23. Reading position persisted to SQLite `app_state`; restored on reload; default Genesis 1 — app.js:29-32, db.js:setState
+21. Current location displayed as "Book Chapter" (e.g. "Genesis 1") in pane nav — reader.js
+22. Book abbreviation shown in book selector button in pane nav — reader.js
+23. Per-pane reading position, translation, and scroll offset persisted to `localStorage` (`ember.pane.left.state` / `ember.pane.right.state`); restored on reload; default Genesis 1 KJV — reader.js
+23a. `.translation-label` in pane nav updated dynamically on every render and on translation switch — reader.js:updateTranslationLabel
 24. Clicking a verse: selects it (`.selected` background), triggers brief gold glow animation (0.4s ease-out, rgba(196,163,90,0.55) → selected bg) — selection.js:handleVerseClick, style.css:`@keyframes verse-select-glow`
 25. Re-clicking same verse: animation restarts via forced reflow — selection.js:39
-26. Selection is single-verse only (previous selection cleared on new click) — selection.js:34
-27. Clicking in notes panel or reference panel does NOT clear verse selection — selection.js:12-21
-28. Clicking outside reader + panels (e.g. header area): clears selection — selection.js:12-21
+26. Plain click selects a single verse (sets anchor); previous selection cleared — selection.js
+26a. Shift-click extends selection from the anchor verse to the clicked verse, selecting the full range in DOM order — selection.js:selectRange
+26b. Shift-click across panes (anchor in pane A, click in pane B) falls back to plain-click behavior; cross-pane ranges are not supported — selection.js:46-55
+26c. Switching the active pane clears any selection whose anchor belongs to the outgoing pane — selection.js (pane-changed listener)
+27. Clicking in notes panel or reference panel does NOT clear verse selection — selection.js
+28. Clicking outside reader + panels (e.g. header area): clears selection — selection.js
 29. Note indicator dots: 6px gold circle (`.note-indicator`) appended after verse text for verses with notes; tooltip shows count — reader.js:69-75, style.css
 30. Indicator dots updated without full re-render after note writes — reader.js:refreshNoteDots
-31. Navigating to a chapter via search or tag-view anchor: scrolls target verse into center and simulates a click to select it — reader.js:81-85
+31. Navigating to a chapter via search or tag-view anchor: scrolls target verse into center and simulates a click to select it — reader.js
+31a. Cross-reference click-to-navigate: `selectVerseRange(startId, endId)` in selection.js programmatically selects a verse or range, scrolls to it, and dispatches `selection-changed` — selection.js:selectVerseRange
 
 ---
 
 ## Split View
 
 32. Split toggle button (⊞) in reader header: shows/hides second reader pane side-by-side — reader.js:toggleSplit
-33. Opening split: pane B loads at the same book/chapter as pane A — reader.js:221
-34. Each pane has independent book/chapter navigation (own book button, prev/next arrows) — reader.js
+33. Opening split: pane B loads at the same book/chapter as pane A — reader.js
+34. Each pane has independent book/chapter navigation, translation, and scroll position — reader.js
 35. Active pane highlighted with accent underline on its nav bar in split mode — style.css:`#reader.split-active`
 36. Draggable resize handle between split panes; minimum 200px per pane — reader.js:initSplitResize
-37. Clicking a verse in either pane sets it as the active selection for notes and reference — selection.js
+37. Clicking a verse in either pane activates that pane and sets it as the active selection for notes and reference — selection.js, reader.js:setActivePane
 
 ---
 
@@ -84,9 +89,11 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 45. Within each testament, books sub-grouped by genre with genre headings: Law, History, Poetry & Wisdom, Prophecy, Gospels, Epistles, Apocalyptic
 46. Each book shown as its abbreviation button; hover tooltip shows full book name
 47. Clicking a book shows a chapter number grid (CSS grid, auto-fill ~44px columns)
-48. Clicking a chapter number navigates to it and closes the overlay — reader.js:229-233
-49. Clicking outside the overlay (but not the book button) closes it — reader.js:18-27
-50. Pressing Escape closes it — reader.js:29-31
+48. Clicking a chapter number navigates to it and closes the overlay — reader.js
+49. Clicking outside the overlay (but not the book button) closes it — reader.js
+50. Pressing Escape closes it — reader.js
+50a. Translation row at top of overlay: one button per installed translation; active translation highlighted with accent color — reader.js:renderTranslationRow, style.css
+50b. Clicking a translation button in the row switches the active pane's translation, preserves the current passage (falls back to chapter 1 if the chapter is absent in the target translation), and keeps the overlay open — reader.js:switchPaneTranslation
 
 ---
 
@@ -247,7 +254,11 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 ## Reference Panel — Related Tab
 
-141. Shows placeholder text: "Cross-references will be available in Build 2." — reference.js:renderRelatedTab
+141. Shows cross-references sourced from `cross_references` table in core.db (OpenBible.info data, ~340K pairs with vote scores) — reference.js:renderRelatedTab
+141a. Results filtered to vote ≥ 2 by default; a "Show all" toggle reveals lower-confidence references — reference.js
+141b. References grouped by target book; displayed as clickable buttons showing book+chapter:verse reference — reference.js
+141c. Clicking a cross-reference: navigates the active pane to the target chapter and selects the target verse range — reference.js:navigateToRef, selection.js:selectVerseRange
+141d. If no high-signal cross-references exist: shows "No high-signal cross-references for this verse." — reference.js:203
 
 ---
 
@@ -291,7 +302,8 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 157. Typing 1 character: hides overlay (no results) — search.js:30-32
 158. Typing 2+ characters: runs search after 200ms debounce — search.js:33-35
 159. Search covers: Scripture (FTS with LIKE fallback, 50 results max), notes (FTS4, 50 max), tag names + topic names (LIKE), study names (LIKE, 20 max) — db.js:search
-160. Results displayed in labeled sections: Scripture, Notes, Studies, Tags — search.js:75-78
+160. Results displayed in labeled sections: "Scripture · {abbrev}" (e.g. "Scripture · KJV"), Notes, Studies, Tags — search.js
+160a. Scripture section runs FTS against the active pane's translation database — search.js:runSearch; db.js:search
 161. Empty results: "No results for 'query'" — search.js:renderEmpty
 162. Clicking a Scripture result: navigates to that verse, closes search, clears input — search.js:111-115
 163. Clicking a Note result: navigates to the note's first anchor verse, opens the note's study in a tab, closes search — search.js:154-163
@@ -313,19 +325,42 @@ All five prefixes are functional:
 172. `k:` — Bookmarks only
 
 173. Shortcuts panel shows all five prefixes with descriptions — search.js:renderShortcuts
-174. Clicking a prefix row in the shortcuts panel inserts that prefix into the input and focuses it — search.js:254-259
+174. Clicking a prefix row in the shortcuts panel inserts that prefix into the input and focuses it — search.js
+
+---
+
+## Text Markups
+
+175. Markup button (pencil icon) in reader header: toggles the markup tool strip open/closed — markups.js
+176. Markup button expanded/collapsed state persists across reloads via `localStorage` key `ember.markup_button.expanded` — markups.js
+177. Tool strip contains highlight tools (multiple colors) and underline tools — index.html, markups.js
+178. `markup-mode-on` class on `<body>` controls markup visibility; applied when strip is expanded — markups.js, reader.js
+179. Clicking a markup tool with verse(s) selected: creates a markup record for the selected range — markups.js:handleToolClick, db.js:createMarkup
+180. Clicking the same tool type + color on an already-marked range: removes the markup (toggle off) — markups.js
+181. Clicking a different color of the same type on a marked range: replaces the markup color — markups.js
+182. Markup visual classes applied per verse during chapter render — reader.js:refreshMarkupClasses, db.js:getMarkupsForChapter
+183. Markups stored in `markups` table in user data (core.db), persisted via the normal OPFS/IndexedDB write path — db.js
+
+---
+
+## Notes — Anchor Coalescing
+
+184. When a note has multiple single-verse anchors that form a contiguous range, they are coalesced into a single range anchor on save — notes.js:coalesceAnchors
+185. Coalesced anchors reduce the number of anchor chips shown while preserving the full verse span
 
 ---
 
 ## Data Persistence
 
-175. SQLite database via sql.js (WebAssembly), runs entirely in-browser — db.js
-176. User data stored in OPFS (`core.db`) if available; falls back to IndexedDB — db.js / storage-worker.js
-177. Database writes offloaded to a Web Worker (storage-worker.js) — zero-copy transfer
-178. Every write operation (note save, delete, tag add/remove, anchor add, study create/rename/delete, bookmark add/remove, state change) triggers a DB export and async save — db.js
-179. No cloud sync; no account required; all data stays on the device
-180. Clearing browser storage (site data) deletes all notes, studies, tags, and bookmarks (the database is reset to the bundled core.db)
-181. Reading position, font size preferences, and default reference tab persisted in `app_state` table — db.js:setState/getState
+186. SQLite database via sql.js (WebAssembly), runs entirely in-browser — db.js
+187. User data (notes, tags, studies, bookmarks, markups, app state) stored in OPFS (`core.db`) if available; falls back to IndexedDB — db.js / storage-worker.js
+188. Translation databases (kjv.db, asv.db, etc.) stored in OPFS `translations/` subdirectory; fetched from network on first use, then served from OPFS — db.js
+189. Database writes offloaded to a Web Worker (storage-worker.js) — zero-copy transfer
+190. Every write operation (note save, delete, tag add/remove, anchor add, study create/rename/delete, bookmark add/remove, markup create/delete, state change) triggers a DB export and async save — db.js
+191. No cloud sync; no account required; all data stays on the device
+192. Clearing browser storage (site data) deletes all notes, studies, tags, bookmarks, and markups (user data reset to empty core.db); translations must be re-fetched
+193. Font size preferences and default reference tab persisted in `app_state` table — db.js:setState/getState
+194. Per-pane reading position, translation, and scroll offset persisted in `localStorage` — reader.js
 
 ---
 
