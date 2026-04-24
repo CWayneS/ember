@@ -5,6 +5,8 @@ import {
     getChapterVerseCount, getTopicsForVerse, getUserTagsForVerse,
     getNotesForVerse, getCrossReferencesForVerse
 } from './db.js';
+import { navigateTo, getCurrentLocation } from './reader.js';
+import { selectVerseRange } from './selection.js';
 import { openStudy, openTagView } from './panels.js';
 
 const EMPTY_MSG = 'Select a verse to see reference material.';
@@ -264,7 +266,7 @@ function renderRelatedShowAll(container, verseId, book, parsed) {
     container.appendChild(showTopBtn);
 }
 
-// Builds an <ul> of cross-reference buttons (click nav wired in next step).
+// Builds an <ul> of cross-reference buttons with click-to-navigate.
 function renderRefList(refs) {
     const list = document.createElement('ul');
     list.className = 'ref-crossref-list';
@@ -272,14 +274,28 @@ function renderRefList(refs) {
         const li  = document.createElement('li');
         li.className = 'ref-crossref-item';
         const btn = document.createElement('button');
-        btn.className            = 'ref-crossref-btn';
-        btn.textContent          = refLabel(ref.target_start, ref.target_end);
-        btn.dataset.targetStart  = ref.target_start;
-        btn.dataset.targetEnd    = ref.target_end ?? '';
+        btn.className   = 'ref-crossref-btn';
+        btn.textContent = refLabel(ref.target_start, ref.target_end);
+        btn.addEventListener('click', () =>
+            navigateToCrossRef(ref.target_start, ref.target_end || null)
+        );
         li.appendChild(btn);
         list.appendChild(li);
     }
     return list;
+}
+
+// Navigate active pane to a cross-reference target and select the range.
+// Skips re-render when already on the target chapter.
+function navigateToCrossRef(startId, endId) {
+    const s = parseVerseId(startId);
+    const { book: curBook, chapter: curChapter } = getCurrentLocation();
+
+    if (curBook !== s.book || curChapter !== s.chapter) {
+        navigateTo(s.book, s.chapter);
+    }
+
+    selectVerseRange(startId, endId);
 }
 
 function makeShowAllBtn(onClick) {

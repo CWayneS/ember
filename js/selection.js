@@ -1,6 +1,6 @@
 // selection.js — Verse selection
 
-import { setActivePane } from './reader.js';
+import { setActivePane, getActivePaneId } from './reader.js';
 
 let selectedVerses = [];
 let anchorVerseId  = null;  // set by plain click; shift-click extends from here
@@ -99,4 +99,46 @@ function dispatch(verseEl) {
 
 export function getSelectedVerses() {
     return [...selectedVerses];
+}
+
+// Programmatically select a verse or range in the active pane.
+// Handles scroll, CSS state, module state, and dispatches selection-changed.
+// Called by cross-reference click-to-navigate after the chapter is rendered.
+export function selectVerseRange(startId, endId = null) {
+    const paneId = getActivePaneId();
+    const paneEl = document.getElementById(`reader-pane-${paneId}`);
+    if (!paneEl) return;
+
+    document.querySelectorAll('.verse.selected').forEach(el => el.classList.remove('selected'));
+
+    if (!endId || startId === endId) {
+        // Single verse — mirror selectSingle including glow animation.
+        const verseEl = paneEl.querySelector(`[data-verse-id="${startId}"]`);
+        if (!verseEl) return;
+        verseEl.classList.add('selected');
+        verseEl.classList.remove('glow');
+        void verseEl.offsetWidth;
+        verseEl.classList.add('glow');
+        verseEl.addEventListener('animationend', () => verseEl.classList.remove('glow'), { once: true });
+        selectedVerses = [startId];
+        anchorVerseId  = startId;
+        anchorPaneId   = paneId;
+        dispatch(verseEl);
+        verseEl.scrollIntoView({ block: 'center' });
+    } else {
+        // Range — mirror selectRange.
+        const minId = Math.min(startId, endId);
+        const maxId = Math.max(startId, endId);
+        const inRange = Array.from(paneEl.querySelectorAll('.verse'))
+            .filter(el => {
+                const id = parseInt(el.dataset.verseId);
+                return id >= minId && id <= maxId;
+            });
+        inRange.forEach(el => el.classList.add('selected'));
+        selectedVerses = inRange.map(el => parseInt(el.dataset.verseId));
+        anchorVerseId  = startId;
+        anchorPaneId   = paneId;
+        dispatch(inRange[0] || null);
+        if (inRange[0]) inRange[0].scrollIntoView({ block: 'center' });
+    }
 }
