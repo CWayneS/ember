@@ -753,3 +753,73 @@ export function getNotesForStudy(studyId) {
     }
     return results;
 }
+
+// ============================================================
+// Markup Queries
+// ============================================================
+
+export function createMarkup(verseStart, verseEnd, type, color) {
+    const now = Date.now();
+    db.run(
+        'INSERT INTO markups (verse_start, verse_end, type, color, created_at) VALUES (?, ?, ?, ?, ?)',
+        [verseStart, verseEnd ?? null, type, color, now]
+    );
+    const id = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+    saveToStorage(db.export());
+    return id;
+}
+
+export function deleteMarkup(id) {
+    db.run('DELETE FROM markups WHERE id = ?', [id]);
+    saveToStorage(db.export());
+}
+
+// Returns all markups whose range covers verseId.
+export function getMarkupsForVerse(verseId) {
+    const stmt = db.prepare(
+        `SELECT id, verse_start, verse_end, type, color, created_at
+         FROM markups
+         WHERE verse_start <= ? AND COALESCE(verse_end, verse_start) >= ?
+         ORDER BY created_at DESC`
+    );
+    stmt.bind([verseId, verseId]);
+    const results = [];
+    while (stmt.step()) results.push(stmt.getAsObject());
+    stmt.free();
+    return results;
+}
+
+// Returns all markups that overlap the given chapter (BBCCC prefix).
+// Efficient for rendering a whole chapter — one query, not one per verse.
+export function getMarkupsForChapter(bookChapter) {
+    const chapterStart = bookChapter * 1000 + 1;
+    const chapterEnd   = bookChapter * 1000 + 999;
+    const stmt = db.prepare(
+        `SELECT id, verse_start, verse_end, type, color, created_at
+         FROM markups
+         WHERE verse_start <= ? AND COALESCE(verse_end, verse_start) >= ?
+         ORDER BY created_at DESC`
+    );
+    stmt.bind([chapterEnd, chapterStart]);
+    const results = [];
+    while (stmt.step()) results.push(stmt.getAsObject());
+    stmt.free();
+    return results;
+}
+
+// Returns the existing markup row that exactly matches range + type, or null.
+// Used to implement toggle: applying the same markup twice removes the first.
+export function getExistingMarkup(verseStart, verseEnd, type) {
+    const stmt = db.prepare(
+        `SELECT id, verse_start, verse_end, type, color, created_at
+         FROM markups
+         WHERE verse_start = ?
+           AND (verse_end IS ? OR (verse_end IS NOT NULL AND verse_end = ?))
+           AND type = ?
+         LIMIT 1`
+    );
+    stmt.bind([verseStart, verseEnd ?? null, verseEnd ?? null, type]);
+    const row = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+    return row;
+}
