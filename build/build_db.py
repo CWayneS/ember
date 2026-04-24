@@ -1,607 +1,446 @@
 #!/usr/bin/env python3
 """
-build_db.py — Build script for data/core.db
+build_db.py — Build script for data/core.db  (Build 2 schema)
 
-Downloads the KJV text from scrollmapper/bible_databases, creates the full
-application schema, populates books/translations/verses, and builds the
-FTS index. All other tables are created empty for future use.
+Produces core.db containing:
+  - books            (66 rows, canonical metadata incl. genre)
+  - translations     (manifest: 6 bundled translations)
+  - cross_references (OpenBible ranked dataset, ~345,500 rows)
+  - topics           (Nave's Topical Bible)
+  - topic_verses     (Nave's verse mappings, BBCCCVVV keys)
+
+Scripture text is NOT stored in core.db after Build 2. It lives in
+per-translation .db files seeded by scripts/build_translation.py.
 
 Usage:
-    python3 build/build_db.py
+    python3 build/build_db.py [--kjv-db PATH]
 
-No external packages required — uses only the Python standard library.
+    --kjv-db PATH  Path to KJV.db built by build_translation.py.
+                   Used for verse-ID validation and split-range clamping.
+                   Default: data/translations-prep/output/KJV.db
 """
 
+import argparse
 import csv
 import os
 import re
 import sqlite3
 import sys
-import tempfile
-import urllib.request
+import time
 
 # ---------------------------------------------------------------------------
-# Book metadata: (id, name, abbrev, testament, genre, chapters)
+# Paths
 # ---------------------------------------------------------------------------
-BOOKS = [
-    ( 1, 'Genesis',         'Gen',  'OT', 'law',         50),
-    ( 2, 'Exodus',          'Exo',  'OT', 'law',         40),
-    ( 3, 'Leviticus',       'Lev',  'OT', 'law',         27),
-    ( 4, 'Numbers',         'Num',  'OT', 'law',         36),
-    ( 5, 'Deuteronomy',     'Deu',  'OT', 'law',         34),
-    ( 6, 'Joshua',          'Jos',  'OT', 'history',     24),
-    ( 7, 'Judges',          'Jdg',  'OT', 'history',     21),
-    ( 8, 'Ruth',            'Rut',  'OT', 'history',      4),
-    ( 9, '1 Samuel',        '1Sa',  'OT', 'history',     31),
-    (10, '2 Samuel',        '2Sa',  'OT', 'history',     24),
-    (11, '1 Kings',         '1Ki',  'OT', 'history',     22),
-    (12, '2 Kings',         '2Ki',  'OT', 'history',     25),
-    (13, '1 Chronicles',    '1Ch',  'OT', 'history',     29),
-    (14, '2 Chronicles',    '2Ch',  'OT', 'history',     36),
-    (15, 'Ezra',            'Ezr',  'OT', 'history',     10),
-    (16, 'Nehemiah',        'Neh',  'OT', 'history',     13),
-    (17, 'Esther',          'Est',  'OT', 'history',     10),
-    (18, 'Job',             'Job',  'OT', 'poetry',      42),
-    (19, 'Psalms',          'Psa',  'OT', 'poetry',     150),
-    (20, 'Proverbs',        'Pro',  'OT', 'poetry',      31),
-    (21, 'Ecclesiastes',    'Ecc',  'OT', 'poetry',      12),
-    (22, 'Song of Solomon', 'Son',  'OT', 'poetry',       8),
-    (23, 'Isaiah',          'Isa',  'OT', 'prophecy',    66),
-    (24, 'Jeremiah',        'Jer',  'OT', 'prophecy',    52),
-    (25, 'Lamentations',    'Lam',  'OT', 'prophecy',     5),
-    (26, 'Ezekiel',         'Eze',  'OT', 'prophecy',    48),
-    (27, 'Daniel',          'Dan',  'OT', 'prophecy',    12),
-    (28, 'Hosea',           'Hos',  'OT', 'prophecy',    14),
-    (29, 'Joel',            'Joe',  'OT', 'prophecy',     3),
-    (30, 'Amos',            'Amo',  'OT', 'prophecy',     9),
-    (31, 'Obadiah',         'Oba',  'OT', 'prophecy',     1),
-    (32, 'Jonah',           'Jon',  'OT', 'prophecy',     4),
-    (33, 'Micah',           'Mic',  'OT', 'prophecy',     7),
-    (34, 'Nahum',           'Nah',  'OT', 'prophecy',     3),
-    (35, 'Habakkuk',        'Hab',  'OT', 'prophecy',     3),
-    (36, 'Zephaniah',       'Zep',  'OT', 'prophecy',     3),
-    (37, 'Haggai',          'Hag',  'OT', 'prophecy',     2),
-    (38, 'Zechariah',       'Zec',  'OT', 'prophecy',    14),
-    (39, 'Malachi',         'Mal',  'OT', 'prophecy',     4),
-    (40, 'Matthew',         'Mat',  'NT', 'gospel',      28),
-    (41, 'Mark',            'Mar',  'NT', 'gospel',      16),
-    (42, 'Luke',            'Luk',  'NT', 'gospel',      24),
-    (43, 'John',            'Joh',  'NT', 'gospel',      21),
-    (44, 'Acts',            'Act',  'NT', 'history',     28),
-    (45, 'Romans',          'Rom',  'NT', 'epistle',     16),
-    (46, '1 Corinthians',   '1Co',  'NT', 'epistle',     16),
-    (47, '2 Corinthians',   '2Co',  'NT', 'epistle',     13),
-    (48, 'Galatians',       'Gal',  'NT', 'epistle',      6),
-    (49, 'Ephesians',       'Eph',  'NT', 'epistle',      6),
-    (50, 'Philippians',     'Php',  'NT', 'epistle',      4),
-    (51, 'Colossians',      'Col',  'NT', 'epistle',      4),
-    (52, '1 Thessalonians', '1Th',  'NT', 'epistle',      5),
-    (53, '2 Thessalonians', '2Th',  'NT', 'epistle',      3),
-    (54, '1 Timothy',       '1Ti',  'NT', 'epistle',      6),
-    (55, '2 Timothy',       '2Ti',  'NT', 'epistle',      4),
-    (56, 'Titus',           'Tit',  'NT', 'epistle',      3),
-    (57, 'Philemon',        'Phm',  'NT', 'epistle',      1),
-    (58, 'Hebrews',         'Heb',  'NT', 'epistle',     13),
-    (59, 'James',           'Jas',  'NT', 'epistle',      5),
-    (60, '1 Peter',         '1Pe',  'NT', 'epistle',      5),
-    (61, '2 Peter',         '2Pe',  'NT', 'epistle',      3),
-    (62, '1 John',          '1Jo',  'NT', 'epistle',      5),
-    (63, '2 John',          '2Jo',  'NT', 'epistle',      1),
-    (64, '3 John',          '3Jo',  'NT', 'epistle',      1),
-    (65, 'Jude',            'Jud',  'NT', 'epistle',      1),
-    (66, 'Revelation',      'Rev',  'NT', 'apocalyptic', 22),
-]
-
-SOURCE_URL = (
-    'https://github.com/scrollmapper/bible_databases'
-    '/raw/master/formats/sqlite/KJV.db'
-)
 
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 OUTPUT_PATH  = os.path.join(PROJECT_ROOT, 'data', 'core.db')
+SOURCES_DIR  = os.path.join(SCRIPT_DIR, 'sources')
+CROSSREF_SRC = os.path.join(SOURCES_DIR, 'cross_references.txt')
+NAVE_CSV     = os.path.join(SOURCES_DIR, 'NavesTopicalDictionary.csv')
+SPLIT_REPORT = os.path.join(PROJECT_ROOT, 'scripts', 'crossref_split_report.txt')
 
+DEFAULT_KJV_DB = os.path.join(
+    PROJECT_ROOT, 'data', 'translations-prep', 'output', 'KJV.db'
+)
 
 # ---------------------------------------------------------------------------
-# Download
+# Book metadata: (id, name, abbrev, testament, genre, chapters)
 # ---------------------------------------------------------------------------
 
-def download_source(url, dest_path):
-    print(f'Downloading KJV source...')
-    print(f'  {url}')
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as response:
-            total = int(response.headers.get('Content-Length', 0))
-            downloaded = 0
-            with open(dest_path, 'wb') as out:
-                while True:
-                    chunk = response.read(65536)
-                    if not chunk:
-                        break
-                    out.write(chunk)
-                    downloaded += len(chunk)
-                    if total:
-                        pct = downloaded * 100 // total
-                        print(f'\r  {pct:3d}%  {downloaded:,} / {total:,} bytes',
-                              end='', flush=True)
-            print()
-    except urllib.error.HTTPError as e:
-        print(f'\nHTTP error {e.code}: {e.reason}', file=sys.stderr)
-        print('Check that the scrollmapper repo URL is still valid.', file=sys.stderr)
-        sys.exit(1)
-    except urllib.error.URLError as e:
-        print(f'\nNetwork error: {e.reason}', file=sys.stderr)
-        sys.exit(1)
-
+BOOKS = [
+    ( 1, 'Genesis',         'Gen',  'OT', 'law',          50),
+    ( 2, 'Exodus',          'Exo',  'OT', 'law',          40),
+    ( 3, 'Leviticus',       'Lev',  'OT', 'law',          27),
+    ( 4, 'Numbers',         'Num',  'OT', 'law',          36),
+    ( 5, 'Deuteronomy',     'Deu',  'OT', 'law',          34),
+    ( 6, 'Joshua',          'Jos',  'OT', 'history',      24),
+    ( 7, 'Judges',          'Jdg',  'OT', 'history',      21),
+    ( 8, 'Ruth',            'Rut',  'OT', 'history',       4),
+    ( 9, '1 Samuel',        '1Sa',  'OT', 'history',      31),
+    (10, '2 Samuel',        '2Sa',  'OT', 'history',      24),
+    (11, '1 Kings',         '1Ki',  'OT', 'history',      22),
+    (12, '2 Kings',         '2Ki',  'OT', 'history',      25),
+    (13, '1 Chronicles',    '1Ch',  'OT', 'history',      29),
+    (14, '2 Chronicles',    '2Ch',  'OT', 'history',      36),
+    (15, 'Ezra',            'Ezr',  'OT', 'history',      10),
+    (16, 'Nehemiah',        'Neh',  'OT', 'history',      13),
+    (17, 'Esther',          'Est',  'OT', 'history',      10),
+    (18, 'Job',             'Job',  'OT', 'poetry',       42),
+    (19, 'Psalms',          'Psa',  'OT', 'poetry',      150),
+    (20, 'Proverbs',        'Pro',  'OT', 'poetry',       31),
+    (21, 'Ecclesiastes',    'Ecc',  'OT', 'poetry',       12),
+    (22, 'Song of Solomon', 'Son',  'OT', 'poetry',        8),
+    (23, 'Isaiah',          'Isa',  'OT', 'prophecy',     66),
+    (24, 'Jeremiah',        'Jer',  'OT', 'prophecy',     52),
+    (25, 'Lamentations',    'Lam',  'OT', 'prophecy',      5),
+    (26, 'Ezekiel',         'Eze',  'OT', 'prophecy',     48),
+    (27, 'Daniel',          'Dan',  'OT', 'prophecy',     12),
+    (28, 'Hosea',           'Hos',  'OT', 'prophecy',     14),
+    (29, 'Joel',            'Joe',  'OT', 'prophecy',      3),
+    (30, 'Amos',            'Amo',  'OT', 'prophecy',      9),
+    (31, 'Obadiah',         'Oba',  'OT', 'prophecy',      1),
+    (32, 'Jonah',           'Jon',  'OT', 'prophecy',      4),
+    (33, 'Micah',           'Mic',  'OT', 'prophecy',      7),
+    (34, 'Nahum',           'Nah',  'OT', 'prophecy',      3),
+    (35, 'Habakkuk',        'Hab',  'OT', 'prophecy',      3),
+    (36, 'Zephaniah',       'Zep',  'OT', 'prophecy',      3),
+    (37, 'Haggai',          'Hag',  'OT', 'prophecy',      2),
+    (38, 'Zechariah',       'Zec',  'OT', 'prophecy',     14),
+    (39, 'Malachi',         'Mal',  'OT', 'prophecy',      4),
+    (40, 'Matthew',         'Mat',  'NT', 'gospel',       28),
+    (41, 'Mark',            'Mar',  'NT', 'gospel',       16),
+    (42, 'Luke',            'Luk',  'NT', 'gospel',       24),
+    (43, 'John',            'Joh',  'NT', 'gospel',       21),
+    (44, 'Acts',            'Act',  'NT', 'history',      28),
+    (45, 'Romans',          'Rom',  'NT', 'epistle',      16),
+    (46, '1 Corinthians',   '1Co',  'NT', 'epistle',      16),
+    (47, '2 Corinthians',   '2Co',  'NT', 'epistle',      13),
+    (48, 'Galatians',       'Gal',  'NT', 'epistle',       6),
+    (49, 'Ephesians',       'Eph',  'NT', 'epistle',       6),
+    (50, 'Philippians',     'Php',  'NT', 'epistle',       4),
+    (51, 'Colossians',      'Col',  'NT', 'epistle',       4),
+    (52, '1 Thessalonians', '1Th',  'NT', 'epistle',       5),
+    (53, '2 Thessalonians', '2Th',  'NT', 'epistle',       3),
+    (54, '1 Timothy',       '1Ti',  'NT', 'epistle',       6),
+    (55, '2 Timothy',       '2Ti',  'NT', 'epistle',       4),
+    (56, 'Titus',           'Tit',  'NT', 'epistle',       3),
+    (57, 'Philemon',        'Phm',  'NT', 'epistle',       1),
+    (58, 'Hebrews',         'Heb',  'NT', 'epistle',      13),
+    (59, 'James',           'Jas',  'NT', 'epistle',       5),
+    (60, '1 Peter',         '1Pe',  'NT', 'epistle',       5),
+    (61, '2 Peter',         '2Pe',  'NT', 'epistle',       3),
+    (62, '1 John',          '1Jo',  'NT', 'epistle',       5),
+    (63, '2 John',          '2Jo',  'NT', 'epistle',       1),
+    (64, '3 John',          '3Jo',  'NT', 'epistle',       1),
+    (65, 'Jude',            'Jud',  'NT', 'epistle',       1),
+    (66, 'Revelation',      'Rev',  'NT', 'apocalyptic',  22),
+]
 
 # ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
 
 SCHEMA = """
--- ============================================================
--- SCRIPTURE DATA (read-only, shipped with the app)
--- ============================================================
+-- ── Canonical book metadata ──────────────────────────────────────────────────
+-- Duplicated into each translation .db file for self-containment, but kept
+-- here too so screens that don't need Scripture text (book picker, reference
+-- panel header) can read it without opening a translation handle.
 
 CREATE TABLE IF NOT EXISTS books (
-    id          INTEGER PRIMARY KEY,
-    name        TEXT NOT NULL,
-    abbrev      TEXT NOT NULL,
-    testament   TEXT NOT NULL,
-    genre       TEXT NOT NULL,
-    chapters    INTEGER NOT NULL
+    id        INTEGER PRIMARY KEY,
+    name      TEXT    NOT NULL,
+    abbrev    TEXT    NOT NULL,
+    testament TEXT    NOT NULL,
+    genre     TEXT    NOT NULL,
+    chapters  INTEGER NOT NULL
 );
+
+-- ── Translation manifest ──────────────────────────────────────────────────────
+-- One row per installed translation. Bundled translations are seeded here
+-- at build time (is_bundled = 1). User-added translations append rows at
+-- install time (is_bundled = 0, future feature).
 
 CREATE TABLE IF NOT EXISTS translations (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    abbrev      TEXT NOT NULL,
-    language    TEXT NOT NULL,
-    license     TEXT NOT NULL
+    id           INTEGER PRIMARY KEY,
+    filename     TEXT    UNIQUE NOT NULL,
+    name         TEXT    NOT NULL,
+    abbreviation TEXT    NOT NULL,
+    year         TEXT,
+    license      TEXT,
+    installed_at INTEGER NOT NULL,
+    is_bundled   INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS verses (
-    id          INTEGER PRIMARY KEY,
-    book_id     INTEGER NOT NULL,
-    chapter     INTEGER NOT NULL,
-    verse       INTEGER NOT NULL,
-    translation_id TEXT NOT NULL,
-    text        TEXT NOT NULL,
-    FOREIGN KEY (book_id) REFERENCES books(id),
-    FOREIGN KEY (translation_id) REFERENCES translations(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_verses_location
-    ON verses(book_id, chapter, verse, translation_id);
-
-CREATE INDEX IF NOT EXISTS idx_verses_translation
-    ON verses(translation_id, book_id, chapter);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS verses_fts USING fts4(
-    content="verses",
-    text
-);
-
-CREATE TABLE IF NOT EXISTS verse_mappings (
-    from_translation TEXT NOT NULL,
-    from_verse_id    INTEGER NOT NULL,
-    to_translation   TEXT NOT NULL,
-    to_verse_id      INTEGER NOT NULL,
-    PRIMARY KEY (from_translation, from_verse_id, to_translation)
-);
+-- ── OpenBible cross-references ───────────────────────────────────────────────
+-- Populated by the ingest step below (from build/sources/cross_references.txt).
+-- All ~345,500 rows stored; vote floor is applied at query time in js/db.js.
 
 CREATE TABLE IF NOT EXISTS cross_references (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_verse_start INTEGER NOT NULL,
-    from_verse_end   INTEGER,
-    to_verse_start   INTEGER NOT NULL,
-    to_verse_end     INTEGER,
-    source           TEXT NOT NULL,
-    relevance        INTEGER DEFAULT 0
+    source_verse INTEGER NOT NULL,
+    target_start INTEGER NOT NULL,
+    target_end   INTEGER,
+    votes        INTEGER NOT NULL DEFAULT 0,
+    sources      TEXT    NOT NULL DEFAULT 'ob'
 );
 
-CREATE INDEX IF NOT EXISTS idx_xref_from ON cross_references(from_verse_start);
-CREATE INDEX IF NOT EXISTS idx_xref_to   ON cross_references(to_verse_start);
+CREATE INDEX IF NOT EXISTS idx_crossrefs_source_votes
+    ON cross_references(source_verse, votes DESC);
 
-CREATE TABLE IF NOT EXISTS original_words (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    verse_id       INTEGER NOT NULL,
-    word_position  INTEGER NOT NULL,
-    original_text  TEXT NOT NULL,
-    strongs_number TEXT NOT NULL,
-    morphology     TEXT,
-    FOREIGN KEY (verse_id) REFERENCES verses(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_origwords_verse   ON original_words(verse_id);
-CREATE INDEX IF NOT EXISTS idx_origwords_strongs ON original_words(strongs_number);
-
-CREATE TABLE IF NOT EXISTS lexicon (
-    strongs_number  TEXT PRIMARY KEY,
-    original_word   TEXT NOT NULL,
-    transliteration TEXT,
-    pronunciation   TEXT,
-    short_def       TEXT NOT NULL,
-    full_def        TEXT
-);
-
--- ============================================================
--- USER DATA (read-write)
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS studies (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    name        TEXT NOT NULL DEFAULT 'Untitled Study',
-    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    modified_at TEXT NOT NULL DEFAULT (datetime('now')),
-    status      TEXT NOT NULL DEFAULT 'active'
-);
-
-CREATE INDEX IF NOT EXISTS idx_studies_status   ON studies(status);
-CREATE INDEX IF NOT EXISTS idx_studies_modified ON studies(modified_at);
-
-CREATE TABLE IF NOT EXISTS study_templates (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    name           TEXT NOT NULL,
-    description    TEXT,
-    estimated_time TEXT,
-    is_builtin     INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS template_steps (
-    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-    template_id        INTEGER NOT NULL,
-    step_number        INTEGER NOT NULL,
-    prompt             TEXT NOT NULL,
-    input_type         TEXT NOT NULL DEFAULT 'text',
-    help_text          TEXT,
-    target_verse_start INTEGER,
-    target_verse_end   INTEGER,
-    tool_to_open       TEXT,
-    highlight_range    TEXT,
-    FOREIGN KEY (template_id) REFERENCES study_templates(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS session_records (
-    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-    template_id        INTEGER,
-    verse_start        INTEGER NOT NULL,
-    verse_end          INTEGER NOT NULL,
-    current_step       INTEGER NOT NULL DEFAULT 0,
-    started_at         TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
-    status             TEXT NOT NULL DEFAULT 'in-progress',
-    visibility_default TEXT NOT NULL DEFAULT 'private',
-    note_ids_json      TEXT,
-    tags_used_json     TEXT,
-    FOREIGN KEY (template_id) REFERENCES study_templates(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_status   ON session_records(status);
-CREATE INDEX IF NOT EXISTS idx_sessions_template ON session_records(template_id);
-
-CREATE TABLE IF NOT EXISTS notes (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    body                TEXT NOT NULL DEFAULT '',
-    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
-    modified_at         TEXT NOT NULL DEFAULT (datetime('now')),
-    visibility          TEXT NOT NULL DEFAULT 'private',
-    parent_note_id      INTEGER,
-    template_session_id INTEGER,
-    study_id            INTEGER,
-    FOREIGN KEY (parent_note_id)      REFERENCES notes(id)            ON DELETE CASCADE,
-    FOREIGN KEY (template_session_id) REFERENCES session_records(id),
-    FOREIGN KEY (study_id)            REFERENCES studies(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_notes_parent ON notes(parent_note_id);
-CREATE INDEX IF NOT EXISTS idx_notes_study  ON notes(study_id);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts4(
-    content="notes",
-    body
-);
-
-CREATE TABLE IF NOT EXISTS note_anchors (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    note_id        INTEGER NOT NULL,
-    verse_start    INTEGER NOT NULL,
-    verse_end      INTEGER,
-    word_position  INTEGER,
-    strongs_number TEXT,
-    FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_anchors_note  ON note_anchors(note_id);
-CREATE INDEX IF NOT EXISTS idx_anchors_verse ON note_anchors(verse_start);
-
-CREATE TABLE IF NOT EXISTS tags (
-    id   INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    type TEXT NOT NULL DEFAULT 'tag'
-);
-
-CREATE TABLE IF NOT EXISTS tag_assignments (
-    tag_id  INTEGER NOT NULL,
-    note_id INTEGER NOT NULL,
-    PRIMARY KEY (tag_id, note_id),
-    FOREIGN KEY (tag_id)  REFERENCES tags(id)  ON DELETE CASCADE,
-    FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_tagassign_note ON tag_assignments(note_id);
-
-CREATE TABLE IF NOT EXISTS note_quotes (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    note_id     INTEGER NOT NULL,
-    verse_start INTEGER NOT NULL,
-    verse_end   INTEGER,
-    position    INTEGER NOT NULL,
-    FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_quotes_note ON note_quotes(note_id);
-
-CREATE TABLE IF NOT EXISTS text_markups (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    verse_start  INTEGER NOT NULL,
-    verse_end    INTEGER,
-    word_position INTEGER,
-    markup_type  TEXT NOT NULL,
-    color        TEXT NOT NULL,
-    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_markups_verse ON text_markups(verse_start);
-
-CREATE TABLE IF NOT EXISTS bookmarks (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    verse_id   INTEGER NOT NULL,
-    label      TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS plans (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    name                TEXT NOT NULL,
-    type                TEXT NOT NULL,
-    template_id         INTEGER,
-    sharing_destination TEXT,
-    FOREIGN KEY (template_id) REFERENCES study_templates(id)
-);
-
-CREATE TABLE IF NOT EXISTS plan_days (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    plan_id     INTEGER NOT NULL,
-    day_number  INTEGER NOT NULL,
-    verse_start INTEGER NOT NULL,
-    verse_end   INTEGER NOT NULL,
-    FOREIGN KEY (plan_id) REFERENCES plans(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS plan_progress (
-    plan_id      INTEGER NOT NULL,
-    day_number   INTEGER NOT NULL,
-    completed    INTEGER NOT NULL DEFAULT 0,
-    completed_at TEXT,
-    PRIMARY KEY (plan_id, day_number),
-    FOREIGN KEY (plan_id) REFERENCES plans(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS memory_verses (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    verse_start   INTEGER NOT NULL,
-    verse_end     INTEGER,
-    next_review   TEXT,
-    interval_days INTEGER NOT NULL DEFAULT 1,
-    ease_factor   REAL    NOT NULL DEFAULT 2.5,
-    repetitions   INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS memory_reviews (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    memory_id   INTEGER NOT NULL,
-    reviewed_at TEXT    NOT NULL DEFAULT (datetime('now')),
-    quality     INTEGER NOT NULL,
-    FOREIGN KEY (memory_id) REFERENCES memory_verses(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS app_state (
-    key   TEXT PRIMARY KEY,
-    value TEXT
-);
-
--- ============================================================
--- NAVE'S TOPICAL BIBLE
--- ============================================================
+-- ── Nave's Topical Bible ──────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS topics (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
-    name    TEXT NOT NULL,
-    entry   TEXT NOT NULL,
-    section TEXT NOT NULL,
+    name    TEXT    NOT NULL,
+    entry   TEXT    NOT NULL,
+    section TEXT    NOT NULL,
     display INTEGER NOT NULL DEFAULT 0  -- 1 = visible chip, 0 = searchable only
 );
 
 CREATE INDEX IF NOT EXISTS idx_topics_name    ON topics(name);
 CREATE INDEX IF NOT EXISTS idx_topics_display ON topics(display);
 
+-- verse_id stores BBCCCVVV integers (book * 1_000_000 + chapter * 1_000 + verse).
+-- No FK to a verses table — Scripture text lives in per-translation files.
+
 CREATE TABLE IF NOT EXISTS topic_verses (
     topic_id INTEGER NOT NULL,
     verse_id INTEGER NOT NULL,
     PRIMARY KEY (topic_id, verse_id),
-    FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE,
-    FOREIGN KEY (verse_id) REFERENCES verses(id)
+    FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_topic_verses_topic ON topic_verses(topic_id);
 CREATE INDEX IF NOT EXISTS idx_topic_verses_verse ON topic_verses(verse_id);
 """
 
+# ---------------------------------------------------------------------------
+# Translations manifest seed data
+# ---------------------------------------------------------------------------
+
+# filenames use lowercase to match OPFS path: translations/{filename}
+TRANSLATIONS = [
+    (1, 'kjv.db',   'King James Version',        'KJV',   '1611', 'Public Domain'),
+    (2, 'asv.db',   'American Standard Version',  'ASV',   '1901', 'Public Domain'),
+    (3, 'web.db',   'World English Bible',         'WEB',   '2000', 'Public Domain'),
+    (4, 'ylt.db',   "Young's Literal Translation", 'YLT',   '1862', 'Public Domain'),
+    (5, 'darby.db', 'Darby Translation',           'Darby', '1890', 'Public Domain'),
+    (6, 'bsb.db',   'Berean Standard Bible',       'BSB',   '2023', 'Public Domain'),
+]
 
 # ---------------------------------------------------------------------------
-# Build steps
+# Cross-reference ingestion (ported from scripts/build_crossrefs.py)
+# Verse counts are looked up from KJV.db (uses `book` column, not `book_id`).
 # ---------------------------------------------------------------------------
 
-def create_schema(conn):
-    print('Creating schema...')
-    conn.executescript(SCHEMA)
-    print('  Done.')
+BOOK_TOKENS = {
+    'Gen':   1,  'Exod':  2,  'Lev':   3,  'Num':   4,  'Deut':  5,
+    'Josh':  6,  'Judg':  7,  'Ruth':  8,  '1Sam':  9,  '2Sam': 10,
+    '1Kgs': 11,  '2Kgs': 12,  '1Chr': 13,  '2Chr': 14,  'Ezra': 15,
+    'Neh':  16,  'Esth': 17,  'Job':  18,  'Ps':   19,  'Prov': 20,
+    'Eccl': 21,  'Song': 22,  'Isa':  23,  'Jer':  24,  'Lam':  25,
+    'Ezek': 26,  'Dan':  27,  'Hos':  28,  'Joel': 29,  'Amos': 30,
+    'Obad': 31,  'Jonah':32,  'Mic':  33,  'Nah':  34,  'Hab':  35,
+    'Zeph': 36,  'Hag':  37,  'Zech': 38,  'Mal':  39,
+    'Matt': 40,  'Mark': 41,  'Luke': 42,  'John': 43,  'Acts': 44,
+    'Rom':  45,  '1Cor': 46,  '2Cor': 47,  'Gal':  48,  'Eph':  49,
+    'Phil': 50,  'Col':  51,  '1Thess':52, '2Thess':53, '1Tim': 54,
+    '2Tim': 55,  'Titus':56,  'Phlm': 57,  'Heb':  58,  'Jas':  59,
+    '1Pet': 60,  '2Pet': 61,  '1John':62,  '2John':63,  '3John':64,
+    'Jude': 65,  'Rev':  66,
+}
+
+CHAPTERS = [
+    0,
+    50, 40, 27, 36, 34, 24, 21, 4,  31, 24,  # Gen–2Sam
+    22, 25, 29, 36, 10, 13, 10, 42, 150, 31,  # 1Kgs–Prov
+    12, 8,  66, 52, 5,  48, 12, 14, 3,  9,    # Eccl–Amos
+    1,  4,  7,  3,  3,  3,  2,  14, 4,         # Obad–Mal
+    28, 16, 24, 21, 28, 16, 16, 13, 6,  6,    # Matt–Eph
+    4,  4,  5,  3,  6,  4,  3,  1,  13, 5,    # Phil–Heb
+    5,  3,  5,  1,  1,  1,  22,                # Jas–Rev
+]
+
+_verse_counts_cache: dict[tuple, int] = {}
 
 
-def insert_books(conn):
-    print('Inserting books...')
-    conn.executemany(
-        'INSERT INTO books (id, name, abbrev, testament, genre, chapters) '
-        'VALUES (?, ?, ?, ?, ?, ?)',
-        BOOKS
-    )
-    print(f'  {len(BOOKS)} books inserted.')
+def bbcccvvv(book: int, chapter: int, verse: int) -> int:
+    return book * 1_000_000 + chapter * 1_000 + verse
 
 
-def insert_translation(conn):
-    print('Inserting translation...')
-    conn.execute(
-        'INSERT INTO translations (id, name, abbrev, language, license) '
-        'VALUES (?, ?, ?, ?, ?)',
-        ('KJV', 'King James Version', 'KJV', 'en', 'Public domain')
-    )
-    print('  KJV inserted.')
-
-
-def insert_verses(conn, source_path):
-    print('Reading verses from source database...')
-    src = sqlite3.connect(source_path)
+def parse_ref(token: str):
+    parts = token.split('.')
+    if len(parts) != 3:
+        return None
+    book_name, chap_str, verse_str = parts
+    book_id = BOOK_TOKENS.get(book_name)
+    if book_id is None:
+        return None
     try:
-        src.row_factory = sqlite3.Row
-        rows = src.execute(
-            'SELECT book_id, chapter, verse, text FROM KJV_verses ORDER BY book_id, chapter, verse'
-        ).fetchall()
-    finally:
-        src.close()
+        return (book_id, int(chap_str), int(verse_str))
+    except ValueError:
+        return None
 
-    print(f'  {len(rows):,} verses read.')
-    print('Inserting verses (BBCCCVVV IDs)...')
 
-    verse_rows = [
-        (
-            row['book_id'] * 1_000_000 + row['chapter'] * 1_000 + row['verse'],  # BBCCCVVV
-            row['book_id'],
-            row['chapter'],
-            row['verse'],
-            'KJV',
-            row['text'],
+def get_verse_count(kjv_conn, book_id: int, chapter: int) -> int:
+    """Max verse number in (book_id, chapter) from KJV.db.
+    KJV.db uses column `book` (not `book_id`).
+    """
+    key = (book_id, chapter)
+    if key not in _verse_counts_cache:
+        row = kjv_conn.execute(
+            'SELECT MAX(verse) FROM verses WHERE book = ? AND chapter = ?',
+            (book_id, chapter),
+        ).fetchone()
+        _verse_counts_cache[key] = row[0] if row and row[0] else 0
+    return _verse_counts_cache[key]
+
+
+def split_range(kjv_conn, start_book, start_chap, start_verse,
+                end_book, end_chap, end_verse, votes, split_report_lines):
+    rows = []
+    cross_book = (start_book != end_book)
+
+    book = start_book
+    chap = start_chap
+
+    while True:
+        seg_start_verse = start_verse if (book == start_book and chap == start_chap) else 1
+
+        if book == end_book and chap == end_chap:
+            seg_end_verse = end_verse
+        else:
+            seg_end_verse = get_verse_count(kjv_conn, book, chap)
+            if seg_end_verse == 0:
+                seg_end_verse = 999
+
+        t_start = bbcccvvv(book, chap, seg_start_verse)
+        t_end   = None if seg_start_verse == seg_end_verse else bbcccvvv(book, chap, seg_end_verse)
+        rows.append((t_start, t_end))
+
+        if book == end_book and chap == end_chap:
+            break
+
+        chap += 1
+        if chap > CHAPTERS[book]:
+            if book == end_book:
+                break
+            book += 1
+            chap = 1
+
+    if cross_book:
+        orig_start = f'{start_book:02d}.{start_chap}.{start_verse}'
+        orig_end   = f'{end_book:02d}.{end_chap}.{end_verse}'
+        split_report_lines.append(
+            f'CROSS-BOOK  {orig_start} — {orig_end}  votes={votes}  → {len(rows)} rows'
         )
-        for row in rows
-    ]
+        for t_start, t_end in rows:
+            split_report_lines.append(f'    {t_start}  {t_end}')
+
+    return rows
+
+
+def ingest_crossrefs(conn, kjv_conn):
+    print('Ingesting cross-references…')
+
+    dedup: dict[tuple, int] = {}
+    skipped    = 0
+    raw_rows   = 0
+    split_rows = 0
+    split_report_lines: list[str] = []
+
+    with open(CROSSREF_SRC, encoding='utf-8') as fh:
+        next(fh)  # skip header row
+
+        for line in fh:
+            cols = line.rstrip('\n').split('\t')
+            if len(cols) < 3:
+                skipped += 1
+                continue
+
+            from_token, to_token, votes_str = cols[0], cols[1], cols[2]
+
+            try:
+                votes = int(votes_str)
+            except ValueError:
+                skipped += 1
+                continue
+
+            src = parse_ref(from_token)
+            if src is None:
+                skipped += 1
+                continue
+            source_verse = bbcccvvv(*src)
+
+            if '-' in to_token:
+                halves      = to_token.split('-', 1)
+                t_start_ref = parse_ref(halves[0])
+                t_end_ref   = parse_ref(halves[1])
+                if t_start_ref is None or t_end_ref is None:
+                    skipped += 1
+                    continue
+
+                sb, sc, sv = t_start_ref
+                eb, ec, ev = t_end_ref
+                raw_rows += 1
+
+                if sb == eb and sc == ec:
+                    t_start = bbcccvvv(sb, sc, sv)
+                    t_end   = bbcccvvv(eb, ec, ev)
+                    if t_start == t_end:
+                        t_end = None
+                    key = (source_verse, t_start, t_end)
+                    dedup[key] = max(dedup.get(key, votes), votes)
+                else:
+                    segs = split_range(
+                        kjv_conn, sb, sc, sv, eb, ec, ev, votes,
+                        split_report_lines,
+                    )
+                    for t_start, t_end in segs:
+                        split_rows += 1
+                        key = (source_verse, t_start, t_end)
+                        dedup[key] = max(dedup.get(key, votes), votes)
+            else:
+                t_ref = parse_ref(to_token)
+                if t_ref is None:
+                    skipped += 1
+                    continue
+                raw_rows += 1
+                t_start = bbcccvvv(*t_ref)
+                key = (source_verse, t_start, None)
+                dedup[key] = max(dedup.get(key, votes), votes)
 
     conn.executemany(
-        'INSERT INTO verses (id, book_id, chapter, verse, translation_id, text) '
-        'VALUES (?, ?, ?, ?, ?, ?)',
-        verse_rows
+        'INSERT INTO cross_references '
+        '(source_verse, target_start, target_end, votes, sources) '
+        'VALUES (?, ?, ?, ?, ?)',
+        [(sv, ts, te, v, 'ob') for (sv, ts, te), v in dedup.items()],
     )
-    print(f'  {len(verse_rows):,} verses inserted.')
-    return len(verse_rows)
 
+    with open(SPLIT_REPORT, 'w', encoding='utf-8') as rpt:
+        rpt.write('Cross-reference split report\n')
+        rpt.write('=' * 60 + '\n\n')
+        rpt.write('\n'.join(split_report_lines) if split_report_lines else '(no cross-book splits)')
+        rpt.write('\n')
 
-def build_fts(conn):
-    print('Building FTS index...')
-    conn.execute("INSERT INTO verses_fts(verses_fts) VALUES('rebuild')")
-    print('  verses_fts built.')
+    total = len(dedup)
+    print(f'  Raw rows:      {raw_rows:>8,}')
+    print(f'  From splits:   {split_rows:>8,}')
+    print(f'  After dedup:   {total:>8,}')
+    print(f'  Skipped:       {skipped:>8,}')
+    if abs(total - 345_500) > 2_000:
+        print(f'  WARNING: row count {total:,} is far from expected ~345,500', file=sys.stderr)
 
-
-# ---------------------------------------------------------------------------
-# Verification
-# ---------------------------------------------------------------------------
-
-def verify(conn, expected_verse_count):
-    print('\n--- Verification ---')
-    ok = True
-
-    def check(label, result, expected=None):
-        nonlocal ok
-        if expected is not None and result != expected:
-            print(f'  FAIL  {label}: got {result}, expected {expected}')
-            ok = False
-        else:
-            print(f'  pass  {label}: {result}')
-
-    count = conn.execute(
-        "SELECT COUNT(*) FROM verses WHERE translation_id = 'KJV'"
-    ).fetchone()[0]
-    check(f'Total KJV verses', count, expected_verse_count)
-
-    book_count = conn.execute(
-        'SELECT COUNT(DISTINCT book_id) FROM verses'
-    ).fetchone()[0]
-    check('Books with verses', book_count, 66)
-
-    gen_1_1 = conn.execute(
-        'SELECT text FROM verses WHERE id = ?', (1_001_001,)
-    ).fetchone()
-    if gen_1_1:
-        print(f'  pass  Genesis 1:1 (id=1001001): "{gen_1_1[0][:72]}"')
-    else:
-        print('  FAIL  Genesis 1:1 not found')
-        ok = False
-
-    rev_22_21 = conn.execute(
-        'SELECT text FROM verses WHERE id = ?', (66_022_021,)
-    ).fetchone()
-    if rev_22_21:
-        print(f'  pass  Revelation 22:21 (id=66022021): "{rev_22_21[0]}"')
-    else:
-        print('  FAIL  Revelation 22:21 not found')
-        ok = False
-
-    fts_count = conn.execute(
-        "SELECT COUNT(*) FROM verses_fts WHERE verses_fts MATCH 'love'"
-    ).fetchone()[0]
-    if fts_count > 0:
-        print(f'  pass  FTS "love": {fts_count:,} results')
-    else:
-        print('  FAIL  FTS returned 0 results for "love"')
-        ok = False
-
-    psalm_119_count = conn.execute(
-        'SELECT COUNT(*) FROM verses WHERE book_id = 19 AND chapter = 119'
-    ).fetchone()[0]
-    check('Psalm 119 verse count', psalm_119_count, 176)
-
-    print('--------------------')
-    return ok
-
+    return total
 
 # ---------------------------------------------------------------------------
-# Phase 2: Nave's Topical Bible
+# Nave's Topical Bible ingestion
+# (unchanged logic from previous version; valid_ids now sourced from KJV.db)
 # ---------------------------------------------------------------------------
 
 NAVE_ABBREVS = {
-    'GEN':  1, 'EXO':  2, 'LEV':  3, 'NUM':  4, 'DEU':  5,
-    'JOS':  6, 'JDG':  7, 'RUT':  8, '1SA':  9, '2SA': 10,
-    '1KI': 11, '2KI': 12, '1CH': 13, '2CH': 14, 'EZR': 15,
-    'NEH': 16, 'EST': 17, 'JOB': 18, 'PSA': 19, 'PRO': 20,
-    'ECC': 21, 'SON': 22, 'SNG': 22, 'ISA': 23, 'JER': 24,
-    'LAM': 25, 'EZE': 26, 'EZK': 26, 'DAN': 27, 'HOS': 28,
-    'JOE': 29, 'JOL': 29, 'AMO': 30, 'OBA': 31, 'JON': 32,
-    'MIC': 33, 'NAH': 34, 'NAM': 34, 'HAB': 35, 'ZEP': 36,
-    'HAG': 37, 'ZEC': 38, 'MAL': 39,
-    'MAT': 40, 'MAR': 41, 'MRK': 41, 'LUK': 42, 'JOH': 43,
-    'JHN': 43, 'ACT': 44, 'ROM': 45, '1CO': 46, '2CO': 47,
-    'GAL': 48, 'EPH': 49, 'PHP': 50, 'PHI': 50, 'COL': 51,
-    '1TH': 52, '2TH': 53, '1TI': 54, '2TI': 55, 'TIT': 56,
-    'PHM': 57, 'HEB': 58, 'JAS': 59, '1PE': 60, '2PE': 61,
-    '1JO': 62, '1JN': 62, '1JHN': 62,
-    '2JO': 63, '2JN': 63,
-    '3JO': 64, '3JN': 64,
-    'JUD': 65, 'REV': 66,
+    'GEN':  1,  'EXO':  2,  'LEV':  3,  'NUM':  4,  'DEU':  5,
+    'JOS':  6,  'JDG':  7,  'RUT':  8,  '1SA':  9,  '2SA': 10,
+    '1KI': 11,  '2KI': 12,  '1CH': 13,  '2CH': 14,  'EZR': 15,
+    'NEH': 16,  'EST': 17,  'JOB': 18,  'PSA': 19,  'PRO': 20,
+    'ECC': 21,  'SON': 22,  'SNG': 22,  'ISA': 23,  'JER': 24,
+    'LAM': 25,  'EZE': 26,  'EZK': 26,  'DAN': 27,  'HOS': 28,
+    'JOE': 29,  'JOL': 29,  'AMO': 30,  'OBA': 31,  'JON': 32,
+    'MIC': 33,  'NAH': 34,  'NAM': 34,  'HAB': 35,  'ZEP': 36,
+    'HAG': 37,  'ZEC': 38,  'MAL': 39,
+    'MAT': 40,  'MAR': 41,  'MRK': 41,  'LUK': 42,  'JOH': 43,
+    'JHN': 43,  'ACT': 44,  'ROM': 45,  '1CO': 46,  '2CO': 47,
+    'GAL': 48,  'EPH': 49,  'PHP': 50,  'PHI': 50,  'COL': 51,
+    '1TH': 52,  '2TH': 53,  '1TI': 54,  '2TI': 55,  'TIT': 56,
+    'PHM': 57,  'HEB': 58,  'JAS': 59,  '1PE': 60,  '2PE': 61,
+    '1JO': 62,  '1JN': 62,  '1JHN': 62,
+    '2JO': 63,  '2JN': 63,
+    '3JO': 64,  '3JN': 64,
+    'JUD': 65,  'REV': 66,
 }
 
-_ANCHOR_RE = re.compile(
-    r'\b([1-3]?[A-Z]{2,4})(?![A-Za-z])\s+(\d+)(?::([\d,\-]+))?'
-)
-_BARE_RE = re.compile(r'(?<![:\d])(\d+):([\d,\-]+)')
+_ANCHOR_RE = re.compile(r'\b([1-3]?[A-Z]{2,4})(?![A-Za-z])\s+(\d+)(?::([\d,\-]+))?')
+_BARE_RE   = re.compile(r'(?<![:\d])(\d+):([\d,\-]+)')
 
 
 def _expand_spec(chapter, spec):
@@ -676,41 +515,42 @@ def _nave_display(name, ref_count, keywords, hitchcock):
     return 0
 
 
-def load_nave_sources(sources_dir):
-    kw_path = os.path.join(sources_dir, 'theological_keywords.txt')
+def ingest_naves(conn, kjv_conn):
+    print("Loading Nave's sources…")
+
+    kw_path = os.path.join(SOURCES_DIR, 'theological_keywords.txt')
     with open(kw_path, encoding='utf-8') as f:
         keywords = {line.strip().lower() for line in f if line.strip()}
 
-    hitch_path = os.path.join(sources_dir, 'HitchcocksBibleNamesDictionary.csv')
-    hitchcock = set()
+    hitch_path = os.path.join(SOURCES_DIR, 'HitchcocksBibleNamesDictionary.csv')
+    hitchcock  = set()
     with open(hitch_path, newline='', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
             clean = {k.lstrip('\ufeff'): v for k, v in row.items()}
             hitchcock.add(clean['Name'].strip().lower())
 
-    return keywords, hitchcock
-
-
-def insert_naves(conn, script_dir):
-    print("Loading Nave's sources...")
-    sources_dir = os.path.join(script_dir, 'sources')
-    keywords, hitchcock = load_nave_sources(sources_dir)
     print(f'  Keywords: {len(keywords)},  Hitchcock names: {len(hitchcock)}')
 
+    # Build valid_ids from KJV.db (BBCCCVVV integers for all verses present in KJV).
+    # This validates that Nave's verse references point to real canonical verses.
+    print("  Building valid-verse set from KJV.db…")
     valid_ids = set(
-        row[0] for row in conn.execute('SELECT id FROM verses').fetchall()
+        book * 1_000_000 + chapter * 1_000 + verse
+        for book, chapter, verse in kjv_conn.execute(
+            'SELECT book, chapter, verse FROM verses'
+        )
     )
+    print(f'  Valid verse IDs: {len(valid_ids):,}')
 
-    nave_path = os.path.join(sources_dir, 'NavesTopicalDictionary.csv')
     nave_rows = []
-    with open(nave_path, newline='', encoding='utf-8') as f:
+    with open(NAVE_CSV, newline='', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
             nave_rows.append({k.lstrip('\ufeff'): v for k, v in row.items()})
-    print(f'  Nave topics: {len(nave_rows):,}')
+    print(f"  Nave topics: {len(nave_rows):,}")
 
-    print("Inserting topics and verse mappings...")
+    print("  Inserting topics and verse mappings…")
     topic_count   = 0
     visible_count = 0
     mapping_count = 0
@@ -757,63 +597,167 @@ def insert_naves(conn, script_dir):
     unique_unparsed = sorted(set(all_unparsed))
     if unique_unparsed:
         print(f"  Unparsed segments:   {len(unique_unparsed):,} unique")
-        for s in unique_unparsed[:10]:
+        for s in unique_unparsed[:5]:
             print(f"    {s!r}")
-        if len(unique_unparsed) > 10:
-            print(f"    ... and {len(unique_unparsed) - 10} more")
+        if len(unique_unparsed) > 5:
+            print(f"    … and {len(unique_unparsed) - 5} more")
 
     return topic_count, visible_count, mapping_count
 
+# ---------------------------------------------------------------------------
+# Verification
+# ---------------------------------------------------------------------------
+
+def verify(conn):
+    print('\n── Verification ──────────────────────────────────────')
+    ok = True
+
+    def check(label, got, expected):
+        nonlocal ok
+        status = '✓' if got == expected else '✗'
+        print(f'  {status}  {label}: {got}  (expected {expected})')
+        if got != expected:
+            ok = False
+
+    # books
+    check('books rows', conn.execute('SELECT COUNT(*) FROM books').fetchone()[0], 66)
+
+    # translations manifest
+    check('translations rows', conn.execute('SELECT COUNT(*) FROM translations').fetchone()[0], 6)
+    filenames = [r[0] for r in conn.execute('SELECT filename FROM translations ORDER BY id')]
+    print(f'     filenames: {filenames}')
+
+    # cross_references
+    xref_total = conn.execute('SELECT COUNT(*) FROM cross_references').fetchone()[0]
+    xref_ok    = 340_000 <= xref_total <= 350_000
+    status     = '✓' if xref_ok else '✗'
+    print(f'  {status}  cross_references rows: {xref_total:,}  (expected ~345,500)')
+    if not xref_ok:
+        ok = False
+
+    # spot-check: John 3:16 cross-references
+    john_3_16 = bbcccvvv(43, 3, 16)
+    jn_refs   = conn.execute(
+        'SELECT COUNT(*) FROM cross_references WHERE source_verse = ? AND votes >= 5',
+        (john_3_16,)
+    ).fetchone()[0]
+    status = '✓' if jn_refs >= 10 else '✗'
+    print(f'  {status}  John 3:16 refs (votes ≥ 5): {jn_refs}  (expected ≥ 10)')
+    if jn_refs < 10:
+        ok = False
+
+    # topics
+    topic_total   = conn.execute('SELECT COUNT(*) FROM topics').fetchone()[0]
+    visible_total = conn.execute('SELECT COUNT(*) FROM topics WHERE display = 1').fetchone()[0]
+    tv_total      = conn.execute('SELECT COUNT(*) FROM topic_verses').fetchone()[0]
+    print(f'  ✓  topics: {topic_total:,}  (visible: {visible_total:,})')
+    print(f'  ✓  topic_verses: {tv_total:,}')
+
+    # no verses table
+    has_verses = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='verses'"
+    ).fetchone()[0]
+    status = '✓' if has_verses == 0 else '✗'
+    print(f'  {status}  verses table absent: {has_verses == 0}')
+    if has_verses:
+        ok = False
+
+    print('──────────────────────────────────────────────────────')
+    return ok
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main():
-    os.makedirs(os.path.join(PROJECT_ROOT, 'data'), exist_ok=True)
+    parser = argparse.ArgumentParser(description='Build core.db (Build 2 schema)')
+    parser.add_argument('--kjv-db', default=DEFAULT_KJV_DB,
+                        help='Path to KJV.db (for verse validation and split-range clamping)')
+    args = parser.parse_args()
 
-    if os.path.exists(OUTPUT_PATH):
-        os.remove(OUTPUT_PATH)
-        print(f'Removed existing {OUTPUT_PATH}')
-
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix='.db')
-    os.close(tmp_fd)
-
-    try:
-        download_source(SOURCE_URL, tmp_path)
-
-        conn = sqlite3.connect(OUTPUT_PATH)
-        conn.execute('PRAGMA journal_mode = WAL')
-        conn.execute('PRAGMA synchronous  = NORMAL')
-        conn.execute('PRAGMA foreign_keys = OFF')  # off during bulk load
-
-        create_schema(conn)
-        insert_books(conn)
-        insert_translation(conn)
-        verse_count = insert_verses(conn, tmp_path)
-        conn.commit()
-
-        build_fts(conn)
-        conn.commit()
-
-        insert_naves(conn, SCRIPT_DIR)
-        conn.commit()
-
-        passed = verify(conn, verse_count)
-        conn.close()
-
-        size_mb = os.path.getsize(OUTPUT_PATH) / (1024 * 1024)
-        print(f'\nOutput: {OUTPUT_PATH}  ({size_mb:.1f} MB)')
-
-        if not passed:
-            print('One or more verification checks failed.', file=sys.stderr)
+    kjv_db_path = os.path.join(PROJECT_ROOT, args.kjv_db) if not os.path.isabs(args.kjv_db) else args.kjv_db
+    if not os.path.exists(kjv_db_path):
+        # Try as relative to PROJECT_ROOT
+        alt = os.path.join(PROJECT_ROOT, args.kjv_db)
+        if os.path.exists(alt):
+            kjv_db_path = alt
+        else:
+            print(f'ERROR: KJV.db not found at {kjv_db_path}', file=sys.stderr)
+            print('Run scripts/build_translation.py KJV ... first.', file=sys.stderr)
             sys.exit(1)
 
-        print('Build complete.')
+    for path, label in [(CROSSREF_SRC, 'cross_references.txt'), (NAVE_CSV, 'NavesTopicalDictionary.csv')]:
+        if not os.path.exists(path):
+            print(f'ERROR: {label} not found at {path}', file=sys.stderr)
+            sys.exit(1)
 
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+    print(f'KJV.db:      {kjv_db_path}')
+    print(f'Output:      {OUTPUT_PATH}')
+
+    # Remove existing output
+    os.makedirs(os.path.join(PROJECT_ROOT, 'data'), exist_ok=True)
+    if os.path.exists(OUTPUT_PATH):
+        os.remove(OUTPUT_PATH)
+        print('Removed existing core.db')
+
+    # Open connections
+    kjv_conn = sqlite3.connect(kjv_db_path)
+    conn     = sqlite3.connect(OUTPUT_PATH)
+    conn.execute('PRAGMA journal_mode = WAL')
+    conn.execute('PRAGMA synchronous  = NORMAL')
+    conn.execute('PRAGMA foreign_keys = ON')
+
+    # 1. Schema
+    print('\nCreating schema…')
+    conn.executescript(SCHEMA)
+    print('  Done.')
+
+    # 2. Books
+    print('Inserting books…')
+    conn.executemany(
+        'INSERT INTO books (id, name, abbrev, testament, genre, chapters) '
+        'VALUES (?, ?, ?, ?, ?, ?)',
+        BOOKS,
+    )
+    print(f'  {len(BOOKS)} books inserted.')
+
+    # 3. Translations manifest
+    print('Inserting translations manifest…')
+    now = int(time.time())
+    conn.executemany(
+        'INSERT INTO translations '
+        '(id, filename, name, abbreviation, year, license, installed_at, is_bundled) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+        [(id_, fn, name, abbrev, year, lic, now)
+         for id_, fn, name, abbrev, year, lic in TRANSLATIONS],
+    )
+    print(f'  {len(TRANSLATIONS)} translations inserted.')
+    conn.commit()
+
+    # 4. Nave's Topical Bible
+    print("\nLoading Nave's Topical Bible…")
+    ingest_naves(conn, kjv_conn)
+    conn.commit()
+
+    # 5. Cross-references
+    print('\nLoading cross-references…')
+    total_xrefs = ingest_crossrefs(conn, kjv_conn)
+    conn.commit()
+
+    kjv_conn.close()
+
+    # 6. Verify
+    passed = verify(conn)
+    conn.close()
+
+    size_mb = os.path.getsize(OUTPUT_PATH) / (1024 * 1024)
+    print(f'\nOutput: {OUTPUT_PATH}  ({size_mb:.1f} MB)')
+
+    if not passed:
+        print('One or more verification checks FAILED.', file=sys.stderr)
+        sys.exit(1)
+
+    print('Build complete.')
 
 
 if __name__ == '__main__':

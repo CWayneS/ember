@@ -3,3 +3,8 @@ js/vendor/sql-wasm.wasm
 .DS_Store
 *.swp
 *.swo
+
+# Translation source downloads (large, re-downloadable)
+data/translations-prep/bsb/
+data/translations-prep/web/
+data/translations-prep/data/
