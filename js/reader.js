@@ -1,6 +1,6 @@
 // reader.js — Scripture rendering and navigation
 
-import { getChapter, getBooks, getBook, getNotesForVerse, getMarkupsForChapter } from './db.js';
+import { getChapter, getBooks, getBook, getTranslations, getTranslationDb, getNotesForVerse, getMarkupsForChapter } from './db.js';
 
 // ============================================================
 // Per-pane state — persisted to localStorage
@@ -46,6 +46,13 @@ function savePaneState(paneId) {
     try {
         localStorage.setItem(PANE_KEYS[paneId], JSON.stringify(panes[paneId]));
     } catch (_) {}
+}
+
+// Translations list — loaded once on first use, never changes during a session.
+let _translationsCache = null;
+function getTranslationsList() {
+    if (!_translationsCache) _translationsCache = getTranslations();
+    return _translationsCache;
 }
 
 // ============================================================
@@ -168,6 +175,7 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
     panes[paneId].chapter        = chapter;
     panes[paneId].scrollPosition = 0;  // reset on navigation; scroll listener updates it
     savePaneState(paneId);
+    updateTranslationLabel(paneId);
 
     const book   = getBook(bookId);
     const verses = getChapter(panes[paneId].translationId, bookId, chapter);
@@ -337,6 +345,69 @@ function toggleSplit() {
 }
 
 // ============================================================
+// Translation selection
+// ============================================================
+
+// Updates the .translation-label span in the pane nav.
+function updateTranslationLabel(paneId) {
+    const tid    = panes[paneId].translationId;
+    const t      = getTranslationsList().find(t => t.id === tid);
+    const abbrev = t ? t.abbreviation : 'KJV';
+    navEl(paneId, '.translation-label').textContent = abbrev;
+}
+
+// Renders the horizontal translation row at the top of the book overlay.
+// Highlights the button matching the pane's current translationId.
+function renderTranslationRow(paneId) {
+    const container = document.getElementById('translation-row');
+    container.innerHTML = '';
+    const activeTid = panes[paneId].translationId;
+
+    for (const t of getTranslationsList()) {
+        const btn       = document.createElement('button');
+        btn.className   = 'translation-btn' + (t.id === activeTid ? ' active' : '');
+        btn.textContent = t.abbreviation;
+        btn.title       = t.name;
+        btn.addEventListener('click', () => {
+            if (t.id !== panes[paneId].translationId) {
+                switchPaneTranslation(paneId, t.id);
+            }
+        });
+        container.appendChild(btn);
+    }
+}
+
+// Validates that (bookId, chapter) exists in the target translation.
+// Falls back to chapter 1 if the chapter is missing entirely.
+// (Shared English versification means this should never trigger for the
+//  six bundled translations, but the logic is here as insurance.)
+function findValidReference(translationId, bookId, chapter) {
+    const tdb = getTranslationDb(translationId);
+    if (!tdb) return { bookId, chapter };
+
+    const chapterExists = tdb.exec(
+        'SELECT 1 FROM verses WHERE book = ? AND chapter = ? LIMIT 1',
+        [bookId, chapter]
+    )[0]?.values.length > 0;
+
+    if (chapterExists) return { bookId, chapter };
+
+    // Chapter is missing — fall back to chapter 1 verse 1.
+    return { bookId, chapter: 1 };
+}
+
+// Switches the active translation for a pane, preserving the passage reference.
+// The book picker stays open so the user can also navigate to a new book.
+function switchPaneTranslation(paneId, translationId) {
+    const { bookId, chapter } = panes[paneId];
+    const target = findValidReference(translationId, bookId, chapter);
+    panes[paneId].translationId = translationId;
+    renderPane(paneId, target.bookId, target.chapter);
+    // Re-render the row so the active highlight updates without reopening.
+    renderTranslationRow(paneId);
+}
+
+// ============================================================
 // Book / Chapter Overlay
 // ============================================================
 
@@ -344,6 +415,7 @@ function openBookOverlay(paneId) {
     overlayPane = paneId;
     document.getElementById('book-overlay').classList.remove('hidden');
     document.getElementById('chapter-grid').classList.add('hidden');
+    renderTranslationRow(paneId);
     renderBookList();
 }
 

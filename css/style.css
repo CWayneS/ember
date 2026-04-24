@@ -1891,6 +1891,39 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     padding: 24px;
 }
 
+#translation-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-width: 560px;
+    margin: 0 auto;
+    padding-bottom: 16px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.translation-btn {
+    padding: 5px 14px;
+    font-family: var(--font-ui);
+    font-size: var(--size-small);
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    background: none;
+    letter-spacing: 0.5px;
+}
+
+.translation-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.translation-btn.active {
+    color: var(--accent);
+    background: var(--accent-light);
+}
+
 #book-list {
     max-width: 560px;
     margin: 0 auto;

@@ -385,6 +385,12 @@ export function getChapter(translationId, bookId, chapter) {
     return results;
 }
 
+export function getTranslations() {
+    return db.exec(
+        'SELECT id, name, abbreviation FROM translations ORDER BY id'
+    )[0]?.values.map(r => ({ id: r[0], name: r[1], abbreviation: r[2] })) || [];
+}
+
 export function getBooks() {
     if (!_booksCache) {
         _booksCache = db.exec('SELECT * FROM books ORDER BY id')[0]?.values.map(row => ({
