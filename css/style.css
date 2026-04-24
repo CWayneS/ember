@@ -742,6 +742,38 @@ body.theme-dark #theme-icon-moon { display: none;  }
     animation: verse-select-glow 0.4s ease-out forwards;
 }
 
+/* ============================================================
+   Markup visuals — gated by body.markup-mode-on.
+   Classes are always on the verse elements (applied at render time);
+   the body class controls whether they're visible.
+   Stacking is additive: a verse can carry highlight + underline + circle.
+   ============================================================ */
+
+body.markup-mode-on .verse.markup-highlight-yellow { background: var(--markup-yellow); }
+body.markup-mode-on .verse.markup-highlight-green  { background: var(--markup-green); }
+body.markup-mode-on .verse.markup-highlight-blue   { background: var(--markup-blue); }
+body.markup-mode-on .verse.markup-highlight-pink   { background: var(--markup-pink); }
+body.markup-mode-on .verse.markup-highlight-orange { background: var(--markup-orange); }
+
+body.markup-mode-on .verse.markup-underline-solid { text-decoration: underline; }
+body.markup-mode-on .verse.markup-underline-wavy  { text-decoration: underline wavy; }
+
+body.markup-mode-on .verse.markup-circle {
+    outline: 2px solid var(--markup-ink);
+    border-radius: 4px;
+}
+
+/* When a verse is both highlighted and selected, the selected background wins
+   (it communicates the selection state clearly). Markup is still visible on
+   adjacent verses in the range. */
+body.markup-mode-on .verse.selected.markup-highlight-yellow,
+body.markup-mode-on .verse.selected.markup-highlight-green,
+body.markup-mode-on .verse.selected.markup-highlight-blue,
+body.markup-mode-on .verse.selected.markup-highlight-pink,
+body.markup-mode-on .verse.selected.markup-highlight-orange {
+    background: var(--bg-selected);
+}
+
 .verse-text {
     font-size: var(--scripture-font-size);
 }

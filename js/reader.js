@@ -1,6 +1,6 @@
 // reader.js — Scripture rendering and navigation
 
-import { getChapter, getBooks, getBook, setState, getNotesForVerse } from './db.js';
+import { getChapter, getBooks, getBook, setState, getNotesForVerse, getMarkupsForChapter } from './db.js';
 
 // ============================================================
 // State
@@ -129,6 +129,19 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
         }
 
         textEl.appendChild(el);
+    }
+
+    // Apply markup classes to verse elements (always; visibility gated by body.markup-mode-on).
+    const bookChapter = bookId * 1000 + chapter;
+    const markups     = getMarkupsForChapter(bookChapter);
+    for (const verseEl of textEl.querySelectorAll('.verse')) {
+        const verseId = parseInt(verseEl.dataset.verseId);
+        for (const markup of markups) {
+            const end = markup.verse_end ?? markup.verse_start;
+            if (markup.verse_start <= verseId && verseId <= end) {
+                applyMarkupClass(verseEl, markup);
+            }
+        }
     }
 
     if (highlightVerseId) {
@@ -363,6 +376,18 @@ function applyRatio(ratio) {
     const pct = ratio.toFixed(2);
     getPaneEl('a').style.flex = `1 1 ${pct}%`;
     getPaneEl('b').style.flex = `1 1 ${(100 - parseFloat(pct)).toFixed(2)}%`;
+}
+
+// Applies the appropriate CSS class(es) to a verse element for one markup row.
+// Classes are always applied; body.markup-mode-on gates whether they're visible.
+function applyMarkupClass(verseEl, markup) {
+    if (markup.type === 'highlight') {
+        verseEl.classList.add(`markup-highlight-${markup.color}`);
+    } else if (markup.type === 'underline') {
+        verseEl.classList.add(`markup-underline-${markup.color}`);
+    } else if (markup.type === 'circle') {
+        verseEl.classList.add('markup-circle');
+    }
 }
 
 function clamp(value, min, max) {

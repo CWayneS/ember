@@ -23,6 +23,9 @@ export function initMarkups() {
 function applyState(btn, strip) {
     btn.classList.toggle('active', expanded);
     strip.classList.toggle('hidden', !expanded);
+    // Gate markup visibility via a body class so CSS can show/hide all markup
+    // styles without re-rendering verses. Classes on verses are always present.
+    document.body.classList.toggle('markup-mode-on', expanded);
 }
 
 // Other modules can query whether markup mode is active.
