@@ -4,7 +4,7 @@ import {
     saveNote, updateNote, deleteNote,
     getNotesForStudy, getStudies, getNotesForTag, getVersesForTopic, getTopicVerseCount,
     parseVerseId, getBooks, createStudy, deleteStudy, renameStudy, getStudyName,
-    addNoteTag, removeNoteTag, addAnchorToNote
+    addNoteTag, removeNoteTag, addAnchorToNote, getCurrentTranslationId
 } from './db.js';
 import { refreshNoteDots, navigateTo }              from './reader.js';
 import { openStudy, closeStudy, getActiveStudyId, openTagView, renameStudyTab } from './panels.js';
@@ -223,7 +223,7 @@ function renderTagView(tagName) {
     const container = document.getElementById('notes-active-view');
     const notes     = getNotesForTag(tagName);
     const total     = getTopicVerseCount(tagName);
-    const verses    = getVersesForTopic(tagName, TOPIC_PAGE, 0);
+    const verses    = getVersesForTopic(tagName, getCurrentTranslationId(), TOPIC_PAGE, 0);
 
     container.innerHTML = '';
 
@@ -263,7 +263,7 @@ function buildLoadMoreButton(tagName, offset, total, container, notes) {
         for (const note of notes) {
             container.querySelector(`[data-note-id="${note.id}"]`)?.remove();
         }
-        const newVerses = getVersesForTopic(tagName, TOPIC_PAGE, offset);
+        const newVerses = getVersesForTopic(tagName, getCurrentTranslationId(), TOPIC_PAGE, offset);
         const newOffset = offset + newVerses.length;
         const appendFooter = () => {
             for (const note of notes) {

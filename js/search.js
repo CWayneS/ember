@@ -1,6 +1,6 @@
 // search.js — Full-text search UI
 
-import { search, parseVerseId, getBooks, getAllBookmarks } from './db.js';
+import { search, parseVerseId, getBooks, getAllBookmarks, getCurrentTranslationId } from './db.js';
 import { navigateTo }                      from './reader.js';
 import { openTagView, openStudy }           from './panels.js';
 
@@ -77,7 +77,7 @@ function runSearch(query) {
         return;
     }
 
-    const results = search(q);
+    const results = search(q, getCurrentTranslationId());
     const show    = (key) => !filter || filter === key;
 
     const sections = [];

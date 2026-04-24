@@ -1,6 +1,6 @@
 // reader.js — Scripture rendering and navigation
 
-import { getChapter, getBooks, getBook, setState, getNotesForVerse, getMarkupsForChapter } from './db.js';
+import { getChapter, getBooks, getBook, setState, getNotesForVerse, getMarkupsForChapter, getCurrentTranslationId } from './db.js';
 
 // ============================================================
 // State
@@ -97,7 +97,7 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
     panes[paneId].chapter = chapter;
 
     const book   = getBook(bookId);
-    const verses = getChapter(bookId, chapter);
+    const verses = getChapter(getCurrentTranslationId(), bookId, chapter);
     const textEl = getTextEl(paneId);
 
     navEl(paneId, '.pane-book-btn').textContent = book.abbrev;

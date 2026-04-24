@@ -366,13 +366,17 @@ export function parseVerseId(id) {
 // Scripture Queries
 // ============================================================
 
-export function getChapter(bookId, chapter, translationId = 'KJV') {
-    const stmt = db.prepare(
-        `SELECT id, verse, text FROM verses
-         WHERE book_id = ? AND chapter = ? AND translation_id = ?
+export function getChapter(translationId, bookId, chapter) {
+    const tdb = _translationDbs.get(translationId) ?? _translationDbs.get(1);
+    if (!tdb) return [];
+    const stmt = tdb.prepare(
+        `SELECT book * 1000000 + chapter * 1000 + verse AS id,
+                verse, text
+         FROM verses
+         WHERE book = ? AND chapter = ?
          ORDER BY verse`
     );
-    stmt.bind([bookId, chapter, translationId]);
+    stmt.bind([bookId, chapter]);
     const results = [];
     while (stmt.step()) {
         results.push(stmt.getAsObject());
@@ -407,8 +411,10 @@ export function getBook(bookId) {
 }
 
 export function getChapterVerseCount(bookId, chapter) {
-    return db.exec(
-        'SELECT COUNT(*) FROM verses WHERE book_id = ? AND chapter = ? AND translation_id = "KJV"',
+    const tdb = _translationDbs.get(1); // always use KJV for canonical count
+    if (!tdb) return 0;
+    return tdb.exec(
+        'SELECT COUNT(*) FROM verses WHERE book = ? AND chapter = ?',
         [bookId, chapter]
     )[0]?.values[0][0] || 0;
 }
@@ -423,19 +429,39 @@ export function getTopicsForVerse(verseId) {
     )[0]?.values.map(r => ({ id: r[0], name: r[1] })) || [];
 }
 
-export function getVersesForTopic(topicName, limit = 100, offset = 0) {
-    return db.exec(
-        `SELECT v.id, v.book_id, v.chapter, v.verse, v.text, b.name AS book_name
-         FROM verses v
-         JOIN books b ON b.id = v.book_id
-         JOIN topic_verses tv ON tv.verse_id = v.id
+export function getVersesForTopic(topicName, translationId = 1, limit = 100, offset = 0) {
+    // Step 1: get verse IDs from core.db (topic_verses + topics are in core.db)
+    const verseIds = db.exec(
+        `SELECT tv.verse_id FROM topic_verses tv
          JOIN topics t ON t.id = tv.topic_id
-         WHERE t.name = ? AND t.display = 1 AND v.translation_id = ?
-         ORDER BY v.id LIMIT ? OFFSET ?`,
-        [topicName, getCurrentTranslation(), limit, offset]
-    )[0]?.values.map(r => ({
-        id: r[0], book_id: r[1], chapter: r[2], verse: r[3], text: r[4], book_name: r[5]
-    })) || [];
+         WHERE t.name = ? AND t.display = 1
+         ORDER BY tv.verse_id LIMIT ? OFFSET ?`,
+        [topicName, limit, offset]
+    )[0]?.values.map(r => r[0]) || [];
+
+    if (verseIds.length === 0) return [];
+
+    // Step 2: fetch verse text from translation db in a single query
+    const tdb = _translationDbs.get(translationId) ?? _translationDbs.get(1);
+    if (!tdb) return [];
+
+    const placeholders = verseIds.map(() => '?').join(', ');
+    const rows = tdb.exec(
+        `SELECT book, chapter, verse, text
+         FROM verses
+         WHERE book * 1000000 + chapter * 1000 + verse IN (${placeholders})
+         ORDER BY book * 1000000 + chapter * 1000 + verse`,
+        verseIds
+    )[0]?.values || [];
+
+    return rows.map(([book, chapter, verse, text]) => ({
+        id:       book * 1000000 + chapter * 1000 + verse,
+        book_id:  book,
+        chapter,
+        verse,
+        text,
+        book_name: getBook(book)?.name || `Book ${book}`
+    }));
 }
 
 export function getTopicVerseCount(topicName) {
@@ -692,43 +718,48 @@ export function removeBookmark(bookmarkId) {
 
 // ============================================================
 
-export function search(query) {
+export function search(query, translationId = 1) {
     const verseResults = [];
     const noteResults  = [];
 
-    // Scripture full-text search — FTS first, LIKE fallback
-    try {
-        const vstmt = db.prepare(
-            `SELECT v.id, v.book_id, v.chapter, v.verse, v.text, b.name AS book_name
-             FROM verses v
-             JOIN books b ON b.id = v.book_id
-             WHERE v.rowid IN (SELECT rowid FROM verses_fts WHERE verses_fts MATCH ?)
-             AND v.translation_id = ?
-             LIMIT 50`
-        );
-        vstmt.bind([query, getCurrentTranslation()]);
-        while (vstmt.step()) {
-            verseResults.push({ type: 'verse', ...vstmt.getAsObject() });
-        }
-        vstmt.free();
-    } catch (e) {
-        console.error('FTS verse search failed, trying LIKE fallback:', e);
+    // Scripture full-text search — routes to the active translation db
+    const tdb = _translationDbs.get(translationId) ?? _translationDbs.get(1);
+    if (tdb) {
         try {
-            const vstmt = db.prepare(
-                `SELECT v.id, v.book_id, v.chapter, v.verse, v.text, b.name AS book_name
-                 FROM verses v
-                 JOIN books b ON b.id = v.book_id
-                 WHERE v.text LIKE ?
-                 AND v.translation_id = ?
+            const vstmt = tdb.prepare(
+                `SELECT book * 1000000 + chapter * 1000 + verse AS id,
+                        book AS book_id, chapter, verse, text
+                 FROM verses
+                 WHERE rowid IN (SELECT rowid FROM verses_fts WHERE verses_fts MATCH ?)
                  LIMIT 50`
             );
-            vstmt.bind([`%${query}%`, getCurrentTranslation()]);
+            vstmt.bind([query]);
             while (vstmt.step()) {
-                verseResults.push({ type: 'verse', ...vstmt.getAsObject() });
+                const row = vstmt.getAsObject();
+                row.book_name = getBook(row.book_id)?.name || `Book ${row.book_id}`;
+                verseResults.push({ type: 'verse', ...row });
             }
             vstmt.free();
-        } catch (e2) {
-            console.error('LIKE verse search also failed:', e2);
+        } catch (e) {
+            console.error('FTS verse search failed, trying LIKE fallback:', e);
+            try {
+                const vstmt = tdb.prepare(
+                    `SELECT book * 1000000 + chapter * 1000 + verse AS id,
+                            book AS book_id, chapter, verse, text
+                     FROM verses
+                     WHERE text LIKE ?
+                     LIMIT 50`
+                );
+                vstmt.bind([`%${query}%`]);
+                while (vstmt.step()) {
+                    const row = vstmt.getAsObject();
+                    row.book_name = getBook(row.book_id)?.name || `Book ${row.book_id}`;
+                    verseResults.push({ type: 'verse', ...row });
+                }
+                vstmt.free();
+            } catch (e2) {
+                console.error('LIKE verse search also failed:', e2);
+            }
         }
     }
 
@@ -802,6 +833,14 @@ export function setState(key, value) {
 
 export function getCurrentTranslation() {
     return getState('translation') || 'KJV';
+}
+
+export function getCurrentTranslationId() {
+    const abbrev = getCurrentTranslation();
+    const result = db.exec(
+        'SELECT id FROM translations WHERE abbreviation = ?', [abbrev]
+    );
+    return result[0]?.values[0]?.[0] ?? 1;
 }
 
 // ============================================================
