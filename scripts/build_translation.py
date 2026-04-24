@@ -214,6 +214,13 @@ def load_from_scrollmapper(source_path: str, abbrev: str) -> list[tuple]:
         verses = [(b, c, v, fix.sub(r'\1 \2', t)) for b, c, v, t in verses]
         print("  Applied Darby God-spacing fix.")
 
+    if abbrev == "YLT":
+        # scrollmapper's YLT source uses <FI>...<Fi> as italics markers.
+        # Strip all such tags — they are display markup, not text.
+        tag = re.compile(r'<FI>|<Fi>', re.IGNORECASE)
+        verses = [(b, c, v, tag.sub('', t)) for b, c, v, t in verses]
+        print("  Stripped YLT italic markup tags.")
+
     return verses
 
 
