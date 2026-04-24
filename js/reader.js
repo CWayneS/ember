@@ -167,6 +167,13 @@ export function getActivePaneTranslationId() {
     return panes[activePaneId].translationId;
 }
 
+// Returns the abbreviation string (e.g. "KJV") for the active pane's translation.
+export function getActivePaneTranslationAbbrev() {
+    const tid = panes[activePaneId].translationId;
+    const t   = getTranslationsList().find(t => t.id === tid);
+    return t ? t.abbreviation : 'KJV';
+}
+
 // ============================================================
 // Render
 // ============================================================

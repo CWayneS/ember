@@ -1,7 +1,7 @@
 // search.js — Full-text search UI
 
 import { search, parseVerseId, getBooks, getAllBookmarks } from './db.js';
-import { navigateTo, getActivePaneTranslationId }        from './reader.js';
+import { navigateTo, getActivePaneTranslationId, getActivePaneTranslationAbbrev } from './reader.js';
 import { openTagView, openStudy }           from './panels.js';
 
 // ============================================================
@@ -77,11 +77,13 @@ function runSearch(query) {
         return;
     }
 
-    const results = search(q, getActivePaneTranslationId());
+    const translationId    = getActivePaneTranslationId();
+    const translationAbbrev = getActivePaneTranslationAbbrev();
+    const results = search(q, translationId);
     const show    = (key) => !filter || filter === key;
 
     const sections = [];
-    if (show('verses')  && results.verses.length  > 0) sections.push(renderSection('Scripture', results.verses.map(renderVerseResult)));
+    if (show('verses')  && results.verses.length  > 0) sections.push(renderSection(`Scripture · ${translationAbbrev}`, results.verses.map(renderVerseResult)));
     if (show('notes')   && results.notes.length   > 0) sections.push(renderSection('Notes',     results.notes.map(renderNoteResult)));
     if (show('studies') && results.studies.length > 0) sections.push(renderSection('Studies',   results.studies.map(renderStudyResult)));
     if (show('tags')    && results.tags.length    > 0) sections.push(renderSection('Tags',       results.tags.map(renderTagResult)));
