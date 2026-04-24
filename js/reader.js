@@ -1,15 +1,56 @@
 // reader.js — Scripture rendering and navigation
 
-import { getChapter, getBooks, getBook, setState, getNotesForVerse, getMarkupsForChapter, getCurrentTranslationId } from './db.js';
+import { getChapter, getBooks, getBook, getNotesForVerse, getMarkupsForChapter } from './db.js';
 
 // ============================================================
-// State
+// Per-pane state — persisted to localStorage
 // ============================================================
+
+const PANE_KEYS = {
+    a: 'ember.pane.left.state',
+    b: 'ember.pane.right.state',
+};
+
+const DEFAULT_PANE_STATE = {
+    translationId:  1,
+    bookId:         1,
+    chapter:        1,
+    verse:          1,
+    scrollPosition: 0,
+};
 
 const panes = {
-    a: { bookId: 1, chapter: 1 },
-    b: { bookId: 1, chapter: 1 },
+    a: { ...DEFAULT_PANE_STATE },
+    b: { ...DEFAULT_PANE_STATE },
 };
+
+function loadPaneState(paneId) {
+    try {
+        const raw = localStorage.getItem(PANE_KEYS[paneId]);
+        if (raw) {
+            const saved = JSON.parse(raw);
+            panes[paneId] = {
+                translationId:  saved.translationId  ?? DEFAULT_PANE_STATE.translationId,
+                bookId:         saved.bookId         ?? DEFAULT_PANE_STATE.bookId,
+                chapter:        saved.chapter        ?? DEFAULT_PANE_STATE.chapter,
+                verse:          saved.verse          ?? DEFAULT_PANE_STATE.verse,
+                scrollPosition: saved.scrollPosition ?? DEFAULT_PANE_STATE.scrollPosition,
+            };
+        }
+    } catch (_) {
+        // Corrupt entry — keep defaults
+    }
+}
+
+function savePaneState(paneId) {
+    try {
+        localStorage.setItem(PANE_KEYS[paneId], JSON.stringify(panes[paneId]));
+    } catch (_) {}
+}
+
+// ============================================================
+// Reader-level state
+// ============================================================
 
 let activePaneId = 'a';
 let splitActive  = false;
@@ -30,10 +71,17 @@ function navEl(id, sel)   { return getPaneEl(id).querySelector(sel); }
 // ============================================================
 
 export function initReader() {
+    // Restore per-pane state from localStorage before first render.
+    loadPaneState('a');
+    loadPaneState('b');
+
     for (const id of ['a', 'b']) {
         navEl(id, '.pane-book-btn').addEventListener('click', () => openBookOverlay(id));
         navEl(id, '.pane-prev').addEventListener('click', () => prevChapter(id));
         navEl(id, '.pane-next').addEventListener('click', () => nextChapter(id));
+
+        // Any click within a pane makes it the active pane.
+        getPaneEl(id).addEventListener('click', () => setActivePane(id));
     }
 
     document.getElementById('split-toggle-btn').addEventListener('click', toggleSplit);
@@ -54,6 +102,26 @@ export function initReader() {
     });
 
     initSplitResize();
+
+    // Throttled scroll-position save — 200 ms after the user stops scrolling.
+    const scrollTimers = {};
+    for (const id of ['a', 'b']) {
+        getContentEl(id).addEventListener('scroll', () => {
+            clearTimeout(scrollTimers[id]);
+            scrollTimers[id] = setTimeout(() => {
+                panes[id].scrollPosition = getContentEl(id).scrollTop;
+                savePaneState(id);
+            }, 200);
+        });
+    }
+
+    // Initial render of pane A. Capture saved scroll before renderPane resets it.
+    const savedScrollA = panes.a.scrollPosition;
+    renderPane('a', panes.a.bookId, panes.a.chapter);
+    requestAnimationFrame(() => {
+        getContentEl('a').scrollTop = savedScrollA;
+    });
+    // Pane B is rendered when split is activated.
 }
 
 // ============================================================
@@ -63,10 +131,6 @@ export function initReader() {
 // External callers navigate the active pane.
 export function navigateTo(bookId, chapter, highlightVerseId = null) {
     renderPane(activePaneId, bookId, chapter, highlightVerseId);
-    if (activePaneId === 'a') {
-        setState('currentBook', bookId);
-        setState('currentChapter', chapter);
-    }
 }
 
 export function getCurrentLocation() {
@@ -88,16 +152,25 @@ export function getActivePaneId() {
     return activePaneId;
 }
 
+// Returns the translationId of the currently active pane.
+// Used by search.js and any other module that needs to read Scripture
+// in whatever translation the user is currently looking at.
+export function getActivePaneTranslationId() {
+    return panes[activePaneId].translationId;
+}
+
 // ============================================================
 // Render
 // ============================================================
 
 function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
-    panes[paneId].bookId  = bookId;
-    panes[paneId].chapter = chapter;
+    panes[paneId].bookId         = bookId;
+    panes[paneId].chapter        = chapter;
+    panes[paneId].scrollPosition = 0;  // reset on navigation; scroll listener updates it
+    savePaneState(paneId);
 
     const book   = getBook(bookId);
-    const verses = getChapter(getCurrentTranslationId(), bookId, chapter);
+    const verses = getChapter(panes[paneId].translationId, bookId, chapter);
     const textEl = getTextEl(paneId);
 
     navEl(paneId, '.pane-book-btn').textContent = book.abbrev;
@@ -219,10 +292,6 @@ function prevChapter(paneId) {
         const prevBook = getBook(bookId - 1);
         renderPane(paneId, bookId - 1, prevBook.chapters);
     }
-    if (paneId === 'a') {
-        setState('currentBook', panes.a.bookId);
-        setState('currentChapter', panes.a.chapter);
-    }
 }
 
 function nextChapter(paneId) {
@@ -232,10 +301,6 @@ function nextChapter(paneId) {
         renderPane(paneId, bookId, chapter + 1);
     } else if (bookId < 66) {
         renderPane(paneId, bookId + 1, 1);
-    }
-    if (paneId === 'a') {
-        setState('currentBook', panes.a.bookId);
-        setState('currentChapter', panes.a.chapter);
     }
 }
 
@@ -257,9 +322,12 @@ function toggleSplit() {
     reader.classList.toggle('split-active', splitActive);
 
     if (splitActive) {
-        // Apply percentage flex so panes scale proportionally with container
         applyRatio(splitRatio);
-        renderPane('b', panes.a.bookId, panes.a.chapter);
+        const savedScrollB = panes.b.scrollPosition;
+        renderPane('b', panes.b.bookId, panes.b.chapter);
+        requestAnimationFrame(() => {
+            getContentEl('b').scrollTop = savedScrollB;
+        });
     } else {
         // Clear explicit flex so pane A fills the reader naturally
         getPaneEl('a').style.flex = '';
@@ -350,10 +418,6 @@ function showChapterGrid(book) {
         btn.textContent = c;
         btn.addEventListener('click', () => {
             renderPane(overlayPane, book.id, c);
-            if (overlayPane === 'a') {
-                setState('currentBook', book.id);
-                setState('currentChapter', c);
-            }
             closeBookOverlay();
         });
         grid.appendChild(btn);

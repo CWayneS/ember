@@ -1,8 +1,8 @@
 // app.js — Entry point
 
-import { initDatabase, getState } from './db.js';
+import { initDatabase } from './db.js';
 
-import { initReader, navigateTo } from './reader.js';
+import { initReader } from './reader.js';
 
 import { initSelection } from './selection.js';
 
@@ -42,12 +42,6 @@ async function init() {
         initNotesSettings();
         initReferenceSettings();
         initMarkups();
-
-        // Restore last reading position, default to Genesis 1
-        const lastBook    = parseInt(getState('currentBook'))    || 1;
-        const lastChapter = parseInt(getState('currentChapter')) || 1;
-
-        navigateTo(lastBook, lastChapter);
 
         document.getElementById('layout-toggle-btn')
             .addEventListener('click', togglePanelLayout);
