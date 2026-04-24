@@ -99,7 +99,7 @@ function buildNoteBlock(note, studyId) {
     const anchorsArea     = document.createElement('div');
     anchorsArea.className = 'note-block-anchors';
 
-    for (const anchor of (note.anchors || [])) {
+    for (const anchor of coalesceAnchors(note.anchors || [])) {
         const chip       = document.createElement('div');
         chip.className   = 'note-block-anchor note-block-anchor-link';
         chip.textContent = formatAnchor(anchor);
@@ -501,6 +501,45 @@ function autoCreateStudy(verseId) {
 function refreshAfterWrite() {
     refreshNoteDots();
     if (currentVerseIds.length > 0) refreshReference(currentVerseIds[0]);
+}
+
+// Merges contiguous note_anchors rows into display ranges.
+// Pure function — does not touch the database.
+// Two anchors are contiguous if they share the same book and chapter and their
+// verse ranges touch or overlap (second start <= first effective end + 1).
+function coalesceAnchors(anchors) {
+    if (anchors.length === 0) return [];
+
+    // Sort by verse_start — BBCCCVVV encoding means numeric sort = canonical order.
+    const sorted = [...anchors].sort((a, b) => a.verse_start - b.verse_start);
+
+    const result  = [];
+    let curStart  = sorted[0].verse_start;
+    let curEnd    = sorted[0].verse_end ?? sorted[0].verse_start;
+
+    for (let i = 1; i < sorted.length; i++) {
+        const next      = sorted[i];
+        const nextStart = next.verse_start;
+        const nextEnd   = next.verse_end ?? next.verse_start;
+
+        const curParsed  = parseVerseId(curStart);
+        const nextParsed = parseVerseId(nextStart);
+
+        const sameChapter = curParsed.book    === nextParsed.book &&
+                            curParsed.chapter === nextParsed.chapter;
+        const touches     = nextStart <= curEnd + 1;
+
+        if (sameChapter && touches) {
+            curEnd = Math.max(curEnd, nextEnd);
+        } else {
+            result.push({ verse_start: curStart, verse_end: curEnd === curStart ? null : curEnd });
+            curStart = nextStart;
+            curEnd   = nextEnd;
+        }
+    }
+    result.push({ verse_start: curStart, verse_end: curEnd === curStart ? null : curEnd });
+
+    return result;
 }
 
 function formatAnchor(anchor) {
