@@ -159,6 +159,34 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
 // Note dots refresh — updates both panes
 // ============================================================
 
+// Clears and re-applies markup classes on all rendered verse elements in both
+// panes. Called after any markup create/delete so visuals stay in sync with DB.
+export function refreshMarkupClasses() {
+    for (const paneId of ['a', 'b']) {
+        const textEl      = getTextEl(paneId);
+        const { bookId, chapter } = panes[paneId];
+
+        // Strip all existing markup classes before re-applying.
+        for (const verseEl of textEl.querySelectorAll('.verse')) {
+            for (const cls of [...verseEl.classList]) {
+                if (cls.startsWith('markup-')) verseEl.classList.remove(cls);
+            }
+        }
+
+        const bookChapter = bookId * 1000 + chapter;
+        const markups     = getMarkupsForChapter(bookChapter);
+        for (const verseEl of textEl.querySelectorAll('.verse')) {
+            const verseId = parseInt(verseEl.dataset.verseId);
+            for (const markup of markups) {
+                const end = markup.verse_end ?? markup.verse_start;
+                if (markup.verse_start <= verseId && verseId <= end) {
+                    applyMarkupClass(verseEl, markup);
+                }
+            }
+        }
+    }
+}
+
 export function refreshNoteDots() {
     for (const id of ['a', 'b']) {
         for (const verseEl of getTextEl(id).querySelectorAll('.verse')) {
