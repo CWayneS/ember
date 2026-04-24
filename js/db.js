@@ -160,6 +160,21 @@ function createUserTables() {
     `);
 
     db.run(`
+        CREATE TABLE IF NOT EXISTS markups (
+            id          INTEGER PRIMARY KEY,
+            verse_start INTEGER NOT NULL,
+            verse_end   INTEGER,
+            type        TEXT NOT NULL,
+            color       TEXT NOT NULL,
+            created_at  INTEGER NOT NULL
+        );
+    `);
+
+    db.run(`
+        CREATE INDEX IF NOT EXISTS idx_markups_verse ON markups(verse_start);
+    `);
+
+    db.run(`
         CREATE TABLE IF NOT EXISTS app_state (
             key   TEXT PRIMARY KEY,
             value TEXT
