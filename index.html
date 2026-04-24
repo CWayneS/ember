@@ -84,6 +84,30 @@
                     </svg>
                 </button>
                 <div class="reader-header-spacer"></div>
+                <button id="markup-btn" aria-label="Markup tools" title="Markup tools">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M13.5 3.5l3 3L7 16H4v-3L13.5 3.5z"/>
+                        <path d="M11 6l3 3"/>
+                    </svg>
+                </button>
+                <div id="markup-strip" class="hidden" role="toolbar" aria-label="Markup tools">
+                    <button class="markup-tool" data-type="highlight" data-color="yellow" aria-label="Yellow highlight" title="Yellow highlight"></button>
+                    <button class="markup-tool" data-type="highlight" data-color="green"  aria-label="Green highlight"  title="Green highlight"></button>
+                    <button class="markup-tool" data-type="highlight" data-color="blue"   aria-label="Blue highlight"   title="Blue highlight"></button>
+                    <button class="markup-tool" data-type="highlight" data-color="pink"   aria-label="Pink highlight"   title="Pink highlight"></button>
+                    <button class="markup-tool" data-type="highlight" data-color="orange" aria-label="Orange highlight" title="Orange highlight"></button>
+                    <div class="markup-tool-divider"></div>
+                    <button class="markup-tool" data-type="underline" data-color="solid" aria-label="Solid underline" title="Solid underline">
+                        <svg viewBox="0 0 20 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="7" x2="18" y2="7"/></svg>
+                    </button>
+                    <button class="markup-tool" data-type="underline" data-color="wavy" aria-label="Wavy underline" title="Wavy underline">
+                        <svg viewBox="0 0 20 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 7 Q5 4 8 7 Q11 10 14 7 Q17 4 18 7"/></svg>
+                    </button>
+                    <div class="markup-tool-divider"></div>
+                    <button class="markup-tool" data-type="circle" data-color="ink" aria-label="Circle" title="Circle">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5"/></svg>
+                    </button>
+                </div>
                 <button id="bookmark-btn" aria-label="Bookmark verse">☆</button>
                 <button id="reader-help-btn" aria-label="Reader help">?</button>
                 <button id="reader-settings-btn" aria-label="Reader settings">⚙</button>

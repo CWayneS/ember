@@ -17,6 +17,7 @@ import { initHelp }         from './help.js';
 import { initReaderSettings } from './reader-settings.js';
 import { initNotesSettings }      from './notes-settings.js';
 import { initReferenceSettings }  from './reference-settings.js';
+import { initMarkups }            from './markups.js';
 
 async function init() {
     try {
@@ -34,6 +35,7 @@ async function init() {
         initReaderSettings();
         initNotesSettings();
         initReferenceSettings();
+        initMarkups();
 
         // Restore last reading position, default to Genesis 1
         const lastBook    = parseInt(getState('currentBook'))    || 1;

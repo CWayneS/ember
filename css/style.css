@@ -774,6 +774,104 @@ body.theme-dark #theme-icon-moon { display: none;  }
    Bookmark Button & Prompt
    ============================================================ */
 
+/* ============================================================
+   Markup button + tool strip
+   ============================================================ */
+
+#markup-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+#markup-btn svg {
+    width: 15px;
+    height: 15px;
+}
+
+#markup-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+}
+
+#markup-btn.active {
+    color: var(--accent);
+    background: var(--accent-light);
+}
+
+#markup-strip {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0 4px;
+}
+
+.markup-tool {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+/* Highlight swatches — colored circles */
+.markup-tool[data-type="highlight"] {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    outline: 1px solid rgba(0,0,0,0.12);
+    outline-offset: 1px;
+}
+
+.markup-tool[data-type="highlight"]:hover,
+.markup-tool[data-type="highlight"].active {
+    outline-color: var(--text-primary);
+    outline-width: 2px;
+}
+
+.markup-tool[data-type="highlight"][data-color="yellow"] { background: var(--markup-yellow); }
+.markup-tool[data-type="highlight"][data-color="green"]  { background: var(--markup-green); }
+.markup-tool[data-type="highlight"][data-color="blue"]   { background: var(--markup-blue); }
+.markup-tool[data-type="highlight"][data-color="pink"]   { background: var(--markup-pink); }
+.markup-tool[data-type="highlight"][data-color="orange"] { background: var(--markup-orange); }
+
+/* Underline and circle tools — icon buttons */
+.markup-tool[data-type="underline"],
+.markup-tool[data-type="circle"] {
+    width: 26px;
+    height: 26px;
+    color: var(--markup-ink);
+}
+
+.markup-tool[data-type="underline"] svg,
+.markup-tool[data-type="circle"] svg {
+    width: 16px;
+    height: 16px;
+}
+
+.markup-tool[data-type="underline"]:hover,
+.markup-tool[data-type="circle"]:hover,
+.markup-tool[data-type="underline"].active,
+.markup-tool[data-type="circle"].active {
+    background: var(--bg-hover);
+}
+
+/* Thin vertical divider between tool groups */
+.markup-tool-divider {
+    width: 1px;
+    height: 16px;
+    background: var(--border-medium);
+    margin: 0 2px;
+    flex-shrink: 0;
+}
+
 #bookmark-btn {
     font-size: 1.1rem;
     line-height: 1;
