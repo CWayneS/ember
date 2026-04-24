@@ -7,6 +7,14 @@ let db             = null;
 let _booksCache    = null;
 let _storageWorker = null;
 
+// Translation handles — keyed by integer translation ID (1 = KJV, 2 = ASV, …).
+// Populated during initDatabase(); read-only after that.
+const _translationDbs = new Map();
+
+export function getTranslationDb(id) {
+    return _translationDbs.get(id) ?? null;
+}
+
 function getStorageWorker() {
     if (!_storageWorker) {
         _storageWorker = new Worker('./js/storage-worker.js');
@@ -36,7 +44,118 @@ export async function initDatabase() {
 
     createUserTables();
 
+    // Seed translation files into OPFS on first install (no-op on subsequent loads).
+    await seedTranslations();
+
+    // Open sql.js Database handles for all bundled translations.
+    await openTranslationHandles(SQL);
+
     return db;
+}
+
+// ============================================================
+// Translation seeding + handle management
+// ============================================================
+
+// On first install: fetch each bundled translation file from ./data/translations/
+// and write it into OPFS under translations/{filename}.
+// On subsequent loads: all files already exist in OPFS — this is a fast no-op.
+// If OPFS is unavailable, openTranslationHandles falls back to network fetch.
+async function seedTranslations() {
+    if (!('storage' in navigator && 'getDirectory' in navigator.storage)) {
+        return;
+    }
+
+    let transDir;
+    try {
+        const root = await navigator.storage.getDirectory();
+        transDir = await root.getDirectoryHandle('translations', { create: true });
+    } catch (e) {
+        console.error('seedTranslations: cannot create translations/ in OPFS:', e);
+        return;
+    }
+
+    const rows = db.exec(
+        'SELECT id, filename FROM translations WHERE is_bundled = 1 ORDER BY id'
+    )[0]?.values ?? [];
+
+    const loadingEl = document.getElementById('loading');
+    let seeded = 0;
+
+    for (const [, filename] of rows) {
+        // Skip if already in OPFS.
+        try {
+            await transDir.getFileHandle(filename);
+            continue;
+        } catch (_) {}
+
+        // Not yet seeded — fetch and write.
+        seeded++;
+        if (loadingEl) {
+            loadingEl.textContent = `Installing translations… ${seeded} of ${rows.length}`;
+        }
+
+        try {
+            const response = await fetch(`./data/translations/${filename}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const buffer   = await response.arrayBuffer();
+            const handle   = await transDir.getFileHandle(filename, { create: true });
+            const writable = await handle.createWritable();
+            await writable.write(buffer);
+            await writable.close();
+        } catch (e) {
+            console.error(`seedTranslations: failed to seed ${filename}:`, e);
+        }
+    }
+
+    if (seeded > 0) {
+        console.log(`Seeded ${seeded} translation file(s) into OPFS.`);
+    }
+}
+
+// Open a sql.js Database handle for every bundled translation.
+// Reads from OPFS; falls back to a direct network fetch if OPFS is unavailable
+// (e.g. in browsers without OPFS support — handles are in-memory only in that case).
+async function openTranslationHandles(SQL) {
+    const rows = db.exec(
+        'SELECT id, filename FROM translations WHERE is_bundled = 1 ORDER BY id'
+    )[0]?.values ?? [];
+
+    for (const [id, filename] of rows) {
+        try {
+            const buffer = await loadTranslationBuffer(filename);
+            if (buffer) {
+                _translationDbs.set(id, new SQL.Database(new Uint8Array(buffer)));
+            } else {
+                console.warn(`openTranslationHandles: no data for ${filename}`);
+            }
+        } catch (e) {
+            console.error(`openTranslationHandles: failed to open ${filename}:`, e);
+        }
+    }
+
+    console.log(`Translation handles open: ${_translationDbs.size}/${rows.length}`);
+}
+
+// Load a translation file as an ArrayBuffer.
+// OPFS is the primary store (fast, persistent); network is the fallback.
+async function loadTranslationBuffer(filename) {
+    if ('storage' in navigator && 'getDirectory' in navigator.storage) {
+        try {
+            const root     = await navigator.storage.getDirectory();
+            const transDir = await root.getDirectoryHandle('translations');
+            const handle   = await transDir.getFileHandle(filename);
+            const file     = await handle.getFile();
+            return await file.arrayBuffer();
+        } catch (_) {
+            // Not in OPFS — fall through to network.
+        }
+    }
+
+    // Network fallback: fetch fresh each time (read-only, so safe).
+    const response = await fetch(`./data/translations/${filename}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status} fetching ${filename}`);
+    return await response.arrayBuffer();
 }
 
 // Ensure all user-writable tables exist (idempotent — safe to run on every init).
