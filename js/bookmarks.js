@@ -3,6 +3,7 @@
 import { getBookmarkForVerse, addBookmark, removeBookmark, getAllBookmarks } from './db.js';
 import { getSelectedVerses } from './selection.js';
 import { navigateTo } from './reader.js';
+import { registerPopover, closeAllPopovers } from './popover-registry.js';
 
 // ============================================================
 // State
@@ -21,6 +22,8 @@ export function initBookmarks() {
     const input    = document.getElementById('bookmark-comment');
     const saveBtn   = document.getElementById('bookmark-save');
     const cancelBtn = document.getElementById('bookmark-cancel');
+
+    registerPopover(() => { dismissPrompt(prompt, input); closeDropdown(dropdown); });
 
     btn.addEventListener('click', () => handleBookmarkClick(btn, prompt, dropdown, input));
     saveBtn.addEventListener('click',   () => handleSave(prompt, input));
@@ -102,6 +105,7 @@ function handleBookmarkClick(btn, prompt, dropdown, input) {
 // ============================================================
 
 function openPrompt(btn, prompt, input) {
+    closeAllPopovers();
     const rect = btn.getBoundingClientRect();
     prompt.style.top  = `${rect.bottom + 6}px`;
     prompt.style.left = `${rect.right}px`;
@@ -134,6 +138,7 @@ function handleSave(prompt, input) {
 // ============================================================
 
 function openDropdown(btn, dropdown) {
+    closeAllPopovers();
     const rect = btn.getBoundingClientRect();
     dropdown.style.top   = `${rect.bottom + 4}px`;
     dropdown.style.right = `${window.innerWidth - rect.right}px`;

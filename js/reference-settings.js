@@ -2,6 +2,7 @@
 
 import { getState, setState } from './db.js';
 import { switchReferenceTab } from './panels.js';
+import { registerPopover, closeAllPopovers } from './popover-registry.js';
 
 const DEFAULT_TAB = 'info';
 const STATE_KEY   = 'default_reference_tab';
@@ -16,11 +17,13 @@ export function initReferenceSettings() {
     let currentTab = getState(STATE_KEY) || DEFAULT_TAB;
     updateToggle(toggleBtns, currentTab);
 
+    registerPopover(() => closePopover(popover));
+
     // Open / close toggle
     btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const alreadyOpen = !popover.classList.contains('hidden');
-        closePopover(popover);
+        closeAllPopovers();
         if (!alreadyOpen) openPopover(btn, popover);
     });
 

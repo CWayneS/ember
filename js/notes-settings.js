@@ -1,6 +1,7 @@
 // notes-settings.js — Notes panel settings popover (font size control)
 
 import { getState, setState } from './db.js';
+import { registerPopover, closeAllPopovers } from './popover-registry.js';
 
 const DEFAULT_SIZE = 18;
 const MIN_SIZE     = 12;
@@ -21,11 +22,13 @@ export function initNotesSettings() {
     let currentSize = clamp(saved);
     applySize(notesPanel, currentSize, display, decBtn, incBtn);
 
+    registerPopover(() => closePopover(popover));
+
     // Open / close toggle
     btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const alreadyOpen = !popover.classList.contains('hidden');
-        closePopover(popover);
+        closeAllPopovers();
         if (!alreadyOpen) openPopover(btn, popover);
     });
 

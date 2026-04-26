@@ -1,6 +1,7 @@
 // reader-settings.js — Reader settings popover (font size control)
 
 import { getState, setState } from './db.js';
+import { registerPopover, closeAllPopovers } from './popover-registry.js';
 
 const DEFAULT_SIZE = 18;
 const MIN_SIZE     = 12;
@@ -21,11 +22,13 @@ export function initReaderSettings() {
     let currentSize = clamp(saved);
     applySize(readerBody, currentSize, display, decBtn, incBtn);
 
+    registerPopover(() => closePopover(popover));
+
     // Open / close toggle
     btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const alreadyOpen = !popover.classList.contains('hidden');
-        closePopover(popover);
+        closeAllPopovers();
         if (!alreadyOpen) openPopover(btn, popover);
     });
 

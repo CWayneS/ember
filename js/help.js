@@ -1,5 +1,7 @@
 // help.js — Contextual help popovers for reader, notes, and reference panels
 
+import { registerPopover, closeAllPopovers } from './popover-registry.js';
+
 export function initHelp() {
     const entries = [
         {
@@ -18,11 +20,13 @@ export function initHelp() {
 
     const allPopovers = entries.map(e => e.popover);
 
+    registerPopover(() => closeAll(allPopovers));
+
     entries.forEach(({ btn, popover }) => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const alreadyOpen = !popover.classList.contains('hidden');
-            closeAll(allPopovers);
+            closeAllPopovers();
             if (!alreadyOpen) {
                 openPopover(btn, popover);
             }
