@@ -730,12 +730,15 @@ body.theme-dark #theme-icon-moon { display: none;  }
 }
 
 .verse.selected {
-    background: var(--bg-selected);
+    background: transparent;
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-radius: 3px;
 }
 
 @keyframes verse-select-glow {
-    0%   { background: color-mix(in srgb, var(--note-indicator) 55%, transparent); }
-    100% { background: var(--bg-selected); }
+    0%   { outline-color: var(--accent); outline-width: 3px; }
+    100% { outline-color: var(--accent); outline-width: 2px; }
 }
 
 .verse.glow {
@@ -763,16 +766,6 @@ body.markup-mode-on .verse.markup-circle {
     border-radius: 4px;
 }
 
-/* When a verse is both highlighted and selected, the selected background wins
-   (it communicates the selection state clearly). Markup is still visible on
-   adjacent verses in the range. */
-body.markup-mode-on .verse.selected.markup-highlight-yellow,
-body.markup-mode-on .verse.selected.markup-highlight-green,
-body.markup-mode-on .verse.selected.markup-highlight-blue,
-body.markup-mode-on .verse.selected.markup-highlight-pink,
-body.markup-mode-on .verse.selected.markup-highlight-orange {
-    background: var(--bg-selected);
-}
 
 .verse-text {
     font-size: var(--scripture-font-size);
