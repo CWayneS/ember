@@ -46,7 +46,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 22. Book abbreviation shown in book selector button in pane nav — reader.js
 23. Per-pane reading position, translation, and scroll offset persisted to `localStorage` (`ember.pane.left.state` / `ember.pane.right.state`); restored on reload; default Genesis 1 KJV — reader.js
 23a. `.translation-label` in pane nav updated dynamically on every render and on translation switch — reader.js:updateTranslationLabel
-24. Clicking a verse: selects it (`.selected` background), triggers brief gold glow animation (0.4s ease-out, rgba(196,163,90,0.55) → selected bg) — selection.js:handleVerseClick, style.css:`@keyframes verse-select-glow`
+24. Clicking a verse: selects it with a 2px accent-color outline (`outline-offset: 1px`); background stays transparent so markup colors show through; brief outline-pulse animation (0.4s ease-out, 3px→2px) — selection.js:handleVerseClick, style.css:`.verse.selected`, `@keyframes verse-select-glow`
 25. Re-clicking same verse: animation restarts via forced reflow — selection.js:39
 26. Plain click selects a single verse (sets anchor); previous selection cleared — selection.js
 26a. Shift-click extends selection from the anchor verse to the clicked verse, selecting the full range in DOM order — selection.js:selectRange
@@ -54,7 +54,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 26c. Switching the active pane clears any selection whose anchor belongs to the outgoing pane — selection.js (pane-changed listener)
 27. Clicking in notes panel or reference panel does NOT clear verse selection — selection.js
 28. Clicking outside reader + panels (e.g. header area): clears selection — selection.js
-29. Note indicator dots: 6px gold circle (`.note-indicator`) appended after verse text for verses with notes; tooltip shows count — reader.js:69-75, style.css
+29. Verse indicators: 5px circles positioned below the verse-number superscript via `.verse-indicators` (absolute, centered). Gold dot (`.note-indicator`, `var(--note-indicator)`) for verses with notes — tooltip shows count. Green dot (`.bookmark-indicator`, `var(--accent)`) for bookmarked verses — tooltip shows comment or "Bookmarked". When both present, dots stack vertically — reader.js, style.css:`.verse-number`, `.verse-indicators`
 30. Indicator dots updated without full re-render after note writes — reader.js:refreshNoteDots
 31. Navigating to a chapter via search or tag-view anchor: scrolls target verse into center and simulates a click to select it — reader.js
 31a. Cross-reference click-to-navigate: `selectVerseRange(startId, endId)` in selection.js programmatically selects a verse or range, scrolls to it, and dispatches `selection-changed` — selection.js:selectVerseRange
@@ -64,10 +64,11 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 ## Split View
 
 32. Split toggle button (⊞) in reader header: shows/hides second reader pane side-by-side — reader.js:toggleSplit
-33. Opening split: pane B loads at the same book/chapter as pane A — reader.js
+33. Opening split: pane B restores its saved `ember.pane.right.state`; first-ever open defaults to Genesis 1 KJV — reader.js
 34. Each pane has independent book/chapter navigation, translation, and scroll position — reader.js
 35. Active pane highlighted with accent underline on its nav bar in split mode — style.css:`#reader.split-active`
 36. Draggable resize handle between split panes; minimum 200px per pane — reader.js:initSplitResize
+36a. Split-view on/off state persisted to `localStorage` (`ember.reader.split`); restored on reload — reader.js:initReader, toggleSplit
 37. Clicking a verse in either pane activates that pane and sets it as the active selection for notes and reference — selection.js, reader.js:setActivePane
 
 ---
@@ -288,7 +289,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 149. All three panels have a help popover (? button): reader, notes, reference — help.js
 150. Popovers use the shared `.help-popover` CSS component: fixed position, z-index 170, max-width 280px, theme-aware colors — style.css
-151. Opening one popover closes any other open popover — help.js:closeAll
+151. Opening one popover closes any other open popover — popover-registry.js:closeAllPopovers (called at the top of each open handler; registered by help.js, bookmarks.js, reader-settings.js, notes-settings.js, reference-settings.js)
 152. Clicking outside any open popover closes it — help.js (document click handler)
 153. Pressing Escape closes any open popover — help.js (keydown handler)
 154. "More help" link in each popover: non-functional placeholder (`preventDefault` only) — help.js
