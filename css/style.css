@@ -22,11 +22,10 @@
     --accent-hover:  #4a5840;
     --accent-light:  #e8ede4;
 
-    --tag-bg:   #e8ede4;
-    --tag-text: #3d4a34;
+    --tag-bg:   #f0e8d4;
+    --tag-text: #6b4e20;
 
     --note-indicator: #c4a35a;
-    --accent-green:   #4a7c59;
 
     --danger:       #a04040;
     --danger-hover: #883535;
@@ -88,11 +87,10 @@
     --accent-hover: #a0b48e;
     --accent-light: #2a3328;
 
-    --tag-bg:   #2a3328;
-    --tag-text: #a0b48e;
+    --tag-bg:   #2d2518;
+    --tag-text: #c8a860;
 
     --note-indicator: #c4a35a;
-    --accent-green:   #72b488;
 
     /* Markup palette */
     --markup-yellow: #6a5a1a;
@@ -812,7 +810,7 @@ body.markup-mode-on .verse.markup-circle {
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: var(--accent-green);
+    background: var(--note-indicator);
 }
 
 
