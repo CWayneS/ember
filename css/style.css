@@ -3,29 +3,29 @@
    ============================================================ */
 :root {
     /* Colors */
-    --bg-primary:    #f9f9f8;
-    --bg-secondary:  #f3f3f1;
-    --bg-panel:      #fafaf7;
-    --bg-hover:      #eeeee8;
-    --bg-selected:   #e8e4d9;
+    --bg-primary:    #f5f0e8;
+    --bg-secondary:  #ede7d9;
+    --bg-panel:      #f2ead8;
+    --bg-hover:      #e5dcc8;
+    --bg-selected:   #ddd4bc;
     --bg-toolbar:    #1a1a2e;
 
-    --text-primary:   #1a1a1a;
-    --text-secondary: #666660;
-    --text-muted:     #999990;
+    --text-primary:   #1a1410;
+    --text-secondary: #6b5e42;
+    --text-muted:     #9c8a68;
     --text-on-dark:   #f0f0e8;
 
-    --border-light:  #e8e8e0;
-    --border-medium: #ccccc4;
+    --border-light:  #ddd4bc;
+    --border-medium: #c4b094;
 
-    --accent:        #5c6b4f;
-    --accent-hover:  #4a5840;
-    --accent-light:  #e8ede4;
+    --accent:        #9c7a2e;
+    --accent-hover:  #7a5e20;
+    --accent-light:  #f0e0b8;
 
-    --tag-bg:   #f0e8d4;
-    --tag-text: #6b4e20;
+    --tag-bg:   #f0e0b8;
+    --tag-text: #7a5018;
 
-    --note-indicator: #c4a35a;
+    --note-indicator: #c4911e;
 
     --danger:       #a04040;
     --danger-hover: #883535;
@@ -39,7 +39,7 @@
     --content-max-width:    var(--measure);
 
     /* Typography */
-    --font-body: ui-serif, 'Iowan Old Style', Charter, Georgia, 'Times New Roman', serif;
+    --font-body: ui-serif, 'Iowan Old Style', Charter, 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
     --font-ui:   system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Monaco', monospace;
 
@@ -68,29 +68,29 @@
 
 /* Dark theme */
 .theme-dark {
-    --bg-primary:    #1a1a1e;
-    --bg-secondary:  #24242a;
-    --bg-panel:      #20202a;
-    --bg-hover:      #2e2e38;
-    --bg-selected:   #383848;
-    --bg-toolbar:    #2a2a3e;
+    --bg-primary:    #1a1712;
+    --bg-secondary:  #231f18;
+    --bg-panel:      #1e1b14;
+    --bg-hover:      #2e2818;
+    --bg-selected:   #38301e;
+    --bg-toolbar:    #28231a;
 
-    --text-primary:   #d8d8d0;
-    --text-secondary: #a0a098;
-    --text-muted:     #707068;
+    --text-primary:   #ddd6c4;
+    --text-secondary: #a09070;
+    --text-muted:     #786850;
     --text-on-dark:   #e8e8e0;
 
-    --border-light:  #333338;
-    --border-medium: #444448;
+    --border-light:  #352e20;
+    --border-medium: #4a3e28;
 
-    --accent:       #8a9e78;
-    --accent-hover: #a0b48e;
-    --accent-light: #2a3328;
+    --accent:       #c4972e;
+    --accent-hover: #d4aa42;
+    --accent-light: #2e2810;
 
-    --tag-bg:   #2d2518;
-    --tag-text: #c8a860;
+    --tag-bg:   #2e2412;
+    --tag-text: #d4a840;
 
-    --note-indicator: #c4a35a;
+    --note-indicator: #c4911e;
 
     /* Markup palette */
     --markup-yellow: #6a5a1a;
@@ -167,6 +167,7 @@ textarea {
     padding: 0 16px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-light);
+    box-shadow: 0 1px 3px rgba(80, 50, 10, 0.06);
     flex-shrink: 0;
 }
 
@@ -270,7 +271,7 @@ body.theme-dark #theme-icon-moon { display: none;  }
     flex-direction: column;
     width: 50%;
     min-width: 240px;
-    background: var(--bg-panel);
+    background: var(--bg-primary);
     border-right: 1px solid var(--border-light);
     overflow: hidden;
     flex-shrink: 0;
