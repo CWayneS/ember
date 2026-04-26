@@ -6,7 +6,7 @@ import {
     parseVerseId, getBooks, createStudy, deleteStudy, renameStudy, getStudyName,
     addNoteTag, removeNoteTag, addAnchorToNote
 } from './db.js';
-import { refreshNoteDots, navigateTo, getActivePaneTranslationId } from './reader.js';
+import { refreshVerseIndicators, navigateTo, getActivePaneTranslationId } from './reader.js';
 import { openStudy, closeStudy, getActiveStudyId, openTagView, renameStudyTab } from './panels.js';
 import { refreshReference }                         from './reference.js';
 
@@ -497,9 +497,9 @@ function autoCreateStudy(verseId) {
 // Helpers
 // ============================================================
 
-// Called after any note write — refreshes reader note-dots and info tab
+// Called after any note write — refreshes reader verse indicators and info tab
 function refreshAfterWrite() {
-    refreshNoteDots();
+    refreshVerseIndicators();
     if (currentVerseIds.length > 0) refreshReference(currentVerseIds[0]);
 }
 

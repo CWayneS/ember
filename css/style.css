@@ -26,6 +26,7 @@
     --tag-text: #3d4a34;
 
     --note-indicator: #c4a35a;
+    --accent-green:   #4a7c59;
 
     --danger:       #a04040;
     --danger-hover: #883535;
@@ -91,6 +92,7 @@
     --tag-text: #a0b48e;
 
     --note-indicator: #c4a35a;
+    --accent-green:   #72b488;
 
     /* Markup palette */
     --markup-yellow: #6a5a1a;
@@ -781,17 +783,36 @@ body.markup-mode-on .verse.markup-circle {
     vertical-align: super;
     margin-right: 2px;
     user-select: none;
+    display: inline-block;
+    position: relative;
+}
+
+.verse-indicators {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
 }
 
 .note-indicator {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
+    display: block;
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
     background: var(--note-indicator);
-    margin-left: 3px;
-    vertical-align: super;
-    pointer-events: none;
+}
+
+.bookmark-indicator {
+    display: block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent-green);
 }
 
 

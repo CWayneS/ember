@@ -1,6 +1,6 @@
 // reader.js — Scripture rendering and navigation
 
-import { getChapter, getBooks, getBook, getTranslations, getTranslationDb, getNotesForVerse, getMarkupsForChapter } from './db.js';
+import { getChapter, getBooks, getBook, getTranslations, getTranslationDb, getNotesForVerse, getMarkupsForChapter, getBookmarksForChapter } from './db.js';
 
 // ============================================================
 // Per-pane state — persisted to localStorage
@@ -193,6 +193,8 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
     navEl(paneId, '.pane-location').textContent = `${book.name} ${chapter}`;
 
     textEl.innerHTML = '';
+    const chapterBookmarks = getBookmarksForChapter(bookId, chapter);
+
     for (const v of verses) {
         const el = document.createElement('div');
         el.className = 'verse';
@@ -206,17 +208,33 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
         textSpan.className = 'verse-text';
         textSpan.textContent = v.text;
 
-        el.appendChild(numSpan);
-        el.appendChild(textSpan);
+        const notes    = getNotesForVerse(v.id);
+        const bookmark = chapterBookmarks.get(v.id);
 
-        const notes = getNotesForVerse(v.id);
-        if (notes.length > 0) {
-            const indicator = document.createElement('span');
-            indicator.className = 'note-indicator';
-            indicator.title = `${notes.length} note(s)`;
-            el.appendChild(indicator);
+        if (notes.length > 0 || bookmark) {
+            const indicators = document.createElement('span');
+            indicators.className = 'verse-indicators';
+
+            if (notes.length > 0) {
+                const dot = document.createElement('span');
+                dot.className = 'note-indicator';
+                dot.title = notes.length === 1 ? '1 note' : `${notes.length} notes`;
+                indicators.appendChild(dot);
+            }
+
+            if (bookmark) {
+                const dot = document.createElement('span');
+                dot.className = 'bookmark-indicator';
+                dot.title = bookmark.label || 'Bookmarked';
+                indicators.appendChild(dot);
+                el.classList.add('verse-bookmarked');
+            }
+
+            numSpan.appendChild(indicators);
         }
 
+        el.appendChild(numSpan);
+        el.appendChild(textSpan);
         textEl.appendChild(el);
     }
 
@@ -276,22 +294,41 @@ export function refreshMarkupClasses() {
     }
 }
 
-export function refreshNoteDots() {
-    for (const id of ['a', 'b']) {
-        for (const verseEl of getTextEl(id).querySelectorAll('.verse')) {
+export function refreshVerseIndicators() {
+    for (const paneId of ['a', 'b']) {
+        const { bookId, chapter } = panes[paneId];
+        const bookmarks = getBookmarksForChapter(bookId, chapter);
+
+        for (const verseEl of getTextEl(paneId).querySelectorAll('.verse')) {
             const verseId  = parseInt(verseEl.dataset.verseId);
             const notes    = getNotesForVerse(verseId);
-            const existing = verseEl.querySelector('.note-indicator');
-            if (notes.length > 0 && !existing) {
+            const bookmark = bookmarks.get(verseId);
+            const numSpan  = verseEl.querySelector('.verse-number');
+
+            numSpan.querySelector('.verse-indicators')?.remove();
+            verseEl.classList.remove('verse-bookmarked');
+
+            if (notes.length === 0 && !bookmark) continue;
+
+            const indicators = document.createElement('span');
+            indicators.className = 'verse-indicators';
+
+            if (notes.length > 0) {
                 const dot = document.createElement('span');
                 dot.className = 'note-indicator';
-                dot.title = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
-                verseEl.appendChild(dot);
-            } else if (notes.length === 0 && existing) {
-                existing.remove();
-            } else if (existing) {
-                existing.title = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
+                dot.title = notes.length === 1 ? '1 note' : `${notes.length} notes`;
+                indicators.appendChild(dot);
             }
+
+            if (bookmark) {
+                const dot = document.createElement('span');
+                dot.className = 'bookmark-indicator';
+                dot.title = bookmark.label || 'Bookmarked';
+                indicators.appendChild(dot);
+                verseEl.classList.add('verse-bookmarked');
+            }
+
+            numSpan.appendChild(indicators);
         }
     }
 }

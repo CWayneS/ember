@@ -699,6 +699,22 @@ export function getAllBookmarks() {
     }));
 }
 
+export function getBookmarksForChapter(bookId, chapter) {
+    const chapterStart = bookId * 1000000 + chapter * 1000 + 1;
+    const chapterEnd   = bookId * 1000000 + chapter * 1000 + 999;
+    const result = db.exec(
+        'SELECT verse_id, id, label FROM bookmarks WHERE verse_id >= ? AND verse_id <= ?',
+        [chapterStart, chapterEnd]
+    );
+    const map = new Map();
+    if (result[0]) {
+        for (const [verse_id, id, label] of result[0].values) {
+            map.set(verse_id, { id, label });
+        }
+    }
+    return map;
+}
+
 export function getBookmarkForVerse(verseId) {
     const result = db.exec(
         'SELECT id, verse_id, label, created_at FROM bookmarks WHERE verse_id = ? LIMIT 1',

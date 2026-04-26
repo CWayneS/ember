@@ -2,7 +2,7 @@
 
 import { getBookmarkForVerse, addBookmark, removeBookmark, getAllBookmarks } from './db.js';
 import { getSelectedVerses } from './selection.js';
-import { navigateTo } from './reader.js';
+import { navigateTo, refreshVerseIndicators } from './reader.js';
 import { registerPopover, closeAllPopovers } from './popover-registry.js';
 
 // ============================================================
@@ -94,6 +94,7 @@ function handleBookmarkClick(btn, prompt, dropdown, input) {
         removeBookmark(currentBookmark.id);
         currentBookmark = null;
         updateButtonState(btn);
+        refreshVerseIndicators();
     } else {
         // Show inline comment prompt
         openPrompt(btn, prompt, input);
@@ -131,6 +132,7 @@ function handleSave(prompt, input) {
     currentBookmark = getBookmarkForVerse(verseIds[0]);
     updateButtonState(document.getElementById('bookmark-btn'));
     dismissPrompt(prompt, input);
+    refreshVerseIndicators();
 }
 
 // ============================================================
@@ -188,6 +190,7 @@ function renderDropdown(dropdown) {
                 currentBookmark = null;
                 updateButtonState(document.getElementById('bookmark-btn'));
             }
+            refreshVerseIndicators();
             row.remove();
             // Show empty state if list is now empty
             if (list.children.length === 0) {
