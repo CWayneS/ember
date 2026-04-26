@@ -762,7 +762,7 @@ body.markup-mode-on .verse.markup-underline-solid { text-decoration: underline; 
 body.markup-mode-on .verse.markup-underline-wavy  { text-decoration: underline wavy; }
 
 body.markup-mode-on .verse.markup-circle {
-    outline: 2px solid var(--markup-ink);
+    box-shadow: 0 0 0 2px var(--markup-ink);
     border-radius: 4px;
 }
 
