@@ -60,7 +60,7 @@ function getTranslationsList() {
 // ============================================================
 
 let activePaneId = 'a';
-let splitActive  = false;
+let splitActive  = localStorage.getItem('ember.reader.split') === 'true';
 let splitRatio   = 50;    // pane A percentage width when split
 let overlayPane  = 'a';   // which pane triggered the book overlay
 
@@ -128,7 +128,26 @@ export function initReader() {
     requestAnimationFrame(() => {
         getContentEl('a').scrollTop = savedScrollA;
     });
-    // Pane B is rendered when split is activated.
+
+    // Restore split-view state from localStorage.
+    if (splitActive) {
+        const paneB  = getPaneEl('b');
+        const handle = document.getElementById('reader-split-handle');
+        const btn    = document.getElementById('split-toggle-btn');
+        const reader = document.getElementById('reader');
+
+        paneB.classList.remove('hidden');
+        handle.classList.remove('hidden');
+        btn.classList.add('active');
+        reader.classList.add('split-active');
+
+        applyRatio(splitRatio);
+        const savedScrollB = panes.b.scrollPosition;
+        renderPane('b', panes.b.bookId, panes.b.chapter);
+        requestAnimationFrame(() => {
+            getContentEl('b').scrollTop = savedScrollB;
+        });
+    }
 }
 
 // ============================================================
@@ -363,6 +382,7 @@ function nextChapter(paneId) {
 
 function toggleSplit() {
     splitActive = !splitActive;
+    localStorage.setItem('ember.reader.split', String(splitActive));
 
     const paneB  = getPaneEl('b');
     const handle = document.getElementById('reader-split-handle');
