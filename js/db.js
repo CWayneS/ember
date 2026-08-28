@@ -1,7 +1,15 @@
 // db.js — Database initialization, queries, and persistence
 
+import { resolveUsfmRef } from './usfm.js';
+
 const CROSSREF_VOTE_FLOOR_DEFAULT = 5;
 const CROSSREF_TOP_N_DEFAULT      = 25;
+
+const BUNDLED_PLAN_FILES = [
+    'mcheyne-1year.json',
+    'bible-in-a-year-canonical.json',
+    'bible-in-a-year-chronological.json'
+];
 
 let db             = null;
 let _booksCache    = null;
@@ -43,6 +51,10 @@ export async function initDatabase() {
     }
 
     createUserTables();
+
+    // Seed bundled reading plans on first install (idempotent — skips any
+    // plan_id already present).
+    await seedBundledPlans();
 
     // Seed translation files into OPFS on first install (no-op on subsequent loads).
     await seedTranslations();
@@ -368,6 +380,86 @@ function migratePlanTables() {
             PRIMARY KEY (plan_id, day_number, sequence)
         );
     `);
+}
+
+// Seed the bundled reading plans from data/plans/ on first install. Idempotent:
+// a plan already present (matched by its stable plan_id) is left untouched.
+async function seedBundledPlans() {
+    let seededAny = false;
+
+    for (const filename of BUNDLED_PLAN_FILES) {
+        let plan;
+        try {
+            const response = await fetch(`./data/plans/${filename}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            plan = await response.json();
+        } catch (e) {
+            console.error(`seedBundledPlans: failed to load ${filename}:`, e);
+            continue;
+        }
+
+        const meta = plan.plan_metadata;
+        const existing = db.exec('SELECT id FROM plans WHERE plan_id = ?', [meta.id]);
+        if (existing.length > 0) {
+            continue;
+        }
+
+        db.run(
+            `INSERT INTO plans (plan_id, title, description, author, language, duration_days, tags, schema_version, source, imported_at, current_step, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'bundled', ?, 0, 'not_started')`,
+            [
+                meta.id,
+                meta.title,
+                meta.description ?? null,
+                meta.author ?? null,
+                meta.language ?? 'en',
+                meta.duration_days,
+                JSON.stringify(meta.tags ?? []),
+                meta.schema_version ?? 1,
+                Math.floor(Date.now() / 1000)
+            ]
+        );
+
+        const planRowId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+        let approximateCount = 0;
+        let unresolvedCount = 0;
+
+        for (const day of plan.days) {
+            db.run(
+                `INSERT INTO plan_days (plan_id, day_number, title, devotional_title, devotional_body, reflection_questions_json)
+                 VALUES (?, ?, NULL, NULL, NULL, NULL)`,
+                [planRowId, day.day_number]
+            );
+
+            let sequence = 0;
+            for (const passage of day.scripture) {
+                sequence++;
+                const resolved = resolveUsfmRef(passage.ref);
+                if (!resolved) {
+                    unresolvedCount++;
+                    console.error(`seedBundledPlans: could not resolve ref "${passage.ref}" in ${filename} day ${day.day_number} — skipping passage.`);
+                    continue;
+                }
+                if (resolved.approximate) approximateCount++;
+                db.run(
+                    `INSERT INTO plan_day_scripture (plan_id, day_number, sequence, ref, display, book, chapter, verse_start, verse_end)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [planRowId, day.day_number, sequence, passage.ref, passage.display,
+                     resolved.book, resolved.chapter, resolved.verseStart, resolved.verseEnd]
+                );
+            }
+        }
+
+        seededAny = true;
+        console.log(
+            `seedBundledPlans: seeded "${meta.title}" (${plan.days.length} days, ` +
+            `${approximateCount} approximate ranges, ${unresolvedCount} unresolved refs)`
+        );
+    }
+
+    if (seededAny) {
+        saveToStorage(db.export());
+    }
 }
 
 // ============================================================
