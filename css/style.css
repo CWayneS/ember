@@ -1185,6 +1185,97 @@ body.markup-mode-on .verse.markup-circle {
     font-weight: 600;
 }
 
+/* ── Global settings popover ────────────────────────────────────── */
+
+#global-settings-popover {
+    max-width: 320px;
+}
+
+.settings-popover-title {
+    font-size: var(--size-base);
+    color: var(--text-primary);
+    margin: 0 0 10px;
+}
+
+/* Generic page-width divider — reused above the ToC, above the section
+   list, and under every section's title. Future sections reuse this same
+   class rather than one-off rules. */
+.settings-divider {
+    border: none;
+    border-top: 1px solid var(--border-light);
+    margin: 0 0 10px;
+}
+
+.settings-toc {
+    margin-bottom: 10px;
+}
+
+.settings-toc-label {
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    margin: 0 0 6px;
+}
+
+.settings-toc ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.settings-toc-link {
+    font-size: var(--size-small);
+    color: var(--accent);
+}
+
+.settings-toc-link:hover {
+    text-decoration: underline;
+}
+
+.settings-section-title {
+    font-size: var(--size-small);
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 8px;
+}
+
+.settings-section-desc {
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+    line-height: var(--line-height-ui);
+    margin: 0 0 12px;
+}
+
+.settings-section-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.settings-action-btn {
+    padding: 7px 14px;
+    border-radius: 6px;
+    background: var(--accent);
+    color: white;
+    font-size: var(--size-small);
+    font-weight: 600;
+    text-align: center;
+}
+
+.settings-action-btn:hover {
+    background: var(--accent-hover);
+}
+
+.settings-action-btn.danger {
+    background: var(--danger);
+}
+
+.settings-action-btn.danger:hover {
+    background: var(--danger-hover);
+}
+
 #bookmark-comment {
     width: 100%;
     padding: 6px 8px;

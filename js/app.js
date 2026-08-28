@@ -1,7 +1,6 @@
 // app.js — Entry point
 
-import { initDatabase, exportBackup } from './db.js';
-import { restoreFromBackup } from './backup.js';
+import { initDatabase } from './db.js';
 
 import { initReader } from './reader.js';
 
@@ -32,23 +31,6 @@ window.emberDebug = window.emberDebug || {};
 async function init() {
     try {
         await initDatabase();
-
-        // TEMP (Build 4 Item 2/3 verification) — no UI yet; the settings popover
-        // wires these up for real in Item 5.
-        window.emberDebug.exportBackup      = exportBackup;
-        window.emberDebug.restoreFromBackup = restoreFromBackup;
-
-        // restoreFromBackup() opens a native file picker, which browsers block
-        // unless it's called from a genuine user gesture — calling it from the
-        // console (no real click) triggers "picker was blocked due to lack of
-        // user activation." A real button click IS a genuine gesture, so this
-        // temporary button is the only manual way to exercise it pre-Item 5.
-        const tempRestoreBtn = document.createElement('button');
-        tempRestoreBtn.textContent = 'TEMP: Restore Backup';
-        tempRestoreBtn.style.cssText =
-            'position:fixed; bottom:12px; right:12px; z-index:9999; padding:8px 14px;';
-        tempRestoreBtn.addEventListener('click', restoreFromBackup);
-        document.body.appendChild(tempRestoreBtn);
 
         initReader();
         initSelection();
