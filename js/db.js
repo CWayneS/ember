@@ -306,6 +306,68 @@ function createUserTables() {
     // Future drag-to-reorder: position column on notes (idempotent).
     // NULL = use created_at order. Will be populated when ordering is implemented.
     try { db.run('ALTER TABLE notes ADD COLUMN position REAL'); } catch (_) {}
+
+    migratePlanTables();
+}
+
+// Build 3: replace the Build 1 placeholder plan tables with the reading-plans
+// schema. Detected by checking whether plans.plan_id is missing — if the
+// table exists but lacks that column, it's the old placeholder shape.
+function migratePlanTables() {
+    const planCols = db.exec("PRAGMA table_info(plans)")[0]?.values ?? [];
+    const isLegacyPlansTable = planCols.length > 0 && !planCols.some(row => row[1] === 'plan_id');
+
+    if (isLegacyPlansTable) {
+        db.run('DROP TABLE IF EXISTS plan_progress');
+        db.run('DROP TABLE IF EXISTS plan_days');
+        db.run('DROP TABLE IF EXISTS plans');
+    }
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS plans (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_id           TEXT UNIQUE NOT NULL,
+            title             TEXT NOT NULL,
+            description       TEXT,
+            author            TEXT,
+            language          TEXT DEFAULT 'en',
+            duration_days     INTEGER NOT NULL,
+            tags              TEXT,
+            schema_version    INTEGER DEFAULT 1,
+            source            TEXT NOT NULL,
+            imported_at       INTEGER NOT NULL,
+            current_step      INTEGER NOT NULL DEFAULT 0,
+            status            TEXT NOT NULL DEFAULT 'not_started'
+                              CHECK(status IN ('not_started','active','completed'))
+        );
+    `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS plan_days (
+            plan_id                   INTEGER NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+            day_number                INTEGER NOT NULL,
+            title                     TEXT,
+            devotional_title          TEXT,
+            devotional_body           TEXT,
+            reflection_questions_json TEXT,
+            PRIMARY KEY (plan_id, day_number)
+        );
+    `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS plan_day_scripture (
+            plan_id     INTEGER NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+            day_number  INTEGER NOT NULL,
+            sequence    INTEGER NOT NULL,
+            ref         TEXT NOT NULL,
+            display     TEXT NOT NULL,
+            book        INTEGER NOT NULL,
+            chapter     INTEGER NOT NULL,
+            verse_start INTEGER NOT NULL,
+            verse_end   INTEGER,
+            PRIMARY KEY (plan_id, day_number, sequence)
+        );
+    `);
 }
 
 // ============================================================
