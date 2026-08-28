@@ -1,6 +1,6 @@
 // app.js — Entry point
 
-import { initDatabase } from './db.js';
+import { initDatabase, exportBackup } from './db.js';
 
 import { initReader } from './reader.js';
 
@@ -30,6 +30,10 @@ window.emberDebug = window.emberDebug || {};
 async function init() {
     try {
         await initDatabase();
+
+        // TEMP (Build 4 Item 2 verification) — no UI yet; the settings popover
+        // wires this up in Item 5. Trigger from the console: emberDebug.exportBackup()
+        window.emberDebug.exportBackup = exportBackup;
 
         initReader();
         initSelection();

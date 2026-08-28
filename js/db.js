@@ -645,6 +645,30 @@ export function deactivatePlan(planRowId) {
 }
 
 // ============================================================
+// Backup — manual export of the full core.db
+// ============================================================
+
+// Exports the entire current core.db (reference + user data, including the
+// meta table) as a downloadable file. Reuses the same db.export() primitive
+// every write already calls before handing bytes to storage-worker.js — the
+// only difference here is the bytes go to a Blob download instead of OPFS.
+export function exportBackup() {
+    const bytes = db.export();
+    const blob = new Blob([bytes], { type: 'application/octet-stream' });
+
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const filename = `ember-backup-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.db`;
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+}
+
+// ============================================================
 // Persistence — OPFS with IndexedDB fallback
 // ============================================================
 
