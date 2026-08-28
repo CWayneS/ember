@@ -866,9 +866,19 @@ export function updateNote(noteId, body) {
     saveToStorage(db.export());
 }
 
-export function deleteNote(noteId) {
-    db.run('DELETE FROM notes WHERE id = ?', [noteId]);
+// Deletes a note and every row that references it (anchors, tag
+// assignments, the FTS index). sql.js does not enforce ON DELETE CASCADE by
+// default, so these are removed explicitly rather than relied on — see
+// deletePlan() for the same pattern.
+function deleteNoteRows(noteId) {
+    db.run('DELETE FROM note_anchors WHERE note_id = ?', [noteId]);
+    db.run('DELETE FROM tag_assignments WHERE note_id = ?', [noteId]);
     db.run('DELETE FROM notes_fts WHERE rowid = ?', [noteId]);
+    db.run('DELETE FROM notes WHERE id = ?', [noteId]);
+}
+
+export function deleteNote(noteId) {
+    deleteNoteRows(noteId);
     saveToStorage(db.export());
 }
 
@@ -1213,13 +1223,14 @@ export function getStudies() {
 }
 
 export function deleteStudy(studyId) {
-    // CASCADE on notes FK handles notes deletion, but notes_fts is a virtual
-    // table without CASCADE — clean it up manually first.
+    // notes.study_id has no CASCADE at all (and even where CASCADE is
+    // declared elsewhere, sql.js doesn't enforce it) — delete every note's
+    // rows explicitly via the same helper deleteNote() uses.
     const noteIds = db.exec(
         'SELECT id FROM notes WHERE study_id = ?', [studyId]
-    )[0]?.values.map(r => r[0]) || [];
-    for (const id of noteIds) {
-        db.run('DELETE FROM notes_fts WHERE rowid = ?', [id]);
+    )[0]?.values.map(r => r[0]) ?? [];
+    for (const noteId of noteIds) {
+        deleteNoteRows(noteId);
     }
     db.run('DELETE FROM studies WHERE id = ?', [studyId]);
     saveToStorage(db.export());
