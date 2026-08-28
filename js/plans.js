@@ -1,6 +1,216 @@
-// plans.js — Reading plan import (JSON + CSV)
+// plans.js — Reading plan import (JSON + CSV) and the Plans tab UI
 
-import { insertPlan } from './db.js';
+import { insertPlan, getPlans, deletePlan } from './db.js';
+
+// ============================================================
+// Plans tab — Reading Plans sub-tab (list, import, delete)
+// ============================================================
+
+export function initPlans() {
+    initPlansSubtabs();
+    initPlanImport();
+
+    // panels.js only toggles tab visibility; refresh the list whenever the
+    // Plans tab itself is opened so imports/deletes made earlier are reflected.
+    const plansTabBtn = document.querySelector('#reference-tabs [data-tab="plans"]');
+    plansTabBtn.addEventListener('click', renderReadingPlansList);
+
+    renderReadingPlansList();
+}
+
+function initPlansSubtabs() {
+    document.querySelectorAll('.plans-subtab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchPlansSubtab(btn.dataset.subtab));
+    });
+}
+
+function switchPlansSubtab(subtab) {
+    document.querySelectorAll('.plans-subtab-btn').forEach(btn => {
+        const active = btn.dataset.subtab === subtab;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    document.querySelectorAll('.plans-subtab-content').forEach(panel => {
+        const active = panel.id === `${subtab}-subtab`;
+        panel.classList.toggle('active', active);
+        panel.classList.toggle('hidden', !active);
+    });
+}
+
+function initPlanImport() {
+    const importBtn = document.getElementById('plan-import-btn');
+    const fileInput  = document.getElementById('plan-import-input');
+
+    importBtn.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', async () => {
+        const file = fileInput.files[0];
+        fileInput.value = ''; // allow re-selecting the same file next time
+        if (!file) return;
+
+        try {
+            const result = await importPlan(file);
+            if (result === null) return; // user cancelled the CSV metadata dialog
+            renderReadingPlansList();
+        } catch (e) {
+            alert(e.message);
+        }
+    });
+}
+
+function renderReadingPlansList() {
+    const container = document.getElementById('plans-list');
+    container.innerHTML = '';
+
+    const plans = getPlans();
+
+    if (plans.length === 0) {
+        const empty = document.createElement('p');
+        empty.className   = 'notes-empty';
+        empty.textContent = 'No reading plans installed. Use the Import button to add a plan.';
+        container.appendChild(empty);
+        return;
+    }
+
+    for (const plan of plans) {
+        container.appendChild(buildPlanCard(plan));
+    }
+}
+
+function buildPlanCard(plan) {
+    const card = document.createElement('div');
+    card.className = 'plan-card';
+
+    const info = document.createElement('div');
+    info.className = 'plan-card-info';
+    info.addEventListener('click', () => {
+        // Placeholder until the plan detail popover ships — opens the plan.
+        console.log('Plan card clicked:', plan.plan_id);
+    });
+
+    const titleRow = document.createElement('div');
+    titleRow.className = 'plan-card-title-row';
+
+    const title = document.createElement('span');
+    title.className   = 'plan-card-title';
+    title.textContent = plan.title;
+
+    const badge = document.createElement('span');
+    badge.className   = `plan-status-badge plan-status-${plan.status}`;
+    badge.textContent = planStatusLabel(plan.status);
+
+    titleRow.appendChild(title);
+    titleRow.appendChild(badge);
+    info.appendChild(titleRow);
+
+    if (plan.status === 'active') {
+        const progress = document.createElement('div');
+        progress.className   = 'plan-card-progress';
+        progress.textContent = `Day ${plan.current_step} of ${plan.duration_days}`;
+        info.appendChild(progress);
+    }
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'plan-card-delete';
+    delBtn.textContent = '✕';
+    delBtn.setAttribute('title', 'Delete plan');
+    delBtn.setAttribute('aria-label', `Delete ${plan.title}`);
+    delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleDeletePlan(plan);
+    });
+
+    card.appendChild(info);
+    card.appendChild(delBtn);
+    return card;
+}
+
+function planStatusLabel(status) {
+    if (status === 'active') return 'In Progress';
+    if (status === 'completed') return 'Completed';
+    return 'Not Started';
+}
+
+async function handleDeletePlan(plan) {
+    const confirmed = await openConfirmDialog({
+        title: `Delete "${plan.title}"?`,
+        lines: [
+            `Current progress: Day ${plan.current_step} of ${plan.duration_days}`,
+            'The plan and your progress will be removed. Your notes are not affected.'
+        ],
+        confirmLabel: 'Delete',
+        danger: true
+    });
+    if (!confirmed) return;
+
+    deletePlan(plan.id);
+    renderReadingPlansList();
+}
+
+// Small centered modal with a heading, one or more message lines, and
+// Cancel/Confirm buttons. Resolves true on confirm, false on cancel/escape/
+// backdrop click. Built without innerHTML so plan titles (user- or
+// import-supplied text) can never be interpreted as markup.
+function openConfirmDialog({ title, lines, confirmLabel, cancelLabel = 'Cancel', danger = false }) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'plan-metadata-overlay';
+
+        const dialog = document.createElement('div');
+        dialog.className = 'plan-metadata-dialog';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+
+        const heading = document.createElement('h2');
+        heading.textContent = title;
+        dialog.appendChild(heading);
+
+        for (const line of lines) {
+            const p = document.createElement('p');
+            p.className   = 'plan-confirm-line';
+            p.textContent = line;
+            dialog.appendChild(p);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'plan-metadata-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type      = 'button';
+        cancelBtn.className = 'plan-metadata-cancel';
+        cancelBtn.textContent = cancelLabel;
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.type      = 'button';
+        confirmBtn.className = 'plan-metadata-confirm' + (danger ? ' danger' : '');
+        confirmBtn.textContent = confirmLabel;
+
+        actions.appendChild(cancelBtn);
+        actions.appendChild(confirmBtn);
+        dialog.appendChild(actions);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        function cleanup() {
+            document.removeEventListener('keydown', onKeydown);
+            overlay.remove();
+        }
+        function onCancel()  { cleanup(); resolve(false); }
+        function onConfirm() { cleanup(); resolve(true); }
+        function onKeydown(e) { if (e.key === 'Escape') onCancel(); }
+
+        cancelBtn.addEventListener('click', onCancel);
+        confirmBtn.addEventListener('click', onConfirm);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) onCancel(); });
+        document.addEventListener('keydown', onKeydown);
+
+        confirmBtn.focus();
+    });
+}
+
+// ============================================================
+// Plan import (JSON + CSV)
+// ============================================================
 
 // Accepts a File object (from a file picker or drop). Detects format by
 // extension, parses and validates it, and inserts the plan via db.js.

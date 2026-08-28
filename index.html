@@ -59,6 +59,7 @@
                         <button class="tab-btn" role="tab" aria-selected="false" data-tab="tags">Tags</button>
                         <button class="tab-btn" role="tab" aria-selected="false" data-tab="related">Related</button>
                         <button class="tab-btn" role="tab" aria-selected="false" data-tab="language">Language</button>
+                        <button class="tab-btn" role="tab" aria-selected="false" data-tab="plans">Plans</button>
                     </nav>
                     <div class="panel-header-actions">
                         <button class="panel-help-btn" aria-label="Reference help">?</button>
@@ -69,6 +70,22 @@
                 <div id="tags-tab" class="tab-content hidden" role="tabpanel"></div>
                 <div id="related-tab" class="tab-content hidden" role="tabpanel"></div>
                 <div id="language-tab" class="tab-content hidden" role="tabpanel"></div>
+                <div id="plans-tab" class="tab-content hidden" role="tabpanel">
+                    <nav class="plans-subtabs" role="tablist">
+                        <button class="plans-subtab-btn active" role="tab" aria-selected="true" data-subtab="reading-plans">Reading Plans</button>
+                        <button class="plans-subtab-btn" role="tab" aria-selected="false" data-subtab="study-templates">Study Templates</button>
+                    </nav>
+                    <div id="reading-plans-subtab" class="plans-subtab-content active" role="tabpanel">
+                        <div class="plans-toolbar">
+                            <button id="plan-import-btn" class="plan-import-btn">Import</button>
+                            <input type="file" id="plan-import-input" accept=".json,.csv" class="hidden">
+                        </div>
+                        <div id="plans-list"></div>
+                    </div>
+                    <div id="study-templates-subtab" class="plans-subtab-content hidden" role="tabpanel">
+                        <p class="ref-placeholder">Study Templates — coming in a future build. Templates guide you through a structured method for engaging with a passage: observe, interpret, apply. Check back soon.</p>
+                    </div>
+                </div>
             </section>
 
         </div>

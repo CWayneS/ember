@@ -498,6 +498,38 @@ async function seedBundledPlans() {
     }
 }
 
+// Returns all installed plans, sorted active (in progress) first, then
+// not_started, then completed; alphabetically by title within each group.
+export function getPlans() {
+    return db.exec(`
+        SELECT id, plan_id, title, description, author, duration_days, source, current_step, status
+        FROM plans
+        ORDER BY
+            CASE status WHEN 'active' THEN 0 WHEN 'not_started' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
+            title COLLATE NOCASE
+    `)[0]?.values.map(row => ({
+        id:            row[0],
+        plan_id:       row[1],
+        title:         row[2],
+        description:   row[3],
+        author:        row[4],
+        duration_days: row[5],
+        source:        row[6],
+        current_step:  row[7],
+        status:        row[8]
+    })) || [];
+}
+
+// Deletes a plan and its days/scripture rows. ON DELETE CASCADE is declared
+// on those tables but sql.js does not enforce foreign keys by default, so
+// the child rows are removed explicitly here rather than relied on.
+export function deletePlan(planRowId) {
+    db.run('DELETE FROM plan_day_scripture WHERE plan_id = ?', [planRowId]);
+    db.run('DELETE FROM plan_days WHERE plan_id = ?', [planRowId]);
+    db.run('DELETE FROM plans WHERE id = ?', [planRowId]);
+    saveToStorage(db.export());
+}
+
 // ============================================================
 // Persistence — OPFS with IndexedDB fallback
 // ============================================================

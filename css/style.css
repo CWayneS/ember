@@ -2303,3 +2303,155 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
 .plan-metadata-confirm:hover {
     background: var(--accent-hover);
 }
+
+.plan-metadata-confirm.danger {
+    background: var(--danger);
+}
+
+.plan-metadata-confirm.danger:hover {
+    background: var(--danger-hover);
+}
+
+.plan-confirm-line {
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+    line-height: var(--line-height-ui);
+    margin: 0 0 10px;
+}
+
+/* ============================================================
+   Plans Tab
+   ============================================================ */
+.plans-subtabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border-light);
+    margin: -16px -16px 16px;
+    padding: 0 16px;
+}
+
+.plans-subtab-btn {
+    padding: 10px 4px;
+    font-size: var(--size-small);
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 2px solid transparent;
+    margin-right: 16px;
+}
+
+.plans-subtab-btn:hover {
+    color: var(--text-primary);
+}
+
+.plans-subtab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.plans-subtab-content.hidden {
+    display: none;
+}
+
+.plans-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+}
+
+.plan-import-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    background: var(--accent);
+    color: white;
+    font-size: var(--size-small);
+    font-weight: 600;
+}
+
+.plan-import-btn:hover {
+    background: var(--accent-hover);
+}
+
+.plan-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    transition: background 0.1s;
+}
+
+.plan-card:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-medium);
+}
+
+.plan-card-info {
+    flex: 1;
+    padding: 12px;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.plan-card-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.plan-card-title {
+    font-family: var(--font-display);
+    font-size: var(--size-small);
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.plan-card-progress {
+    font-family: var(--font-reading);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+}
+
+.plan-status-badge {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: var(--size-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.plan-status-active {
+    background: var(--accent-light);
+    color: var(--accent);
+}
+
+.plan-status-not_started {
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+}
+
+.plan-status-completed {
+    background: var(--tag-bg);
+    color: var(--tag-text);
+}
+
+.plan-card-delete {
+    flex-shrink: 0;
+    padding: 8px 10px;
+    color: var(--text-muted);
+    font-size: var(--size-small);
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.plan-card:hover .plan-card-delete {
+    opacity: 1;
+}
+
+.plan-card-delete:hover {
+    color: var(--danger);
+}

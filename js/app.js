@@ -18,6 +18,7 @@ import { initReaderSettings } from './reader-settings.js';
 import { initNotesSettings }      from './notes-settings.js';
 import { initReferenceSettings }  from './reference-settings.js';
 import { initMarkups }            from './markups.js';
+import { initPlans }              from './plans.js';
 
 // Dev tuning hook — lets crossrefFloor / crossrefTopN be adjusted from the
 // browser console without reloading. getCrossReferencesForVerse reads these
@@ -42,6 +43,7 @@ async function init() {
         initNotesSettings();
         initReferenceSettings();
         initMarkups();
+        initPlans();
 
         document.getElementById('layout-toggle-btn')
             .addEventListener('click', togglePanelLayout);
