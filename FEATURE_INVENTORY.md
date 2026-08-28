@@ -287,12 +287,12 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 ## Help System
 
-149. All three panels have a help popover (? button): reader, notes, reference — help.js
+149. All three panels plus the global header have a help popover (? button): reader, notes, reference, global — help.js
 150. Popovers use the shared `.help-popover` CSS component: fixed position, z-index 170, max-width 280px, theme-aware colors — style.css
-151. Opening one popover closes any other open popover — popover-registry.js:closeAllPopovers (called at the top of each open handler; registered by help.js, bookmarks.js, reader-settings.js, notes-settings.js, reference-settings.js)
+151. Opening one popover closes any other open popover — popover-registry.js:closeAllPopovers (called at the top of each open handler; registered by help.js, bookmarks.js, reader-settings.js, notes-settings.js, reference-settings.js, global-settings.js)
 152. Clicking outside any open popover closes it — help.js (document click handler)
 153. Pressing Escape closes any open popover — help.js (keydown handler)
-154. "More help" link in each popover: non-functional placeholder (`preventDefault` only) — help.js
+154. "More help" link in each of the three per-panel popovers (reader, notes, reference): non-functional placeholder (`preventDefault` only) — help.js. The global help popover has no such link — its content is placeholder text only, per Build 4 scope
 
 ---
 
@@ -437,6 +437,47 @@ All five prefixes are functional:
 229. Which day/passage the bar is currently browsing (as opposed to `current_step`, the persisted "bookmark" day) is in-memory only — it is not written anywhere and does not survive a reload — template-bar.js (module-level `state`)
 230. ✕ closes the bar and reverts the plan's `status` to `not_started` while preserving `current_step` (`db.js:deactivatePlan`) — the plan is not deleted, and Continue from the Plans tab resumes it from the same day — template-bar.js:handleClose
 230a. Nothing prevents more than one plan from having `status = 'active'` in the database at once (e.g. activate plan A, close the Plans tab, activate plan B — A's row is untouched). The bar only ever displays one plan at a time; the Plans tab list still reflects each plan's own `current_step`/`status` correctly regardless — template-bar.js, db.js:getPlans
+
+---
+
+## `meta` Table
+
+231. `core.db` gains a `meta` table (`schema_version`, `created_at`, `app_name`) — a single descriptive row, distinct from each translation `.db`'s unrelated key/value `meta` table — db.js:ensureMetaTable
+231a. Created idempotently at the end of `createUserTables()`, same pattern as `migratePlanTables()`: `CREATE TABLE IF NOT EXISTS`, then the row is inserted once — checked via row count — and never touched again on subsequent boots, so `created_at`/`schema_version` never reset — db.js:ensureMetaTable
+231b. The one-time INSERT explicitly persists itself (`saveToStorage(db.export())`) rather than relying on some other write happening later in the same boot — an upgrade boot where plans/translations are already seeded may write nothing else that session, and the row must not be silently lost — db.js:ensureMetaTable
+231c. Works on both a fresh install (table created alongside every other user table) and an existing pre-Build-4 database (table added on next boot without touching existing notes/tags/bookmarks/etc.) — db.js:createUserTables
+
+---
+
+## Backup & Restore
+
+232. Export Backup: serializes the live `core.db` via the same `db.export()` call every write already uses, wraps it in a `Blob`, and triggers a download via a synthetic anchor click — no page navigation or reload — db.js:exportBackup
+232a. Filename: `ember-backup-YYYY-MM-DD-HHmm.db`, local time, zero-padded — sorts chronologically and won't collide within the same minute — db.js:exportBackup
+232b. Export scope is the entirety of `core.db` — every reference table and every user table, including `meta` and the reading-plans tables — db.js:exportBackup (wraps the whole `db.export()` output, not a partial query)
+
+233. Restore from Backup: file picker restricted to `.db` files (`accept=".db"`) — backup.js:restoreFromBackup
+233a. Selected file is read and validated before anything else happens: the bytes are opened as a throwaway sql.js `Database` (the live `db` is never touched) and checked for a `books` table — an invalid or unrelated file is rejected with a clear `alert()` and no confirmation dialog is ever shown — db.js:looksLikeCoreDb, backup.js:restoreFromBackup
+233b. On a valid file: a confirmation dialog appears, built from DOM nodes and `textContent` only (no `innerHTML`) — the same construction pattern as plans.js's `openConfirmDialog()` — stating plainly that the action replaces all current notes, tags, bookmarks, markups, and reading-plan progress and cannot be undone — backup.js:openRestoreConfirmDialog
+233c. Cancel (button, Escape, or backdrop click) leaves the current database completely untouched — nothing is written until both validation and confirmation have passed — backup.js:openRestoreConfirmDialog
+233d. On confirm: the validated bytes are written over the stored `core.db` (OPFS, falling back to IndexedDB only if OPFS is unavailable at all) and the page reloads so `initDatabase()` boots fresh from the restored file — db.js:restoreCoreDb
+233e. Unlike ordinary writes, a restore does NOT fall back from OPFS to IndexedDB after a partial OPFS failure (quota exceeded mid-write, etc.) — it rejects outright. `loadFromStorage()` always checks OPFS first on the next boot, so falling back there would leave a truncated `core.db` in OPFS that the next boot reads instead of the good IndexedDB copy — exactly the half-restored state a destructive restore must never produce — db.js:restoreCoreDb
+233f. Any failure at any step (unreadable file, invalid file, failed write) shows a clear `alert()` and leaves the existing `core.db` untouched; no partial writes — backup.js:restoreFromBackup
+
+---
+
+## Global Header
+
+234. ⚙ and ? buttons added to the global header alongside the search bar, reusing the exact `.panel-help-btn`/`.panel-settings-btn` classes the per-panel headers already use — identical 28×28 sizing, spacing, and hover state, no new CSS — index.html (`#search-bar`)
+
+235. Global help popover (? button): placeholder content explaining the global-vs-per-panel distinction ("Ember — the whole workspace..."). Wired into help.js's existing multi-popover `entries` array alongside reader/notes/reference help — shares the same `registerPopover`/outside-click/Escape handling with zero new logic — help.js, index.html (`#global-help-popover`)
+
+236. Global settings popover (⚙ button): opens via a dedicated `global-settings.js` module mirroring `reader-settings.js`'s open/close skeleton, registered with `popover-registry.js` — global-settings.js:initGlobalSettings
+236a. Content — title, table of contents, and every section — is rendered entirely from a `SECTIONS` array (`{ id, title, render(container) }`) rather than hardcoded markup, so a future build adds a section by extending that array — global-settings.js:SECTIONS, buildPopoverContent
+236b. Table of contents: one clickable entry per section ("Backup & Restore" in Build 4); clicking scrolls that section into view without closing the popover — global-settings.js:buildPopoverContent
+236c. `.settings-divider` is a single reusable page-width divider class applied after the popover title, after the ToC, and under every section's title — the pattern later builds reuse as-is when reader/notes/reference settings eventually migrate in — style.css:`.settings-divider`
+236d. Backup & Restore is the only populated section in Build 4: a one-line description plus "Export Backup" (wired to `exportBackup()`) and "Restore from Backup" (styled `.danger`, matching the confirm dialog it triggers; wired to `restoreFromBackup()`) — global-settings.js:SECTIONS
+236e. Popover closes on outside click and Escape, and registering with `popover-registry.js` means opening it closes any other open popover (per-panel or global) and vice versa — global-settings.js:initGlobalSettings
+236f. reader-settings.js/notes-settings.js/reference-settings.js content is deliberately NOT migrated into this popover yet — each panel keeps its own ⚙ popover for now; only Backup & Restore lives in the global one, per Build 4 scope
 
 ---
 
