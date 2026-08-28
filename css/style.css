@@ -116,6 +116,10 @@ html, body {
 }
 
 body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
     font-family: var(--font-reading);
     font-size: var(--size-base);
     line-height: var(--line-height);
@@ -250,6 +254,91 @@ body.theme-dark #theme-icon-moon { display: none;  }
     font-family: var(--font-display);
     border-bottom: 1px solid var(--border-light);
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 12px;
+}
+
+.template-bar-title {
+    flex-shrink: 1;
+    min-width: 0;
+    font-size: var(--size-small);
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.template-bar-side-btn {
+    flex-shrink: 0;
+    font-size: var(--size-small);
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.template-bar-side-btn:hover:not(:disabled) {
+    color: var(--accent);
+}
+
+.template-bar-side-btn:disabled {
+    color: var(--text-muted);
+    opacity: 0.4;
+    cursor: default;
+}
+
+.template-bar-track {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.template-bar-dot {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1.5px solid var(--text-muted);
+    background: transparent;
+}
+
+.template-bar-dot.filled {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.template-bar-label {
+    flex-shrink: 1;
+    min-width: 0;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--accent-light);
+    color: var(--accent);
+    font-size: var(--size-small);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.template-bar-label:hover {
+    text-decoration: underline;
+}
+
+.template-bar-close {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-size: var(--size-small);
+    padding: 4px 6px;
+}
+
+.template-bar-close:hover {
+    color: var(--danger);
 }
 
 /* ============================================================
@@ -257,7 +346,8 @@ body.theme-dark #theme-icon-moon { display: none;  }
    ============================================================ */
 #workspace {
     display: flex;
-    height: calc(100vh - var(--global-header-height));
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
 }
 

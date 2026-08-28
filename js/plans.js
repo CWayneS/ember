@@ -1,11 +1,7 @@
 // plans.js — Reading plan import (JSON + CSV) and the Plans tab UI
 
-import {
-    insertPlan, getPlans, deletePlan,
-    getPlanDetail, getPlanDayFirstPassage, setPlanProgress, restartPlan,
-    makeVerseId
-} from './db.js';
-import { navigateTo } from './reader.js';
+import { insertPlan, getPlans, deletePlan, getPlanDetail, restartPlan } from './db.js';
+import { activatePlan } from './template-bar.js';
 
 // ============================================================
 // Plans tab — Reading Plans sub-tab (list, import, delete)
@@ -267,7 +263,8 @@ function openPlanDetailPopover(planRowId) {
     continueBtn.className   = 'plan-detail-continue';
     continueBtn.textContent = 'Continue →';
     continueBtn.addEventListener('click', () => {
-        goToPlanDay(detail, effectiveCurrentDay(detail));
+        activatePlan(detail.id, effectiveCurrentDay(detail));
+        renderReadingPlansList();
         closePopover();
     });
 
@@ -319,7 +316,8 @@ function openPlanDetailPopover(planRowId) {
         row.appendChild(iconEl);
         row.appendChild(labelEl);
         row.addEventListener('click', () => {
-            goToPlanDay(detail, day.day_number);
+            activatePlan(detail.id, day.day_number);
+            renderReadingPlansList();
             closePopover();
         });
 
@@ -364,22 +362,6 @@ function openPlanDetailPopover(planRowId) {
 // The day a plan is "on": current_step if it has started, else Day 1.
 function effectiveCurrentDay(detail) {
     return detail.current_step > 0 ? detail.current_step : 1;
-}
-
-// Sets progress to dayNumber and navigates the reader to that day's first
-// passage. Used by both Continue and clicking a specific day row.
-function goToPlanDay(detail, dayNumber) {
-    setPlanProgress(detail.id, dayNumber);
-
-    const passage = getPlanDayFirstPassage(detail.id, dayNumber);
-    if (!passage) {
-        console.error(`goToPlanDay: no first passage for plan "${detail.plan_id}" day ${dayNumber}`);
-        return;
-    }
-
-    const verseId = makeVerseId(passage.book, passage.chapter, passage.verse_start);
-    navigateTo(passage.book, passage.chapter, verseId);
-    renderReadingPlansList();
 }
 
 // ============================================================

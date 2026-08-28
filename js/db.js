@@ -562,18 +562,6 @@ export function getPlanDetail(planRowId) {
     return { id, plan_id, title, description, author, duration_days, current_step, status, days };
 }
 
-// The first passage of a given day, pre-resolved for navigation.
-export function getPlanDayFirstPassage(planRowId, dayNumber) {
-    const rows = db.exec(
-        `SELECT book, chapter, verse_start FROM plan_day_scripture
-         WHERE plan_id = ? AND day_number = ? AND sequence = 1`,
-        [planRowId, dayNumber]
-    )[0]?.values;
-    if (!rows || rows.length === 0) return null;
-    const [book, chapter, verse_start] = rows[0];
-    return { book, chapter, verse_start };
-}
-
 // Sets current_step to dayNumber and recomputes status (active, or
 // completed if dayNumber reaches duration_days). Used by both Continue and
 // clicking a specific day row in the plan detail popover.
@@ -589,6 +577,43 @@ export function setPlanProgress(planRowId, dayNumber) {
 // Resets a plan to its pre-start state. Days and scripture rows are untouched.
 export function restartPlan(planRowId) {
     db.run(`UPDATE plans SET current_step = 0, status = 'not_started' WHERE id = ?`, [planRowId]);
+    saveToStorage(db.export());
+}
+
+// Minimal plan fields needed by the template bar (no days/scripture).
+export function getPlan(planRowId) {
+    const rows = db.exec(
+        'SELECT id, plan_id, title, duration_days, current_step, status FROM plans WHERE id = ?',
+        [planRowId]
+    )[0]?.values;
+    if (!rows || rows.length === 0) return null;
+    const [id, plan_id, title, duration_days, current_step, status] = rows[0];
+    return { id, plan_id, title, duration_days, current_step, status };
+}
+
+// Every passage for one day, in sequence order, with pre-resolved
+// book/chapter/verse for navigation.
+export function getPlanDayScripture(planRowId, dayNumber) {
+    return db.exec(
+        `SELECT sequence, ref, display, book, chapter, verse_start, verse_end
+         FROM plan_day_scripture WHERE plan_id = ? AND day_number = ? ORDER BY sequence`,
+        [planRowId, dayNumber]
+    )[0]?.values.map(row => ({
+        sequence:    row[0],
+        ref:         row[1],
+        display:     row[2],
+        book:        row[3],
+        chapter:     row[4],
+        verse_start: row[5],
+        verse_end:   row[6]
+    })) ?? [];
+}
+
+// Closes the template bar's hold on a plan without losing progress:
+// current_step is preserved, only status reverts. The plan resumes from
+// the Plans tab via Continue, same as any other not_started plan.
+export function deactivatePlan(planRowId) {
+    db.run(`UPDATE plans SET status = 'not_started' WHERE id = ?`, [planRowId]);
     saveToStorage(db.export());
 }
 
