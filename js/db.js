@@ -14,6 +14,7 @@ const BUNDLED_PLAN_FILES = [
 let db             = null;
 let _booksCache    = null;
 let _storageWorker = null;
+let _SQL           = null; // cached sql.js module — reused by restore's validation step
 
 // Translation handles — keyed by integer translation ID (1 = KJV, 2 = ASV, …).
 // Populated during initDatabase(); read-only after that.
@@ -39,6 +40,7 @@ export async function initDatabase() {
     const SQL = await window.initSqlJs({
         locateFile: file => `./js/vendor/${file}`
     });
+    _SQL = SQL;
 
     const stored = await loadFromStorage();
     if (stored) {
@@ -645,7 +647,7 @@ export function deactivatePlan(planRowId) {
 }
 
 // ============================================================
-// Backup — manual export of the full core.db
+// Backup — manual export and restore of the full core.db
 // ============================================================
 
 // Exports the entire current core.db (reference + user data, including the
@@ -666,6 +668,67 @@ export function exportBackup() {
     anchor.download = filename;
     anchor.click();
     URL.revokeObjectURL(url);
+}
+
+// Minimal structural check for a candidate restore file: opens `bytes` as a
+// throwaway sql.js Database (never touching the live `db`) and confirms a
+// `books` table exists. Catches an obviously wrong file (bad extension, an
+// unrelated SQLite file) without validating full schema correctness. Never
+// throws — any parse failure (not even a SQLite file, corrupt, etc.) is
+// treated as "not a valid backup."
+export function looksLikeCoreDb(bytes) {
+    let testDb = null;
+    try {
+        testDb = new _SQL.Database(bytes);
+        const rows = testDb.exec(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='books'"
+        );
+        return rows.length > 0 && rows[0].values.length > 0;
+    } catch (e) {
+        return false;
+    } finally {
+        testDb?.close();
+    }
+}
+
+// Destructively replaces the stored core.db with `bytes`. Unlike
+// saveToStorage() (fire-and-forget, off-thread, used for every ordinary
+// write), this runs on the main thread and returns a Promise that rejects
+// on failure: a destructive restore must not report success — or trigger
+// the reload that follows it — on a silent write failure.
+//
+// Deliberately does NOT fall back from OPFS to IndexedDB the way
+// storage-worker.js's ordinary writes do. loadFromStorage() always checks
+// OPFS first on the next boot; if OPFS is available but write()/close()
+// fails partway (quota, transient error), createWritable() has already
+// truncated the target — falling back to IndexedDB here would "succeed"
+// while leaving a truncated core.db in OPFS that the next boot reads
+// instead of the good IndexedDB copy, i.e. exactly the half-restored state
+// this function must not produce. If OPFS is the platform's storage,
+// commit to it and let failure reject outright.
+export async function restoreCoreDb(bytes) {
+    if ('storage' in navigator && 'getDirectory' in navigator.storage) {
+        const root     = await navigator.storage.getDirectory();
+        const handle   = await root.getFileHandle('core.db', { create: true });
+        const writable = await handle.createWritable();
+        await writable.write(bytes);
+        await writable.close();
+        return;
+    }
+
+    await new Promise((resolve, reject) => {
+        const request = indexedDB.open('ScriptureStudy', 1);
+        request.onupgradeneeded = () => {
+            request.result.createObjectStore('db');
+        };
+        request.onsuccess = () => {
+            const tx = request.result.transaction('db', 'readwrite');
+            tx.objectStore('db').put(bytes, 'core');
+            tx.oncomplete = () => resolve();
+            tx.onerror    = () => reject(tx.error);
+        };
+        request.onerror = () => reject(request.error);
+    });
 }
 
 // ============================================================
