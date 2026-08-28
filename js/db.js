@@ -382,11 +382,94 @@ function migratePlanTables() {
     `);
 }
 
+// Insert a full plan (plans + plan_days + plan_day_scripture rows) and persist.
+// `meta` fields: id, title, description, author, language, duration_days, tags,
+// schema_version, current_step (all but id/title/duration_days optional).
+// `days`: [{ day_number, title?, devotional_title?, devotional_body?,
+//            reflection_questions_json?, scripture: [{ ref, display }] }].
+// Throws an Error with `.code === 'DUPLICATE_PLAN_ID'` if meta.id is already
+// installed. Returns { planRowId, approximateCount, unresolvedCount }.
+export function insertPlan(meta, days, source) {
+    const existing = db.exec('SELECT id FROM plans WHERE plan_id = ?', [meta.id]);
+    if (existing.length > 0) {
+        const err = new Error(`Plan already installed: ${meta.id}`);
+        err.code = 'DUPLICATE_PLAN_ID';
+        throw err;
+    }
+
+    const durationDays = meta.duration_days;
+    let currentStep = meta.current_step ?? 0;
+    let status = 'not_started';
+    if (currentStep >= durationDays) {
+        currentStep = durationDays;
+        status = 'completed';
+    } else if (currentStep > 0) {
+        status = 'active';
+    }
+
+    db.run(
+        `INSERT INTO plans (plan_id, title, description, author, language, duration_days, tags, schema_version, source, imported_at, current_step, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            meta.id,
+            meta.title,
+            meta.description ?? null,
+            meta.author ?? null,
+            meta.language ?? 'en',
+            durationDays,
+            JSON.stringify(meta.tags ?? []),
+            meta.schema_version ?? 1,
+            source,
+            Math.floor(Date.now() / 1000),
+            currentStep,
+            status
+        ]
+    );
+
+    const planRowId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+    let approximateCount = 0;
+    let unresolvedCount = 0;
+
+    for (const day of days) {
+        db.run(
+            `INSERT INTO plan_days (plan_id, day_number, title, devotional_title, devotional_body, reflection_questions_json)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [
+                planRowId,
+                day.day_number,
+                day.title ?? null,
+                day.devotional_title ?? null,
+                day.devotional_body ?? null,
+                day.reflection_questions_json ?? null
+            ]
+        );
+
+        let sequence = 0;
+        for (const passage of day.scripture) {
+            sequence++;
+            const resolved = resolveUsfmRef(passage.ref);
+            if (!resolved) {
+                unresolvedCount++;
+                console.error(`insertPlan: could not resolve ref "${passage.ref}" for plan "${meta.id}" day ${day.day_number} — skipping passage.`);
+                continue;
+            }
+            if (resolved.approximate) approximateCount++;
+            db.run(
+                `INSERT INTO plan_day_scripture (plan_id, day_number, sequence, ref, display, book, chapter, verse_start, verse_end)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [planRowId, day.day_number, sequence, passage.ref, passage.display,
+                 resolved.book, resolved.chapter, resolved.verseStart, resolved.verseEnd]
+            );
+        }
+    }
+
+    saveToStorage(db.export());
+    return { planRowId, approximateCount, unresolvedCount };
+}
+
 // Seed the bundled reading plans from data/plans/ on first install. Idempotent:
 // a plan already present (matched by its stable plan_id) is left untouched.
 async function seedBundledPlans() {
-    let seededAny = false;
-
     for (const filename of BUNDLED_PLAN_FILES) {
         let plan;
         try {
@@ -399,66 +482,19 @@ async function seedBundledPlans() {
         }
 
         const meta = plan.plan_metadata;
-        const existing = db.exec('SELECT id FROM plans WHERE plan_id = ?', [meta.id]);
-        if (existing.length > 0) {
+        let result;
+        try {
+            result = insertPlan(meta, plan.days, 'bundled');
+        } catch (e) {
+            if (e.code === 'DUPLICATE_PLAN_ID') continue; // already seeded
+            console.error(`seedBundledPlans: failed to seed ${filename}:`, e);
             continue;
         }
 
-        db.run(
-            `INSERT INTO plans (plan_id, title, description, author, language, duration_days, tags, schema_version, source, imported_at, current_step, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'bundled', ?, 0, 'not_started')`,
-            [
-                meta.id,
-                meta.title,
-                meta.description ?? null,
-                meta.author ?? null,
-                meta.language ?? 'en',
-                meta.duration_days,
-                JSON.stringify(meta.tags ?? []),
-                meta.schema_version ?? 1,
-                Math.floor(Date.now() / 1000)
-            ]
-        );
-
-        const planRowId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
-        let approximateCount = 0;
-        let unresolvedCount = 0;
-
-        for (const day of plan.days) {
-            db.run(
-                `INSERT INTO plan_days (plan_id, day_number, title, devotional_title, devotional_body, reflection_questions_json)
-                 VALUES (?, ?, NULL, NULL, NULL, NULL)`,
-                [planRowId, day.day_number]
-            );
-
-            let sequence = 0;
-            for (const passage of day.scripture) {
-                sequence++;
-                const resolved = resolveUsfmRef(passage.ref);
-                if (!resolved) {
-                    unresolvedCount++;
-                    console.error(`seedBundledPlans: could not resolve ref "${passage.ref}" in ${filename} day ${day.day_number} — skipping passage.`);
-                    continue;
-                }
-                if (resolved.approximate) approximateCount++;
-                db.run(
-                    `INSERT INTO plan_day_scripture (plan_id, day_number, sequence, ref, display, book, chapter, verse_start, verse_end)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [planRowId, day.day_number, sequence, passage.ref, passage.display,
-                     resolved.book, resolved.chapter, resolved.verseStart, resolved.verseEnd]
-                );
-            }
-        }
-
-        seededAny = true;
         console.log(
             `seedBundledPlans: seeded "${meta.title}" (${plan.days.length} days, ` +
-            `${approximateCount} approximate ranges, ${unresolvedCount} unresolved refs)`
+            `${result.approximateCount} approximate ranges, ${result.unresolvedCount} unresolved refs)`
         );
-    }
-
-    if (seededAny) {
-        saveToStorage(db.export());
     }
 }
 

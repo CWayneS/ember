@@ -2203,3 +2203,103 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     font-size: var(--size-large);
     z-index: 999;
 }
+
+/* ============================================================
+   Plan Metadata Dialog (CSV import)
+   ============================================================ */
+.plan-metadata-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 400;
+}
+
+.plan-metadata-dialog {
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    border-radius: 10px;
+    padding: 24px;
+    width: 360px;
+    max-width: calc(100vw - 32px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+    font-family: var(--font-reading);
+}
+
+.plan-metadata-dialog h2 {
+    font-size: var(--size-base);
+    margin: 0 0 8px;
+}
+
+.plan-metadata-hint {
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+    margin: 0 0 16px;
+    line-height: var(--line-height-ui);
+}
+
+.plan-metadata-field {
+    display: block;
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+}
+
+.plan-metadata-required {
+    color: var(--danger);
+}
+
+.plan-metadata-field input,
+.plan-metadata-field textarea {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-medium);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: var(--size-small);
+    resize: vertical;
+}
+
+.plan-metadata-field input:focus,
+.plan-metadata-field textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.plan-metadata-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.plan-metadata-actions button {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: var(--size-small);
+    font-family: inherit;
+}
+
+.plan-metadata-cancel {
+    color: var(--text-secondary);
+}
+
+.plan-metadata-cancel:hover {
+    color: var(--text-primary);
+}
+
+.plan-metadata-confirm {
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+}
+
+.plan-metadata-confirm:hover {
+    background: var(--accent-hover);
+}
