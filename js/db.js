@@ -320,6 +320,33 @@ function createUserTables() {
     try { db.run('ALTER TABLE notes ADD COLUMN position REAL'); } catch (_) {}
 
     migratePlanTables();
+    ensureMetaTable();
+}
+
+// Build 4: single-row descriptive table. Created idempotently; the row is
+// inserted once, on first creation, and never updated after that — created_at
+// marks when this core.db was first initialized, not when it was last backed up.
+function ensureMetaTable() {
+    db.run(`
+        CREATE TABLE IF NOT EXISTS meta (
+            schema_version INTEGER NOT NULL,
+            created_at     INTEGER NOT NULL,
+            app_name       TEXT NOT NULL DEFAULT 'Ember Bible Study'
+        );
+    `);
+
+    const rowCount = db.exec('SELECT COUNT(*) FROM meta')[0].values[0][0];
+    if (rowCount === 0) {
+        db.run(
+            'INSERT INTO meta (schema_version, created_at, app_name) VALUES (?, ?, ?)',
+            [1, Math.floor(Date.now() / 1000), 'Ember Bible Study']
+        );
+        // migratePlanTables()'s DDL relies on some later write in the boot to
+        // persist it; meta's one-time row can't rely on that (an upgrade boot
+        // where plans/translations are already seeded may write nothing else),
+        // so it saves explicitly to guarantee created_at is never regenerated.
+        saveToStorage(db.export());
+    }
 }
 
 // Build 3: replace the Build 1 placeholder plan tables with the reading-plans
