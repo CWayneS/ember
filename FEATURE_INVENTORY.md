@@ -203,7 +203,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 111. Clicking the study row: opens the study in a new tab (or switches to existing tab if already open) — notes.js:388
 112. Delete button (✕) hidden by default, fades in on row hover — style.css
 113. Delete study: confirm dialog; if notes exist, includes count in prompt — notes.js:406-415
-114. Deleting a study also deletes all its notes (CASCADE) and closes its open tab if any — db.js:deleteStudy, panels.js:closeStudy
+114. Deleting a study also deletes all its notes — and each note's anchors, tag assignments, and FTS index row — via an explicit per-note cleanup (not the schema's `ON DELETE CASCADE`, which sql.js doesn't enforce); also closes the study's open tab if any — db.js:deleteStudy/deleteNoteRows, panels.js:closeStudy
 115. Empty state: "No studies yet. Click + to start one." — notes.js:374-378
 
 ---
@@ -362,7 +362,7 @@ All five prefixes are functional:
 192. Clearing browser storage (site data) deletes all notes, studies, tags, bookmarks, and markups (user data reset to empty core.db); translations must be re-fetched
 193. Font size preferences and default reference tab persisted in `app_state` table — db.js:setState/getState
 194. Per-pane reading position, translation, and scroll offset persisted in `localStorage` — reader.js
-194a. sql.js does not enforce foreign keys by default (confirmed empirically — the `foreign_keys` pragma is off, and a parent-row delete leaves child rows in place). The schema's `ON DELETE CASCADE` on `plan_days`/`plan_day_scripture` is therefore inert; `deletePlan()` deletes both explicitly, in dependency order, before the `plans` row — db.js:deletePlan
+194a. sql.js does not enforce foreign keys by default (confirmed empirically — the `foreign_keys` pragma is off, and a parent-row delete leaves child rows in place). The schema's `ON DELETE CASCADE` on `plan_days`/`plan_day_scripture` is therefore inert; `deletePlan()` deletes both explicitly, in dependency order, before the `plans` row — db.js:deletePlan. `deleteNote()`/`deleteStudy()` had the same gap (notes.study_id has no CASCADE declared at all, and note_anchors/tag_assignments weren't being cleaned up on delete either) — both now go through a shared `deleteNoteRows()` helper for the same explicit cleanup — db.js:deleteNoteRows
 
 ---
 

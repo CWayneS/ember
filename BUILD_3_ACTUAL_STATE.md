@@ -1,10 +1,10 @@
 # BUILD_3_ACTUAL_STATE.md — Ground-Truth Audit
 
-> **⚠️ SNAPSHOT:** This document reflects the codebase as of 2026-08-27, after Build 3 (reading plans) shipped.
+> **⚠️ SNAPSHOT:** This document reflects the codebase as of 2026-08-28, after Build 3 (reading plans) shipped and its deferred `deleteStudy()`/`deleteNote()` fix landed.
 > When this document and the actual source files disagree, **the source files are correct.**
 > This document supersedes `BUILD_2_ACTUAL_STATE.md`.
 
-_Read from source files on 2026-08-27. No spec, proposal, or guide documents consulted for content — Build_3_Spec.md was checked only to confirm scope, not copied from. Several inaccuracies in `BUILD_2_ACTUAL_STATE.md` were found and corrected here (noted inline); it had drifted from the code even before Build 3 started._
+_Read from source files on 2026-08-27, updated 2026-08-28 to reflect the deleteStudy()/deleteNote() fix. No spec, proposal, or guide documents consulted for content — Build_3_Spec.md was checked only to confirm scope, not copied from. Several inaccuracies in `BUILD_2_ACTUAL_STATE.md` were found and corrected here (noted inline); it had drifted from the code even before Build 3 started._
 
 ---
 
@@ -202,7 +202,7 @@ So `migratePlanTables()`'s legacy-shape check (a `plans` table present but missi
 
 **⚠️ `ON DELETE CASCADE` here is declared but not enforced.** sql.js does not turn on `PRAGMA foreign_keys` by default (verified empirically this session — a throwaway script confirmed `PRAGMA foreign_keys` reads `0`, and a parent-row `DELETE` left child rows in place). `db.js:deletePlan()` therefore deletes `plan_day_scripture` and `plan_days` explicitly, in that order, before deleting the `plans` row — it does not rely on the schema's cascade at all.
 
-This is not new to Build 3: `deleteStudy()` has the identical latent bug for `notes`/`note_anchors` (its comment claims "CASCADE on notes FK handles notes deletion," which is not actually true under sql.js's defaults — it only manually cleans up `notes_fts`, a virtual table CASCADE could never reach anyway). That bug is **intentionally not fixed in this build** — it was found while building `deletePlan()`, and fixing `deleteStudy()` to match is deferred to after Build 3 ships.
+This wasn't new to Build 3: `deleteStudy()` had the identical latent bug for `notes`/`note_anchors`/`tag_assignments` (its old comment claimed "CASCADE on notes FK handles notes deletion," which was never true under sql.js's defaults — `notes.study_id` doesn't even declare `ON DELETE CASCADE` in the schema, and the function only manually cleaned up `notes_fts`, a virtual table CASCADE could never reach anyway). It was found while building `deletePlan()`, deliberately deferred, then fixed at the end of Build 3: `deleteNote()` and `deleteStudy()` now both go through a shared `deleteNoteRows(noteId)` helper — the same explicit, dependency-ordered delete pattern as `deletePlan()` — that removes `note_anchors`, `tag_assignments`, and the `notes_fts` row before the `notes` row itself. `deleteNote()` had the identical leak for every single-note delete, not just study-wide deletes, and is fixed the same way.
 
 ### Translation DB Schema (e.g. `data/translations/kjv.db`) — unchanged, but corrected from BUILD_2_ACTUAL_STATE.md
 
@@ -414,12 +414,12 @@ Scripture rendering (6 translations, 66 books); per-pane independent translation
 - **Bundled plan seeding** — three plans, idempotent, runs every boot.
 - **USFM resolution** — all 66 books, five ref shapes, resolved once at write time.
 - **Template bar** — fully wired: Prev/Next/Prev Day/Next Day, progress dots, clickable passage label, close. Does not auto-activate on load (by design).
+- **`deleteStudy()`/`deleteNote()`** — not a new feature, but fixed during Build 3's wrap-up: both leaked orphaned `note_anchors`/`tag_assignments` rows (sql.js doesn't enforce the schema's `ON DELETE CASCADE`, and `notes.study_id` doesn't even declare one). Both now go through a shared `deleteNoteRows()` helper — see §2. No longer listed under Partially Wired below.
 
 ### Partially Wired / Incomplete
 
 - **Reference → Language tab**: static placeholder only, unchanged.
 - **Study Templates sub-tab**: static placeholder only, by design for this build — no import button, no list, no JS renders it at all.
-- **`deleteStudy()`**: has a latent FK-cascade bug (see §2) — **known, and intentionally not fixed in this build.**
 - **Devotional content** (`plan_days.devotional_title`/`devotional_body`/`reflection_questions_json`): columns exist and `insertPlan()`/`getPlanDetail()` read/write them, but nothing populates them — all three bundled plans and both import formats are Scripture-only. No UI renders them even if they were populated (the plan detail popover's day rows only ever show `title` and the first passage's `display` string).
 - **Simultaneous "active" plans**: nothing stops more than one plan from having `status = 'active'` at once (e.g. activate plan A, leave the bar up, go activate plan B from the Plans tab — A's row is never touched). The template bar only ever shows one plan; the Plans tab list is unaffected and continues to reflect each plan's own state correctly. Not a bug exactly — just an unenforced assumption worth knowing about.
 - **`sw.js`'s `PRECACHE` list is stale**, and more so after this build: it lists `app.js`, `db.js`, `reader.js`, `selection.js`, `notes.js`, `tags.js`, `search.js`, `panels.js`, `state.js`, `storage-worker.js`, and the two vendor files — but not `reference.js`, `bookmarks.js`, `markups.js`, `help.js`, `popover-registry.js`, `reader-settings.js`, `notes-settings.js`, `reference-settings.js` (all pre-existing gaps from Build 2), nor the three new Build 3 modules (`usfm.js`, `plans.js`, `template-bar.js`) or `data/plans/*.json`. This doesn't break offline use in practice — the fetch handler's cache-first-with-fallback caches anything on first successful fetch regardless of whether it was in the install-time list — but it means those files aren't guaranteed cached until the user has actually triggered a fetch for each of them at least once while online.
