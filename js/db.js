@@ -530,6 +530,68 @@ export function deletePlan(planRowId) {
     saveToStorage(db.export());
 }
 
+// Full detail for the plan popover: plan fields plus every day with its
+// optional title and the display string of its first (sequence=1) passage.
+export function getPlanDetail(planRowId) {
+    const planRows = db.exec(
+        `SELECT id, plan_id, title, description, author, duration_days, current_step, status
+         FROM plans WHERE id = ?`,
+        [planRowId]
+    )[0]?.values;
+    if (!planRows || planRows.length === 0) return null;
+
+    const [id, plan_id, title, description, author, duration_days, current_step, status] = planRows[0];
+
+    const dayRows = db.exec(
+        'SELECT day_number, title FROM plan_days WHERE plan_id = ? ORDER BY day_number',
+        [planRowId]
+    )[0]?.values ?? [];
+
+    const firstPassageRows = db.exec(
+        'SELECT day_number, display FROM plan_day_scripture WHERE plan_id = ? AND sequence = 1',
+        [planRowId]
+    )[0]?.values ?? [];
+    const firstPassageByDay = new Map(firstPassageRows.map(([dayNumber, display]) => [dayNumber, display]));
+
+    const days = dayRows.map(([day_number, dayTitle]) => ({
+        day_number,
+        title: dayTitle,
+        first_passage_display: firstPassageByDay.get(day_number) ?? null
+    }));
+
+    return { id, plan_id, title, description, author, duration_days, current_step, status, days };
+}
+
+// The first passage of a given day, pre-resolved for navigation.
+export function getPlanDayFirstPassage(planRowId, dayNumber) {
+    const rows = db.exec(
+        `SELECT book, chapter, verse_start FROM plan_day_scripture
+         WHERE plan_id = ? AND day_number = ? AND sequence = 1`,
+        [planRowId, dayNumber]
+    )[0]?.values;
+    if (!rows || rows.length === 0) return null;
+    const [book, chapter, verse_start] = rows[0];
+    return { book, chapter, verse_start };
+}
+
+// Sets current_step to dayNumber and recomputes status (active, or
+// completed if dayNumber reaches duration_days). Used by both Continue and
+// clicking a specific day row in the plan detail popover.
+export function setPlanProgress(planRowId, dayNumber) {
+    const rows = db.exec('SELECT duration_days FROM plans WHERE id = ?', [planRowId])[0]?.values;
+    if (!rows || rows.length === 0) return;
+    const durationDays = rows[0][0];
+    const status = dayNumber >= durationDays ? 'completed' : 'active';
+    db.run('UPDATE plans SET current_step = ?, status = ? WHERE id = ?', [dayNumber, status, planRowId]);
+    saveToStorage(db.export());
+}
+
+// Resets a plan to its pre-start state. Days and scripture rows are untouched.
+export function restartPlan(planRowId) {
+    db.run(`UPDATE plans SET current_step = 0, status = 'not_started' WHERE id = ?`, [planRowId]);
+    saveToStorage(db.export());
+}
+
 // ============================================================
 // Persistence — OPFS with IndexedDB fallback
 // ============================================================

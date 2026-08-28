@@ -1,6 +1,11 @@
 // plans.js — Reading plan import (JSON + CSV) and the Plans tab UI
 
-import { insertPlan, getPlans, deletePlan } from './db.js';
+import {
+    insertPlan, getPlans, deletePlan,
+    getPlanDetail, getPlanDayFirstPassage, setPlanProgress, restartPlan,
+    makeVerseId
+} from './db.js';
+import { navigateTo } from './reader.js';
 
 // ============================================================
 // Plans tab — Reading Plans sub-tab (list, import, delete)
@@ -83,10 +88,7 @@ function buildPlanCard(plan) {
 
     const info = document.createElement('div');
     info.className = 'plan-card-info';
-    info.addEventListener('click', () => {
-        // Placeholder until the plan detail popover ships — opens the plan.
-        console.log('Plan card clicked:', plan.plan_id);
-    });
+    info.addEventListener('click', () => openPlanDetailPopover(plan.id));
 
     const titleRow = document.createElement('div');
     titleRow.className = 'plan-card-title-row';
@@ -131,7 +133,11 @@ function planStatusLabel(status) {
     return 'Not Started';
 }
 
-async function handleDeletePlan(plan) {
+// `plan` needs only { id, title, current_step, duration_days } — both the
+// getPlans() row (card ✕) and the getPlanDetail() result (popover Delete
+// button) satisfy that. `onDeleted` runs only after a confirmed delete —
+// the popover uses it to close itself.
+async function handleDeletePlan(plan, { onDeleted } = {}) {
     const confirmed = await openConfirmDialog({
         title: `Delete "${plan.title}"?`,
         lines: [
@@ -145,6 +151,25 @@ async function handleDeletePlan(plan) {
 
     deletePlan(plan.id);
     renderReadingPlansList();
+    onDeleted?.();
+}
+
+// Same field requirements as handleDeletePlan(); `onRestarted` runs only
+// after a confirmed restart.
+async function handleRestartPlan(plan, { onRestarted } = {}) {
+    const confirmed = await openConfirmDialog({
+        title: `Restart "${plan.title}"?`,
+        lines: [
+            `Current progress: Day ${plan.current_step} of ${plan.duration_days}`,
+            'This will reset your progress to Day 1. Your notes are not affected.'
+        ],
+        confirmLabel: 'Restart'
+    });
+    if (!confirmed) return;
+
+    restartPlan(plan.id);
+    renderReadingPlansList();
+    onRestarted?.();
 }
 
 // Small centered modal with a heading, one or more message lines, and
@@ -206,6 +231,155 @@ function openConfirmDialog({ title, lines, confirmLabel, cancelLabel = 'Cancel',
 
         confirmBtn.focus();
     });
+}
+
+// ============================================================
+// Plan detail popover
+// ============================================================
+
+function openPlanDetailPopover(planRowId) {
+    const detail = getPlanDetail(planRowId);
+    if (!detail) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'plan-metadata-overlay';
+
+    const dialog = document.createElement('div');
+    dialog.className = 'plan-detail-dialog';
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+
+    function closePopover() {
+        document.removeEventListener('keydown', onKeydown);
+        overlay.remove();
+    }
+    function onKeydown(e) { if (e.key === 'Escape') closePopover(); }
+
+    // Header: title + Continue
+    const header = document.createElement('div');
+    header.className = 'plan-detail-header';
+
+    const titleEl = document.createElement('h2');
+    titleEl.className   = 'plan-detail-title';
+    titleEl.textContent = detail.title;
+
+    const continueBtn = document.createElement('button');
+    continueBtn.className   = 'plan-detail-continue';
+    continueBtn.textContent = 'Continue →';
+    continueBtn.addEventListener('click', () => {
+        goToPlanDay(detail, effectiveCurrentDay(detail));
+        closePopover();
+    });
+
+    header.appendChild(titleEl);
+    header.appendChild(continueBtn);
+    dialog.appendChild(header);
+
+    // Progress summary (omitted for not_started)
+    if (detail.status !== 'not_started') {
+        const progress = document.createElement('div');
+        progress.className   = 'plan-detail-progress';
+        progress.textContent = `Day ${detail.current_step} of ${detail.duration_days}`;
+        dialog.appendChild(progress);
+    }
+
+    // Day list
+    const dayList = document.createElement('div');
+    dayList.className = 'plan-detail-days';
+
+    const currentDay = effectiveCurrentDay(detail);
+    let currentRowEl = null;
+
+    for (const day of detail.days) {
+        const row = document.createElement('button');
+        row.type      = 'button';
+        row.className = 'plan-detail-day-row';
+
+        let statusIcon = '○';
+        if (day.day_number < currentDay) {
+            statusIcon = '☑';
+            row.classList.add('completed');
+        } else if (day.day_number === currentDay) {
+            statusIcon = '▶';
+            row.classList.add('current');
+            currentRowEl = row;
+        }
+
+        const iconEl = document.createElement('span');
+        iconEl.className   = 'plan-detail-day-icon';
+        iconEl.textContent = statusIcon;
+
+        const labelEl = document.createElement('span');
+        labelEl.className = 'plan-detail-day-label';
+        const labelParts  = [`Day ${day.day_number}`];
+        if (day.title) labelParts.push(day.title);
+        if (day.first_passage_display) labelParts.push(day.first_passage_display);
+        labelEl.textContent = labelParts.join(' — ');
+
+        row.appendChild(iconEl);
+        row.appendChild(labelEl);
+        row.addEventListener('click', () => {
+            goToPlanDay(detail, day.day_number);
+            closePopover();
+        });
+
+        dayList.appendChild(row);
+    }
+
+    dialog.appendChild(dayList);
+
+    // Footer: Restart + Delete
+    const footer = document.createElement('div');
+    footer.className = 'plan-detail-footer';
+
+    const restartBtn = document.createElement('button');
+    restartBtn.className   = 'plan-detail-restart';
+    restartBtn.textContent = 'Restart';
+    restartBtn.addEventListener('click', () => {
+        handleRestartPlan(detail, { onRestarted: closePopover });
+    });
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className   = 'plan-detail-delete';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', () => {
+        handleDeletePlan(detail, { onDeleted: closePopover });
+    });
+
+    footer.appendChild(restartBtn);
+    footer.appendChild(deleteBtn);
+    dialog.appendChild(footer);
+
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closePopover(); });
+    document.addEventListener('keydown', onKeydown);
+
+    if (currentRowEl) {
+        currentRowEl.scrollIntoView({ block: 'center' });
+    }
+}
+
+// The day a plan is "on": current_step if it has started, else Day 1.
+function effectiveCurrentDay(detail) {
+    return detail.current_step > 0 ? detail.current_step : 1;
+}
+
+// Sets progress to dayNumber and navigates the reader to that day's first
+// passage. Used by both Continue and clicking a specific day row.
+function goToPlanDay(detail, dayNumber) {
+    setPlanProgress(detail.id, dayNumber);
+
+    const passage = getPlanDayFirstPassage(detail.id, dayNumber);
+    if (!passage) {
+        console.error(`goToPlanDay: no first passage for plan "${detail.plan_id}" day ${dayNumber}`);
+        return;
+    }
+
+    const verseId = makeVerseId(passage.book, passage.chapter, passage.verse_start);
+    navigateTo(passage.book, passage.chapter, verseId);
+    renderReadingPlansList();
 }
 
 // ============================================================

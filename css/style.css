@@ -2455,3 +2455,133 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
 .plan-card-delete:hover {
     color: var(--danger);
 }
+
+/* ============================================================
+   Plan Detail Popover
+   ============================================================ */
+.plan-detail-dialog {
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    border-radius: 10px;
+    width: 460px;
+    max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 64px);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+    font-family: var(--font-reading);
+    overflow: hidden;
+}
+
+.plan-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 20px 20px 0;
+}
+
+.plan-detail-title {
+    font-family: var(--font-display);
+    font-size: var(--size-base);
+    font-weight: 700;
+    margin: 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.plan-detail-continue {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    border-radius: 6px;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    font-size: var(--size-small);
+}
+
+.plan-detail-continue:hover {
+    background: var(--accent-hover);
+}
+
+.plan-detail-progress {
+    font-size: var(--size-small);
+    color: var(--text-muted);
+    padding: 6px 20px 16px;
+}
+
+.plan-detail-days {
+    flex: 1;
+    overflow-y: auto;
+    border-top: 1px solid var(--border-light);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.plan-detail-day-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 20px;
+    text-align: left;
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.plan-detail-day-row:last-child {
+    border-bottom: none;
+}
+
+.plan-detail-day-row:hover {
+    background: var(--bg-hover);
+}
+
+.plan-detail-day-row.completed {
+    color: var(--text-muted);
+}
+
+.plan-detail-day-row.current {
+    background: var(--accent-light);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.plan-detail-day-icon {
+    flex-shrink: 0;
+    width: 1.2em;
+    text-align: center;
+}
+
+.plan-detail-day-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.plan-detail-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 14px 20px;
+}
+
+.plan-detail-restart,
+.plan-detail-delete {
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: var(--size-small);
+    font-weight: 600;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+.plan-detail-restart:hover {
+    color: var(--text-primary);
+}
+
+.plan-detail-delete:hover {
+    color: var(--danger);
+}
