@@ -362,6 +362,81 @@ All five prefixes are functional:
 192. Clearing browser storage (site data) deletes all notes, studies, tags, bookmarks, and markups (user data reset to empty core.db); translations must be re-fetched
 193. Font size preferences and default reference tab persisted in `app_state` table — db.js:setState/getState
 194. Per-pane reading position, translation, and scroll offset persisted in `localStorage` — reader.js
+194a. sql.js does not enforce foreign keys by default (confirmed empirically — the `foreign_keys` pragma is off, and a parent-row delete leaves child rows in place). The schema's `ON DELETE CASCADE` on `plan_days`/`plan_day_scripture` is therefore inert; `deletePlan()` deletes both explicitly, in dependency order, before the `plans` row — db.js:deletePlan
+
+---
+
+## Reading Plans
+
+195. Plans tab in the reference panel tab bar, after Language — index.html:68. It plugs into panels.js's existing generic tab-switch handler (any `.tab-btn` + matching `#<tab>-tab` panel); no plans-specific code was needed in panels.js
+195a. Two sub-tabs inside the Plans tab: Reading Plans and Study Templates, with their own independent tab-switch logic — index.html:80-93, plans.js:initPlansSubtabs/switchPlansSubtab
+196. Reading Plans sub-tab lists every installed plan as a card; the list re-renders whenever the Plans tab button is clicked (so imports/deletes made earlier are reflected) and immediately after any import or delete — plans.js:initPlans, renderReadingPlansList
+197. Default sort: In Progress (active) first, then Not Started, then Completed; alphabetical by title within each group — db.js:getPlans
+198. Each card shows the title, a status badge ("In Progress" / "Not Started" / "Completed"), and — only for in-progress plans — a "Day N of M" progress line — plans.js:buildPlanCard, planStatusLabel
+199. ✕ on a card opens a delete confirmation dialog without also opening the plan detail popover (click event is stopped from bubbling) — plans.js:buildPlanCard
+200. Clicking a card anywhere else opens the plan detail popover — plans.js:buildPlanCard → openPlanDetailPopover
+201. Import button opens a native file picker restricted to `.json`/`.csv` — index.html:86-87, plans.js:initPlanImport
+202. Import failures (duplicate id, missing required fields, malformed file, unknown extension) are surfaced via `alert()` with the specific message from the parser — plans.js:initPlanImport
+203. Empty state (all plans deleted): "No reading plans installed. Use the Import button to add a plan." — plans.js:renderReadingPlansList
+204. Study Templates sub-tab shows static placeholder text only ("Study Templates — coming in a future build...") — plain markup in index.html:92, no JS renders it, no import button or list
+
+---
+
+## Plan Detail Popover
+
+205. Clicking a plan card opens a centered modal (reuses the `.plan-metadata-overlay` backdrop) with the plan title, a prominent filled "Continue →" button, a progress summary line (omitted for not_started plans), a scrollable day-list checklist, and a Restart/Delete footer — plans.js:openPlanDetailPopover
+206. Each day row shows a status icon — ☑ completed, ▶ current, ○ upcoming — the day number, an optional day title, and that day's first passage display string, joined with " — " — plans.js:openPlanDetailPopover
+206a. The popover opens already scrolled to the current day (day 1 for not_started plans) — plans.js:openPlanDetailPopover (`currentRowEl.scrollIntoView({ block: 'center' })`)
+207. Clicking Continue, or clicking any day row, activates the template bar for that plan starting at that day, then closes the popover — plans.js → template-bar.js:activatePlan
+208. Restart and Delete each open a confirmation dialog naming the plan and its current progress ("Current progress: Day N of M") and stating notes are not affected. Restart resets `current_step` to 0 and `status` to `not_started`; Delete removes the plan and its `plan_days`/`plan_day_scripture` rows — plans.js:handleRestartPlan/handleDeletePlan, db.js:restartPlan/deletePlan
+208a. Both dialogs (and the CSV import metadata dialog) are built from DOM nodes via `textContent`, never `innerHTML`, so a plan title sourced from imported data can never be interpreted as markup — plans.js:openConfirmDialog
+
+---
+
+## Plan Import — JSON and CSV
+
+209. `importPlan(file)` (js/plans.js) detects format by file extension and routes to a JSON or CSV parser; unknown extensions get "Only .json and .csv plan files are supported." — plans.js:importPlan
+210. JSON import requires `plan_metadata.id`, `.title`, `.duration_days`, and a non-empty `days` array; any missing field produces "This plan file is missing required field(s): …" naming exactly which ones — plans.js:importJsonPlan
+211. A `plan_metadata.schedule_type` of `'date'`, or a `start_date` field, is converted to sequential silently (no warning shown); `current_step` is derived from days elapsed since `start_date`, clamped to `duration_days`, or 0 if `start_date` is missing/unparseable — plans.js:deriveCurrentStepFromStartDate
+212. A duplicate `plan_id` (from either JSON or CSV) is rejected with "A plan with this ID is already installed." — db.js:insertPlan (throws with `.code === 'DUPLICATE_PLAN_ID'`), plans.js:insertPlanOrThrowFriendly
+213. Malformed or unreadable files (invalid JSON, a CSV with no `day`/`ref`/`display` header) show "Could not read this file. Make sure it's a valid Ember plan file." — plans.js:importJsonPlan/importCsvPlan/parseCsv
+214. CSV import expects `day`, `ref`, `display` columns in any order (matched by header name), supports minimal RFC4180-style quoting, infers `duration_days` from the highest `day` value, and opens a metadata dialog (title required; description and author optional) before inserting — plans.js:importCsvPlan, parseCsv, openCsvMetadataDialog
+215. CSV-imported plans are always Scripture-only (no devotional fields) and are assigned a generated `plan_id` (`csv-{slugified-title}-{timestamp}`), since the CSV format carries no stable external id — plans.js:importCsvPlan, slugify
+
+---
+
+## Bundled Reading Plans
+
+216. Three plans ship as JSON files in `data/plans/` and are seeded into `plans`/`plan_days`/`plan_day_scripture` on first run — db.js:seedBundledPlans, called from `initDatabase()` right after `createUserTables()`/schema migration, before translation seeding
+216a. **M'Cheyne One-Year Reading Plan** (`mcheyne-1year`) — 365 days, 4 passages/day — data/plans/mcheyne-1year.json
+216b. **Bible in a Year (Canonical)** (`bible-in-a-year-canonical`) — 362 days (not 365 — the actual bundled data covers the whole Bible in fewer, denser days) — data/plans/bible-in-a-year-canonical.json
+216c. **Bible in a Year (Chronological)** (`bible-in-a-year-chronological`) — 365 days, passages ordered by historical sequence — data/plans/bible-in-a-year-chronological.json
+217. Seeding is idempotent: a plan whose `plan_id` already exists is silently skipped (matched via `insertPlan()`'s duplicate check) — db.js:seedBundledPlans
+218. All three ship Scripture-only (no `devotional_title`/`devotional_body`/`reflection_questions_json`) and appear "Not Started" on fresh install — db.js:insertPlan
+
+---
+
+## USFM Reference Resolution
+
+219. `js/usfm.js` maps all 66 USFM 3-letter book codes to internal book numbers (1–66, matching the `books` table's canonical order). Nahum is coded `'NAH'` — not the stricter USFM `'NAM'` — to match what the bundled plan data actually uses — usfm.js:USFM_BOOK_CODES
+220. `resolveUsfmRef(ref)` parses five ref shapes — whole chapter (`GEN.1`), single verse (`GEN.1.1`), in-chapter verse range (`GEN.1.1-25`), chapter range (`GEN.9-10`), and cross-chapter verse range (`GEN.1.1-2.17`) — into `{ book, chapter, verseStart, verseEnd, approximate }` — usfm.js:resolveUsfmRef
+221. Chapter-range and cross-chapter refs are flagged `approximate: true` and stored with `verse_end = NULL`; navigation for those relies on the plan's stored `display` string rather than an exact end verse — usfm.js:resolveUsfmRef
+222. Resolution happens exactly once, at seed/import time (`insertPlan()`); runtime navigation reads the pre-resolved `book`/`chapter`/`verse_start`/`verse_end` columns from `plan_day_scripture` directly and never re-parses USFM — db.js:insertPlan, getPlanDayScripture
+222a. A ref that fails to resolve (unrecognized book code, unexpected shape) is skipped with a console error rather than aborting the whole plan; `insertPlan()` returns a count of unresolved refs — db.js:insertPlan
+
+---
+
+## Template Bar
+
+223. `#template-bar`, below the global header, is fully wired: plan title, Prev/Next passage navigation, progress dots, the current passage as a clickable label, and a close (✕) button — index.html:30-36, template-bar.js
+224. The bar is hidden by default and never auto-activates on load, even if a plan's `status` is `'active'` in the database from a previous session — it only appears via Continue or a day row in the plan detail popover — template-bar.js (module-level `state` starts `null`)
+225. Prev/Next move between passages within the day currently shown in the bar; Prev becomes "◀ Prev Day" on the first passage of a day (Next becomes "Next Day ▶" on the last) — template-bar.js:render
+226. Progress dots: one per passage in the current day. Filled = before the passage currently shown, outline = after it; the current passage itself renders as the clickable label, not a dot — template-bar.js:render
+227. Clicking the current-passage label re-navigates the reader to it — useful after following a cross-reference or note anchor away from the plan passage — template-bar.js (label click → `navigateToCurrentPassage`)
+228. Only "Next Day" writes to the database: it advances `current_step` by one (`db.js:setPlanProgress`), or — if that was the last passage of the plan's final day — marks the plan `completed` and hides the bar. Prev/Prev Day is pure review: it never changes `current_step`, even when it walks backward past the day the plan is bookmarked at — template-bar.js:handleNext/handlePrev
+229. Which day/passage the bar is currently browsing (as opposed to `current_step`, the persisted "bookmark" day) is in-memory only — it is not written anywhere and does not survive a reload — template-bar.js (module-level `state`)
+230. ✕ closes the bar and reverts the plan's `status` to `not_started` while preserving `current_step` (`db.js:deactivatePlan`) — the plan is not deleted, and Continue from the Plans tab resumes it from the same day — template-bar.js:handleClose
+230a. Nothing prevents more than one plan from having `status = 'active'` in the database at once (e.g. activate plan A, close the Plans tab, activate plan B — A's row is untouched). The bar only ever displays one plan at a time; the Plans tab list still reflects each plan's own `current_step`/`status` correctly regardless — template-bar.js, db.js:getPlans
 
 ---
 
@@ -369,9 +444,9 @@ All five prefixes are functional:
 
 **PWA install prompt:** `#install-overlay` DOM element and styles are in place (Install / Not now buttons). JavaScript handling for `beforeinstallprompt` is coming in a future update.
 
-**`state.js` module**: in-memory reactive state manager scaffolded (`getAppState`, `setAppState`, `onStateChange`); not yet wired into the app. Work in progress.
+**`state.js` module**: in-memory reactive state manager scaffolded (`getAppState`, `setAppState`, `onStateChange`); still not imported or wired into the app by anything. Work in progress.
 
-**`#template-bar`**: DOM element present (`height: 40px`, currently hidden). No content yet.
+*(The `#template-bar` entry that used to live here — "DOM element present, no content yet" — is gone as of Build 3: the bar is now fully implemented. See the Template Bar section above.)*
 
 ---
 
