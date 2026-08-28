@@ -16,6 +16,10 @@ export function initHelp() {
             btn:     document.querySelector('#reference-panel .panel-help-btn'),
             popover: document.getElementById('reference-help-popover'),
         },
+        {
+            btn:     document.getElementById('global-help-btn'),
+            popover: document.getElementById('global-help-popover'),
+        },
     ];
 
     const allPopovers = entries.map(e => e.popover);

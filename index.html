@@ -24,6 +24,8 @@
                     <path d="M17.5 11.5A7.5 7.5 0 0 1 8.5 2.5a7.5 7.5 0 1 0 9 9z"/>
                 </svg>
             </button>
+            <button id="global-help-btn" class="panel-help-btn" aria-label="Help">?</button>
+            <button id="global-settings-btn" class="panel-settings-btn" aria-label="Settings">⚙</button>
         </div>
     </header>
 
@@ -226,6 +228,14 @@
         </ul>
         <a href="#" class="help-more-link">Need more? A full help guide is on its way. For now, try clicking around — Ember is designed to teach itself through use.</a>
     </div>
+
+    <!-- Global help popover -->
+    <div id="global-help-popover" class="help-popover hidden" role="dialog" aria-label="Help">
+        <p class="help-popover-lead"><strong>Ember</strong> — the whole workspace. Settings and help for each panel live in that panel's own ⚙ and ? buttons. Global settings (below) cover things that apply everywhere, like backup and restore.</p>
+    </div>
+
+    <!-- Global settings popover — shell built out in Build 4 Item 5 -->
+    <div id="global-settings-popover" class="help-popover hidden" role="dialog" aria-label="Settings"></div>
 
     <!-- Reference settings popover -->
     <div id="reference-settings-popover" class="help-popover hidden" role="dialog" aria-label="Reference settings">
