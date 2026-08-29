@@ -1403,6 +1403,41 @@ export function createStudy(name = 'Untitled Study') {
     return studyId;
 }
 
+// Build 5 Item 3: generates one study plus one note per template_steps row,
+// each note's body pre-filled verbatim with that step's prompt_text. Single
+// logical operation — persisted once at the end, matching the no-explicit-
+// transaction pattern insertPlan()/insertTemplate() already use (sql.js runs
+// synchronously in one thread, so sequential db.run() calls are already
+// atomic in practice; nothing else here can partially fail).
+//
+// Unconditional: never reads reader selection state and never creates a
+// note_anchors row for any generated note, regardless of what's selected.
+//
+// Visibility: studies has no visibility column of its own (only notes
+// does), so generated notes simply omit visibility from the INSERT and take
+// the notes table's own DEFAULT 'private' — the same thing saveNote() does.
+export function generateStudyFromTemplate(templateId, studyName) {
+    db.run('INSERT INTO studies (name, template_id) VALUES (?, ?)', [studyName, templateId]);
+    const studyId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+
+    const steps = db.exec(
+        'SELECT id, prompt_text FROM template_steps WHERE template_id = ? ORDER BY step_index',
+        [templateId]
+    )[0]?.values ?? [];
+
+    for (const [stepId, promptText] of steps) {
+        db.run(
+            'INSERT INTO notes (body, study_id, template_step_id) VALUES (?, ?, ?)',
+            [promptText, studyId, stepId]
+        );
+        const noteId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+        db.run('INSERT INTO notes_fts(rowid, body) VALUES (?, ?)', [noteId, promptText]);
+    }
+
+    saveToStorage(db.export());
+    return studyId;
+}
+
 export function getStudyName(studyId) {
     return db.exec('SELECT name FROM studies WHERE id = ?', [studyId])[0]?.values[0][0] || '';
 }
