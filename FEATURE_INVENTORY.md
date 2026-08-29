@@ -378,7 +378,7 @@ All five prefixes are functional:
 201. Import button opens a native file picker restricted to `.json`/`.csv` — index.html:86-87, plans.js:initPlanImport
 202. Import failures (duplicate id, missing required fields, malformed file, unknown extension) are surfaced via `alert()` with the specific message from the parser — plans.js:initPlanImport
 203. Empty state (all plans deleted): "No reading plans installed. Use the Import button to add a plan." — plans.js:renderReadingPlansList
-204. Study Templates sub-tab shows static placeholder text only ("Study Templates — coming in a future build...") — plain markup in index.html:92, no JS renders it, no import button or list
+204. Study Templates sub-tab lists the three built-in templates as tappable cards (name + description); tapping one prompts for a study name and generates the study — see "Study Templates" section below (Build 5). The Build 3 static placeholder is gone.
 
 ---
 
@@ -481,6 +481,27 @@ All five prefixes are functional:
 
 ---
 
+## Study Templates
+
+237. `study_templates`/`template_steps` schema (id/name/description; id/template_id/step_index/prompt_text) plus nullable `studies.template_id` and `notes.template_step_id` linkage columns — added idempotently in `createUserTables()`, migrate cleanly against an existing pre-Build-5 database — db.js
+238. Three built-in templates seeded from `data/templates/*.json` on first run, idempotent by template name (no separate stable-key column exists for templates, unlike `plans.plan_id`) — db.js:seedBundledTemplates/insertTemplate
+238a. **Inductive Study (OIA)** — 4 steps (intro + Observation/Interpretation/Application) — data/templates/inductive-study.json
+238b. **Word Study** — 6 steps (intro + Key Word/Original Language/Other Occurrences/Patterns/Summary) — data/templates/word-study.json
+238c. **Passage Overview** — 5 steps (intro + Context/Structure/Themes/Response) — data/templates/passage-overview.json
+239. Study Templates sub-tab (Plans tab): one card per built-in template, showing name and description — study-templates.js:renderStudyTemplatesList/buildTemplateCard
+240. Tapping a card (whole-card click target, no sub-element) opens a "Name this study" dialog pre-filled with the template's name, editable — study-templates.js:openStudyNameDialog. Built with `createElement`/`textContent` only, reusing plans.js's `.plan-metadata-*` dialog CSS rather than inventing new styling
+241. Confirming generates the study via `generateStudyFromTemplate()` and opens it in the Notes panel via the same `openStudy()` path the "+" new-study button uses — study-templates.js:handleStartTemplate
+242. Cancelling (button, Escape, or backdrop click) creates nothing — study-templates.js:openStudyNameDialog
+243. `generateStudyFromTemplate(templateId, studyName)`: creates one study (with `template_id` set) and one note per template step, in step order, body pre-filled verbatim with `prompt_text`, `template_step_id` set on each note — db.js
+243a. No `note_anchors` row is ever created for a generated note — the function never reads reader selection state, unconditionally, regardless of what's selected when a template is started — db.js:generateStudyFromTemplate
+243b. Generated notes are indexed into `notes_fts` immediately, same as any freeform note — db.js:generateStudyFromTemplate
+243c. Since `studies` has no `visibility` column (only `notes` does), generated notes' visibility comes from `notes.visibility`'s own column default (`'private'`) — the same thing `saveNote()` already relies on for freeform notes — db.js:generateStudyFromTemplate
+244. Template-generated notes are indistinguishable in behavior from freeform notes everywhere else in the app: editable, searchable (FTS), taggable, individually deletable without affecting the study/template/other notes; the generating study can be renamed and have freeform notes added to it exactly like any other study — verified live, not just by code inspection (see `BUILD_5_ACTUAL_STATE.md` §10)
+245. Deleting a `study_templates` row (no UI exists for this yet — template management is out of scope for Build 5) does not cascade-delete studies or notes — neither `studies.template_id` nor `notes.template_step_id` declares `ON DELETE CASCADE`; verified under `PRAGMA foreign_keys = ON` that such a delete is rejected outright (`NO ACTION`), not cascaded — db.js schema, `BUILD_5_ACTUAL_STATE.md` §10
+246. `#template-bar` is never touched by study templates — no session/step-navigation model was built; a step's "done" state is derived (a note whose body differs from its seeded `prompt_text`), not stored, and no build has surfaced that comparison in the UI yet — see `BUILD_5_ACTUAL_STATE.md` §9/§11
+
+---
+
 ## COMING SOON — UI elements present but not yet wired up
 
 **PWA install prompt:** `#install-overlay` DOM element and styles are in place (Install / Not now buttons). JavaScript handling for `beforeinstallprompt` is coming in a future update.
@@ -493,4 +514,4 @@ All five prefixes are functional:
 
 ## Needs Verification
 
-- Does the LIKE fallback for Scripture search actually fire (requires FTS to fail first)?
+- ~~Does the LIKE fallback for Scripture search actually fire (requires FTS to fail first)?~~ **Resolved, Build 5:** yes — observed firing in a live Playwright session (console: `FTS verse search failed, trying LIKE fallback: Error: no such module: fts5`). Confirms sql.js's WASM build genuinely lacks FTS5 (not just a theoretical gap) and the `search()` catch/fallback path in db.js is live code, not dead code.
