@@ -317,6 +317,28 @@ function createUserTables() {
         );
     `);
 
+    db.run(`
+        CREATE TABLE IF NOT EXISTS study_templates (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL,
+            description TEXT
+        );
+    `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS template_steps (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_id INTEGER NOT NULL,
+            step_index  INTEGER NOT NULL,
+            prompt_text TEXT NOT NULL,
+            FOREIGN KEY (template_id) REFERENCES study_templates(id) ON DELETE CASCADE
+        );
+    `);
+
+    db.run(`
+        CREATE INDEX IF NOT EXISTS idx_template_steps_template ON template_steps(template_id);
+    `);
+
     // Future drag-to-reorder: position column on notes (idempotent).
     // NULL = use created_at order. Will be populated when ordering is implemented.
     try { db.run('ALTER TABLE notes ADD COLUMN position REAL'); } catch (_) {}
