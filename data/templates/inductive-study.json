@@ -1,0 +1,24 @@
+{
+  "template_metadata": {
+    "name": "Inductive Study (OIA)",
+    "description": "A three-step method for reading Scripture closely: see what it says, understand what it means, then live it out."
+  },
+  "steps": [
+    {
+      "step_index": 1,
+      "prompt_text": "This is an Inductive Study. Reading in this order (observe first, interpret second) keeps you from jumping to conclusions before you've actually looked closely at what the text says. It works through a passage in three steps: Observation, Interpretation, and Application, each in its own note below. Type your answer in each note."
+    },
+    {
+      "step_index": 2,
+      "prompt_text": "1. Observation: What does the text say? Note who's speaking, what happens, and any words or ideas that repeat, without yet deciding what any of it means."
+    },
+    {
+      "step_index": 3,
+      "prompt_text": "2. Interpretation: What does it mean? Consider the context, the original audience, and how this fits with the rest of Scripture."
+    },
+    {
+      "step_index": 4,
+      "prompt_text": "3. Application: How does this apply to my life? Be specific about what would actually change if I took this seriously this week."
+    }
+  ]
+}

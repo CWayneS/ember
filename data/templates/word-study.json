@@ -1,0 +1,32 @@
+{
+  "template_metadata": {
+    "name": "Word Study",
+    "description": "A close look at a single word: its meaning, its use across Scripture, and what that reveals about the passage."
+  },
+  "steps": [
+    {
+      "step_index": 1,
+      "prompt_text": "This is a Word Study. Words carry more freight in their original language than any translation can fully capture: a word study helps you see nuance, connections, and shades of meaning that get flattened in translation. It works through one key word in the passage: its original meaning, where else it appears, and what patterns emerge, each in its own note below. Type your answer in each note."
+    },
+    {
+      "step_index": 2,
+      "prompt_text": "1. Key Word: Which word in this passage carries the most weight? Write it down, along with the verse it appears in."
+    },
+    {
+      "step_index": 3,
+      "prompt_text": "2. Original Language: What is the word in the original Hebrew or Greek? What does it literally mean?"
+    },
+    {
+      "step_index": 4,
+      "prompt_text": "3. Other Occurrences: Where else does this word appear in Scripture? Do those uses agree with each other, or shift depending on context?"
+    },
+    {
+      "step_index": 5,
+      "prompt_text": "4. Patterns: What patterns or themes show up across those occurrences?"
+    },
+    {
+      "step_index": 6,
+      "prompt_text": "5. Summary: In your own words, what does this word mean here, and why does it matter for understanding the passage?"
+    }
+  ]
+}

@@ -11,6 +11,12 @@ const BUNDLED_PLAN_FILES = [
     'bible-in-a-year-chronological.json'
 ];
 
+const BUNDLED_TEMPLATE_FILES = [
+    'inductive-study.json',
+    'word-study.json',
+    'passage-overview.json'
+];
+
 let db             = null;
 let _booksCache    = null;
 let _storageWorker = null;
@@ -57,6 +63,10 @@ export async function initDatabase() {
     // Seed bundled reading plans on first install (idempotent — skips any
     // plan_id already present).
     await seedBundledPlans();
+
+    // Seed built-in study templates on first install (idempotent — skips any
+    // template name already present).
+    await seedBundledTemplates();
 
     // Seed translation files into OPFS on first install (no-op on subsequent loads).
     await seedTranslations();
@@ -551,6 +561,63 @@ async function seedBundledPlans() {
             `seedBundledPlans: seeded "${meta.title}" (${plan.days.length} days, ` +
             `${result.approximateCount} approximate ranges, ${result.unresolvedCount} unresolved refs)`
         );
+    }
+}
+
+// Insert a study template (study_templates + template_steps rows) and persist.
+// `meta`: { name, description }. `steps`: [{ step_index, prompt_text }, ...].
+// Throws an Error with `.code === 'DUPLICATE_TEMPLATE_NAME'` if a template
+// with this name is already installed — study_templates has no separate
+// stable key column (see Build_5_Spec.md Item 1), so name is the dedupe key.
+export function insertTemplate(meta, steps) {
+    const existing = db.exec('SELECT id FROM study_templates WHERE name = ?', [meta.name]);
+    if (existing.length > 0) {
+        const err = new Error(`Template already installed: ${meta.name}`);
+        err.code = 'DUPLICATE_TEMPLATE_NAME';
+        throw err;
+    }
+
+    db.run(
+        'INSERT INTO study_templates (name, description) VALUES (?, ?)',
+        [meta.name, meta.description ?? null]
+    );
+    const templateRowId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+
+    for (const step of steps) {
+        db.run(
+            'INSERT INTO template_steps (template_id, step_index, prompt_text) VALUES (?, ?, ?)',
+            [templateRowId, step.step_index, step.prompt_text]
+        );
+    }
+
+    saveToStorage(db.export());
+    return { templateRowId };
+}
+
+// Seed the built-in study templates from data/templates/ on first install.
+// Idempotent: a template already present (matched by its name) is left untouched.
+async function seedBundledTemplates() {
+    for (const filename of BUNDLED_TEMPLATE_FILES) {
+        let template;
+        try {
+            const response = await fetch(`./data/templates/${filename}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            template = await response.json();
+        } catch (e) {
+            console.error(`seedBundledTemplates: failed to load ${filename}:`, e);
+            continue;
+        }
+
+        const meta = template.template_metadata;
+        try {
+            insertTemplate(meta, template.steps);
+        } catch (e) {
+            if (e.code === 'DUPLICATE_TEMPLATE_NAME') continue; // already seeded
+            console.error(`seedBundledTemplates: failed to seed ${filename}:`, e);
+            continue;
+        }
+
+        console.log(`seedBundledTemplates: seeded "${meta.name}" (${template.steps.length} steps)`);
     }
 }
 

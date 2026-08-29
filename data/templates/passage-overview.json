@@ -1,0 +1,28 @@
+{
+  "template_metadata": {
+    "name": "Passage Overview",
+    "description": "A wide-angle look at a passage before zooming in: its background, its shape, its themes, and what it asks of you."
+  },
+  "steps": [
+    {
+      "step_index": 1,
+      "prompt_text": "This is a Passage Overview. Before you dig into detail, it helps to see the whole first: where the passage sits in its book, how it's put together, and what it's really about. It works through context, structure, themes, and response, each in its own note below. Type your answer in each note."
+    },
+    {
+      "step_index": 2,
+      "prompt_text": "1. Context: Where does this passage sit in the book? What comes before and after it, and who is the original audience?"
+    },
+    {
+      "step_index": 3,
+      "prompt_text": "2. Structure: How is the passage put together? Look for shifts in scene, speaker, or argument, and any natural breaks."
+    },
+    {
+      "step_index": 4,
+      "prompt_text": "3. Themes: What ideas or concerns come up more than once? What is this passage really about?"
+    },
+    {
+      "step_index": 5,
+      "prompt_text": "4. Response: Now that you've seen the whole, what's your honest reaction? What stands out, surprises you, or unsettles you?"
+    }
+  ]
+}
