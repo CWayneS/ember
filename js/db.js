@@ -621,6 +621,18 @@ async function seedBundledTemplates() {
     }
 }
 
+// Returns all built-in study templates, ordered by id (seed order — see
+// BUNDLED_TEMPLATE_FILES). Only three exist today, so no filter/sort needed.
+export function getStudyTemplates() {
+    return db.exec(
+        'SELECT id, name, description FROM study_templates ORDER BY id'
+    )[0]?.values.map(row => ({
+        id:          row[0],
+        name:        row[1],
+        description: row[2]
+    })) || [];
+}
+
 // Returns all installed plans, sorted active (in progress) first, then
 // not_started, then completed; alphabetically by title within each group.
 export function getPlans() {

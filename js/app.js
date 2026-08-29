@@ -19,6 +19,7 @@ import { initNotesSettings }      from './notes-settings.js';
 import { initReferenceSettings }  from './reference-settings.js';
 import { initMarkups }            from './markups.js';
 import { initPlans }              from './plans.js';
+import { initStudyTemplates }     from './study-templates.js';
 import { initTemplateBar }        from './template-bar.js';
 import { initGlobalSettings }     from './global-settings.js';
 
@@ -46,6 +47,7 @@ async function init() {
         initReferenceSettings();
         initMarkups();
         initPlans();
+        initStudyTemplates();
         initTemplateBar();
         initGlobalSettings();
 
