@@ -339,6 +339,11 @@ function createUserTables() {
         CREATE INDEX IF NOT EXISTS idx_template_steps_template ON template_steps(template_id);
     `);
 
+    // Build 5: study/note linkage to templates (idempotent).
+    // NULL = freeform study/note (the vast majority of both).
+    try { db.run('ALTER TABLE studies ADD COLUMN template_id INTEGER REFERENCES study_templates(id)'); } catch (_) {}
+    try { db.run('ALTER TABLE notes ADD COLUMN template_step_id INTEGER REFERENCES template_steps(id)'); } catch (_) {}
+
     // Future drag-to-reorder: position column on notes (idempotent).
     // NULL = use created_at order. Will be populated when ordering is implemented.
     try { db.run('ALTER TABLE notes ADD COLUMN position REAL'); } catch (_) {}
