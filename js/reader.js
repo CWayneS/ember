@@ -1,6 +1,6 @@
 // reader.js — Scripture rendering and navigation
 
-import { getChapter, getBooks, getBook, getTranslations, getTranslationDb, getNotesForVerse, getMarkupsForChapter, getBookmarksForChapter } from './db.js';
+import { getChapter, getBooks, getBook, getTranslations, getTranslationDb, getNotesForVerse, getMarkupsForChapter, getBookmarksForChapter, getOriginalWordsForVerses } from './db.js';
 
 // ============================================================
 // Per-pane state — persisted to localStorage
@@ -216,12 +216,15 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
 
     for (const v of verses) {
         // verse=0 is a Psalm title row (Psalm_Title_Fix_Spec.md). KJV/ASV/Darby
-        // currently carry it as an empty placeholder (no title text sourced —
-        // see spec); skip rendering entirely rather than leave a stray empty
-        // clickable row. Once populated (Build 6), it renders with distinct
-        // title styling below.
-        const isTitle = v.verse === 0;
-        if (isTitle && !v.text) continue;
+        // carry it as an empty placeholder — their own base text has no title
+        // wording (see spec). Build 6: rather than skip it, render the row and
+        // asynchronously fill it with TAHOT's joined contextual gloss as a
+        // substitute title (Wayne's call, once TAHOT title data was actually in
+        // hand — see Build_6_Spec.md's carried-over sub-decision). If no gloss
+        // is available for some reason, the row removes itself — never left as
+        // a stray empty clickable line.
+        const isTitle    = v.verse === 0;
+        const needsGloss = isTitle && !v.text;
 
         const el = document.createElement('div');
         el.className = isTitle ? 'verse verse-title' : 'verse';
@@ -267,6 +270,8 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
         if (numSpan) el.appendChild(numSpan);
         el.appendChild(textSpan);
         textEl.appendChild(el);
+
+        if (needsGloss) populateTitleGloss(el, textSpan, v.id);
     }
 
     // Apply markup classes to verse elements (always; visibility gated by body.markup-mode-on).
@@ -290,6 +295,31 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
         }
     } else {
         getContentEl(paneId).scrollTop = 0;
+    }
+}
+
+// Fills an empty Psalm-title row (KJV/ASV/Darby's own base text has none) with
+// TAHOT's joined contextual gloss, once language.db resolves — fire-and-forget;
+// if the pane has since re-rendered, `el`/`textSpan` are simply detached nodes
+// and this is a harmless no-op. Removes the row entirely if no gloss data
+// comes back, rather than leave an empty title line.
+async function populateTitleGloss(el, textSpan, verseId) {
+    let words = [];
+    try {
+        words = await getOriginalWordsForVerses([verseId]);
+    } catch (e) {
+        console.error('populateTitleGloss: failed to load title words:', e);
+    }
+    // STEPBible's gloss uses '/' to mark prefix/root/suffix boundaries within a
+    // printed word — meaningful in the Language tab's per-word interlinear
+    // context, just visual noise in a reader title line ("of/ David" reads
+    // worse than "of David"). Stripped here only, not in the underlying data.
+    const gloss = words.map(w => w.gloss_contextual).filter(Boolean)
+        .join(' ').replace(/\//g, ' ').replace(/\s+/g, ' ').trim();
+    if (gloss) {
+        textSpan.textContent = gloss;
+    } else {
+        el.remove();
     }
 }
 

@@ -8,6 +8,7 @@ import {
 import { navigateTo, getCurrentLocation } from './reader.js';
 import { selectVerseRange } from './selection.js';
 import { openStudy, openTagView } from './panels.js';
+import { renderLanguageTab as renderLanguageTabContent } from './language.js';
 
 const EMPTY_MSG = 'Select a verse to see reference material.';
 
@@ -21,20 +22,25 @@ export function initReference() {
     document.addEventListener('selection-changed', (e) => {
         const { verseIds } = e.detail;
         if (verseIds.length > 0) {
-            renderAll(verseIds[0]);
+            renderAll(verseIds);
         } else {
             clearAll();
         }
     });
 }
 
-function renderAll(verseId) {
-    const parsed = parseVerseId(verseId);
-    const book   = getBook(parsed.book);
+// Info/Tags/Related are single-verse tabs (always keyed to the first verse of
+// a range, unchanged pre-Build-6 behavior). Language is the only tab that
+// uses the full range — an interlinear naturally extends across a multi-verse
+// selection the way a single "current verse" concept doesn't.
+function renderAll(verseIds) {
+    const verseId = verseIds[0];
+    const parsed  = parseVerseId(verseId);
+    const book    = getBook(parsed.book);
     renderInfoTab(book, parsed.chapter, verseId);
     renderTagsTab(verseId);
     renderRelatedTab(verseId, book, parsed);
-    renderLanguageTab();
+    renderLanguageTabContent(verseIds);
 }
 
 function clearAll() {
@@ -324,15 +330,6 @@ function refLabel(startId, endId) {
     const eBook = getBook(e.book);
     const eName = eBook ? eBook.name : `Book ${e.book}`;
     return `${name} ${s.chapter}:${s.verse}–${eName} ${e.chapter}:${e.verse}`;
-}
-
-// ============================================================
-// Language tab — placeholder
-// ============================================================
-
-function renderLanguageTab() {
-    setPlaceholder(document.getElementById('language-tab'),
-        'Original language tools will be available in a future build.');
 }
 
 // ============================================================

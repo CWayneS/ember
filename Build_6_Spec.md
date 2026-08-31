@@ -8,7 +8,7 @@
 
 **Upstream dependency — resolved and implemented, see `Psalm_Title_Fix_Spec.md`:** Verifying TAHOT's versification surfaced that Ember's core `KJV.db` does not store psalm (and likely other) superscriptions/titles as text at all. Investigation found this gap is common across available public-domain KJV digital sources (checked directly, not assumed), not unique to Ember -- so KJV/ASV/Darby's base text remains without title wording for now, matching most other sources. `kjv.db`, `asv.db`, and `darby.db` now carry an empty-text verse=0 placeholder row for each of the 116 titled Psalms (via `scripts/build_translation.py`'s `add_psalm_title_placeholders()`), giving the title a real, addressable `verse_id` ahead of this build. WEB/YLT/BSB were left untouched -- their titles are already merged into verse 1's own text by their source data, and that representation is being kept as-is rather than split out.
 
-**Still open for Build 6 implementation time (Psalm_Title_Fix_Spec.md, last Definition of Done item):** KJV/ASV/Darby's verse=0 rows are empty placeholders, not TAHOT text. When this build's import populates `original_words` for `Psa.X.0`, decide whether those three translations' verse=0 row should then display TAHOT's English gloss as a substitute title, continue showing nothing, or something else. Until that decision is made and implemented, the reader skips rendering those rows entirely (empty title text renders as nothing, not a blank line) -- see `js/reader.js`'s `renderPane()`.
+**Resolved during Build 6 implementation (Psalm_Title_Fix_Spec.md, last Definition of Done item):** once `original_words` was populated for `Psa.X.0` and real gloss text was in hand, Wayne decided KJV/ASV/Darby's verse=0 rows should display TAHOT's English gloss as a substitute title. Implemented: `js/reader.js`'s `renderPane()` renders the row and asynchronously fills it via `populateTitleGloss()` once `data/language.db` resolves (not blocking chapter render); a row with no gloss available removes itself. See `BUILD_6_ACTUAL_STATE.md` §11 for the full rationale and the trade-off this introduces (an earlier, more likely trigger for `language.db`'s first load than the Language tab alone).
 
 ---
 
@@ -211,13 +211,13 @@ Confirmed via mockup review:
 
 ### Definition of Done (Item 3)
 
-- [ ] Language tab responds to `selection-changed` with new `verseIds`, for any active translation
-- [ ] Renders the running original-language verse line (decorative, non-interactive) above the gloss list
-- [ ] Gloss list shows original-language text + English gloss per row, grouped by verse
-- [ ] Grouped words (per `+`/`»` markers) collapse into a single row -- one combined text span, one gloss, one tap target
-- [ ] Every gloss row is fully clickable (not just the word text) and opens the word detail view
-- [ ] Hebrew renders correctly right-to-left; Greek renders left-to-right
-- [ ] Clearing selection shows the existing neutral "Select a verse..." state (consistent with other tabs)
+- [x] Language tab responds to `selection-changed` with new `verseIds`, for any active translation
+- [x] Renders the running original-language verse line (decorative, non-interactive) above the gloss list
+- [x] Gloss list shows original-language text + English gloss per row, grouped by verse
+- [x] Grouped words (per `+`/`»` markers) collapse into a single row -- one combined text span, one gloss, one tap target
+- [x] Every gloss row is fully clickable (not just the word text) and opens the word detail view
+- [x] Hebrew renders correctly right-to-left; Greek renders left-to-right
+- [x] Clearing selection shows the existing neutral "Select a verse..." state (consistent with other tabs)
 
 ---
 
@@ -241,11 +241,11 @@ The panel is roughly a quarter of the window by default and resizable (confirmed
 
 ### Definition of Done (Item 4)
 
-- [ ] Tapping a word swaps tab content to the word detail view
-- [ ] Detail view shows lemma, transliteration, Strong's number, morphology, contextual gloss, dictionary gloss
-- [ ] Greek words additionally show the TBESG lexicon entry
-- [ ] Hebrew words show available data without a lexicon paragraph (documented gap, not a bug)
-- [ ] Back action returns to the interlinear view at the prior scroll position
+- [x] Tapping a word swaps tab content to the word detail view
+- [x] Detail view shows lemma, transliteration, Strong's number, morphology, contextual gloss, dictionary gloss
+- [x] Greek words additionally show the TBESG lexicon entry
+- [x] Hebrew words show available data without a lexicon paragraph (documented gap, not a bug)
+- [x] Back action returns to the interlinear view at the prior scroll position
 
 ---
 
@@ -257,9 +257,9 @@ Ember does not currently have an About/credits screen. This item needs a landing
 
 ### Definition of Done (Item 5)
 
-- [ ] A location for data attribution exists in the app
-- [ ] STEPBible-Data is credited per CC BY 4.0 (link to stepbible.org)
-- [ ] Any other CC-licensed sources already bundled but not yet credited (e.g. openscriptures/strongs, CC BY-SA 3.0) are audited and added at the same time -- don't ship partial attribution
+- [x] A location for data attribution exists in the app
+- [x] STEPBible-Data is credited per CC BY 4.0 (link to stepbible.org)
+- [x] Any other CC-licensed sources already bundled but not yet credited (e.g. openscriptures/strongs, CC BY-SA 3.0) are audited and added at the same time -- don't ship partial attribution
 - [ ] Once Ember is available, send STEPBible a heads-up per their stated interest (not a permission request -- see Item 1)
 
 ---
@@ -268,15 +268,15 @@ Ember does not currently have an About/credits screen. This item needs a landing
 
 - [x] Ezra SIL rendering verified against real TAHOT sample text (Genesis 1:1, Ecclesiastes 2:6, Psalm 3 title) — niqqud positioning confirmed clean, more legible than system fallback. `SILEOT.woff` is the file to bundle.
 - [x] Psalm Title Fix (`Psalm_Title_Fix_Spec.md`) implemented -- verse=0 rows exist in kjv.db/asv.db/darby.db for the 116 affected psalms (empty placeholders; WEB/YLT/BSB unchanged). Open sub-decision carried into this build: whether those placeholder rows show TAHOT's gloss once populated -- see spec's last Definition of Done item.
-- [ ] `original_words` populated from TAHOT (all 4 files) and TAGNT (both files)
-- [ ] `step_lexicon_greek` populated from TBESG
-- [ ] Versification mapping between source data and Ember's verse ID convention confirmed correct
-- [ ] Language tab shows interlinear view grouped by verse, for any selected verse/range, any active translation
-- [ ] Word grouping (`+`/`»`) renders correctly, not as fragmented single words
-- [ ] Word detail view shows full available data, Greek includes TBESG entry
-- [ ] Attribution location exists and credits all CC-licensed bundled data
-- [ ] `FEATURE_INVENTORY.md` updated to reflect Build 6 additions
-- [ ] `BUILD_5_ACTUAL_STATE.md` superseded by `BUILD_6_ACTUAL_STATE.md` after build ships
+- [x] `original_words` populated from TAHOT (all 4 files) and TAGNT (both files)
+- [x] `step_lexicon_greek` populated from TBESG
+- [x] Versification mapping between source data and Ember's verse ID convention confirmed correct
+- [x] Language tab shows interlinear view grouped by verse, for any selected verse/range, any active translation
+- [x] Word grouping (`+`/`»`) renders correctly, not as fragmented single words
+- [x] Word detail view shows full available data, Greek includes TBESG entry
+- [x] Attribution location exists and credits all CC-licensed bundled data
+- [x] `FEATURE_INVENTORY.md` updated to reflect Build 6 additions
+- [x] `BUILD_5_ACTUAL_STATE.md` superseded by `BUILD_6_ACTUAL_STATE.md` after build ships
 
 ---
 

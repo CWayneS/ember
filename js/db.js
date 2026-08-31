@@ -182,6 +182,67 @@ async function loadTranslationBuffer(filename) {
     return await response.arrayBuffer();
 }
 
+// ============================================================
+// Language DB — TAHOT/TAGNT/TBESG (Build 6), lazy-loaded
+// ============================================================
+//
+// Unlike translations (opened eagerly for all 6 at init — small files, always
+// needed), language.db is ~50MB of read-only reference data most sessions may
+// never open. It is not seeded into OPFS or opened until the Language tab
+// first actually needs it, so it adds no cost to app startup. Once opened,
+// the handle is cached for the rest of the session. It is never part of the
+// db.export()/saveToStorage() write cycle — it's read-only reference data,
+// not part of core.db.
+
+let _languageDb        = null;
+let _languageDbPromise = null;
+
+export function getLanguageDb() {
+    if (_languageDb) return Promise.resolve(_languageDb);
+    if (_languageDbPromise) return _languageDbPromise;
+
+    _languageDbPromise = (async () => {
+        const buffer = await loadLanguageBuffer();
+        _languageDb = new _SQL.Database(new Uint8Array(buffer));
+        return _languageDb;
+    })();
+    return _languageDbPromise;
+}
+
+// OPFS is the primary store; network is the fallback, and also seeds OPFS
+// for next time (mirrors loadTranslationBuffer(), but seeding happens lazily
+// here on first use instead of eagerly at init via seedTranslations()).
+async function loadLanguageBuffer() {
+    if ('storage' in navigator && 'getDirectory' in navigator.storage) {
+        try {
+            const root   = await navigator.storage.getDirectory();
+            const handle = await root.getFileHandle('language.db');
+            const file   = await handle.getFile();
+            return await file.arrayBuffer();
+        } catch (_) {
+            // Not in OPFS yet — fall through to network.
+        }
+    }
+
+    const response = await fetch('./data/language.db');
+    if (!response.ok) throw new Error(`HTTP ${response.status} fetching language.db`);
+    const buffer = await response.arrayBuffer();
+
+    if ('storage' in navigator && 'getDirectory' in navigator.storage) {
+        try {
+            const root     = await navigator.storage.getDirectory();
+            const handle   = await root.getFileHandle('language.db', { create: true });
+            const writable = await handle.createWritable();
+            await writable.write(buffer);
+            await writable.close();
+        } catch (e) {
+            console.error('loadLanguageBuffer: failed to seed OPFS:', e);
+        }
+    }
+
+    return buffer;
+}
+
 // Ensure all user-writable tables exist (idempotent — safe to run on every init).
 // The shipped core.db already contains these, but this guards against schema drift.
 function createUserTables() {
@@ -1625,4 +1686,76 @@ export function getCrossReferencesForVerse(verseId, options = {}) {
     while (stmt.step()) results.push(stmt.getAsObject());
     stmt.free();
     return results;
+}
+
+// ============================================================
+// Language — original-language words + Greek lexicon (Build 6)
+// ============================================================
+
+// Rows for every selected verse, ordered for interlinear rendering (verse,
+// then word_position within it). All async — language.db is lazy-loaded.
+export async function getOriginalWordsForVerses(verseIds) {
+    if (verseIds.length === 0) return [];
+    const langDb = await getLanguageDb();
+    const placeholders = verseIds.map(() => '?').join(',');
+    const stmt = langDb.prepare(
+        `SELECT id, verse_id, word_position, language, surface_text, transliteration, lemma,
+                gloss_contextual, gloss_dictionary, strongs_number, morph_code, group_id
+         FROM original_words
+         WHERE verse_id IN (${placeholders})
+         ORDER BY verse_id ASC, word_position ASC`
+    );
+    stmt.bind(verseIds);
+    const results = [];
+    while (stmt.step()) results.push(stmt.getAsObject());
+    stmt.free();
+    return results;
+}
+
+// All rows sharing a group_id (a collapsed multi-word display unit), for the
+// word detail view when a grouped row is tapped.
+export async function getOriginalWordsForGroup(groupId) {
+    const langDb = await getLanguageDb();
+    const stmt = langDb.prepare(
+        `SELECT id, verse_id, word_position, language, surface_text, transliteration, lemma,
+                gloss_contextual, gloss_dictionary, strongs_number, morph_code, group_id
+         FROM original_words WHERE group_id = ? ORDER BY word_position ASC`
+    );
+    stmt.bind([groupId]);
+    const results = [];
+    while (stmt.step()) results.push(stmt.getAsObject());
+    stmt.free();
+    return results;
+}
+
+export async function getOriginalWord(id) {
+    const langDb = await getLanguageDb();
+    const stmt = langDb.prepare(
+        `SELECT id, verse_id, word_position, language, surface_text, transliteration, lemma,
+                gloss_contextual, gloss_dictionary, strongs_number, morph_code, group_id
+         FROM original_words WHERE id = ?`
+    );
+    stmt.bind([id]);
+    const row = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+    return row;
+}
+
+// TBESG entry for a Greek word's exact (disambiguated) Strong's number. Hebrew
+// has no lexicon table — see Build_6_Spec.md Item 1's TBESH resolution. A
+// small number of Greek codes (~0.2%) have no TBESG match due to a disambig-
+// uation-suffix mismatch between TAGNT and TBESG in the source data itself;
+// callers should treat a null return as "no lexicon entry available", not
+// an error.
+export async function getGreekLexiconEntry(strongsNumber) {
+    if (!strongsNumber) return null;
+    const langDb = await getLanguageDb();
+    const stmt = langDb.prepare(
+        `SELECT strongs_number, lemma, transliteration, morph, gloss, meaning
+         FROM step_lexicon_greek WHERE strongs_number = ?`
+    );
+    stmt.bind([strongsNumber]);
+    const row = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+    return row;
 }

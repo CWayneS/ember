@@ -42,6 +42,52 @@ const SECTIONS = [
             actions.appendChild(restoreBtn);
             container.appendChild(actions);
         }
+    },
+    {
+        id: 'data-attribution',
+        title: 'Data & Attribution',
+        render(container) {
+            const desc = document.createElement('p');
+            desc.className = 'settings-section-desc';
+            desc.textContent = 'Ember bundles data from several sources. The six Bible translations and Nave’s Topical Bible are public domain. Two sources are licensed CC BY 4.0 and credited here as required:';
+            container.appendChild(desc);
+
+            const list = document.createElement('ul');
+            list.className = 'settings-credits-list';
+
+            for (const credit of [
+                {
+                    name: 'STEPBible-Data',
+                    url: 'https://www.stepbible.org',
+                    note: 'Original-language word data (Hebrew/Greek text, glosses, and lexicon entries) powering the Language tab, from Tyndale House, Cambridge.'
+                },
+                {
+                    name: 'OpenBible.info',
+                    url: 'https://www.openbible.info',
+                    note: 'Cross-reference data powering the Related tab.'
+                }
+            ]) {
+                const li = document.createElement('li');
+                li.className = 'settings-credit-item';
+
+                const link = document.createElement('a');
+                link.href = credit.url;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.className = 'settings-credit-link';
+                link.textContent = credit.name;
+
+                const note = document.createElement('span');
+                note.className = 'settings-credit-note';
+                note.textContent = ` — ${credit.note} CC BY 4.0.`;
+
+                li.appendChild(link);
+                li.appendChild(note);
+                list.appendChild(li);
+            }
+
+            container.appendChild(list);
+        }
     }
 ];
 

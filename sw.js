@@ -1,10 +1,12 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v3'; // bumped: reader.js/db.js/style.css changed (Psalm_Title_Fix_Spec.md)
+const CACHE_NAME = 'ember-v4'; // bumped: language.js/db.js/style.css changed, SILEOT.woff added (Build 6)
 
 // Files that must be cached on install for the app to work offline.
 // core.db is NOT included here — it is large (18 MB) and already persisted
-// in OPFS/IndexedDB by db.js on first load.
+// in OPFS/IndexedDB by db.js on first load. data/language.db (Build 6, ~51MB)
+// is the same story — not precached, seeded into OPFS lazily on first
+// Language-tab use by db.js's getLanguageDb(), then served from there.
 const PRECACHE = [
     './',
     './index.html',
@@ -16,12 +18,14 @@ const PRECACHE = [
     './js/selection.js',
     './js/notes.js',
     './js/tags.js',
+    './js/language.js',
     './js/search.js',
     './js/panels.js',
     './js/state.js',
     './js/storage-worker.js',
     './js/vendor/sql-wasm.js',
-    './js/vendor/sql-wasm.wasm'
+    './js/vendor/sql-wasm.wasm',
+    './fonts/SILEOT.woff'
 ];
 
 // ============================================================

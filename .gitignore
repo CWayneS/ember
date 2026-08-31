@@ -8,3 +8,6 @@ js/vendor/sql-wasm.wasm
 data/translations-prep/bsb/
 data/translations-prep/web/
 data/translations-prep/data/
+
+# STEPBible-Data source downloads (large, re-downloadable — CC BY 4.0, see Build_6_Spec.md)
+data/stepbible-prep/raw/

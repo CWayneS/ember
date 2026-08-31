@@ -42,6 +42,8 @@
     --font-display: Georgia, 'Times New Roman', serif;
     --font-reading: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Monaco', monospace;
+    --font-hebrew: 'Ezra SIL', 'SBL Hebrew', 'Times New Roman', serif;
+    --font-greek: var(--font-display);
 
     --size-base:  18px;
     --size-small: 14px;
@@ -99,6 +101,17 @@
     --markup-pink:   #5a3a48;
     --markup-orange: #6a4a20;
     --markup-ink:    var(--text-primary);
+}
+
+/* Ezra SIL — Hebrew niqqud/cantillation rendering, verified 2026-08-31 against
+   real TAHOT sample text (Build_6_Spec.md Item 3). SIL Open Font License 1.1 +
+   MIT/X11 (Hebrew layout intelligence), both permissive. */
+@font-face {
+    font-family: 'Ezra SIL';
+    src: url('../fonts/SILEOT.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
 }
 
 /* ============================================================
@@ -1289,6 +1302,31 @@ body.markup-mode-on .verse.markup-circle {
     background: var(--danger-hover);
 }
 
+.settings-credits-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.settings-credit-item {
+    font-size: var(--size-small);
+    line-height: var(--line-height-ui);
+}
+
+.settings-credit-link {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.settings-credit-link:hover {
+    text-decoration: underline;
+}
+
+.settings-credit-note {
+    color: var(--text-secondary);
+}
+
 #bookmark-comment {
     width: 100%;
     padding: 6px 8px;
@@ -2071,6 +2109,179 @@ body.markup-mode-on .verse.markup-circle {
 
 details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     content: '▸ ';
+}
+
+/* ============================================================
+   Language tab — interlinear + word detail (Build 6)
+   ============================================================ */
+
+.language-verse-block {
+    border-bottom: 1px solid var(--border-light);
+}
+
+.language-verse-block:last-child {
+    border-bottom: none;
+}
+
+.language-verse-heading {
+    font-family: var(--font-display);
+    font-size: var(--size-small);
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 10px 16px 4px;
+}
+
+/* Running verse line — decorative, non-interactive. RTL as a full block for
+   Hebrew; extra line-height for niqqud clearance (150-180% standard). */
+.language-verse-line {
+    padding: 2px 16px 10px;
+    font-size: var(--size-base);
+}
+
+.language-verse-line.language-hebrew {
+    font-family: var(--font-hebrew);
+    line-height: 1.7;
+    text-align: right;
+}
+
+.language-verse-line.language-greek {
+    font-family: var(--font-greek);
+    line-height: var(--line-height-ui);
+}
+
+/* Gloss list — plain text rows, minimal visual weight (no per-word card/box
+   treatment). Original-language column fixed left, gloss fixed right,
+   regardless of language — only the running verse line above flips for RTL. */
+.language-word-list {
+    padding-bottom: 4px;
+}
+
+.language-word-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 16px;
+    border-top: 1px solid var(--border-light);
+    cursor: pointer;
+}
+
+.language-word-row:hover {
+    background: var(--bg-secondary);
+}
+
+.language-word-original {
+    font-size: var(--size-base);
+    text-align: left;
+    flex-shrink: 0;
+}
+
+.language-word-original.language-hebrew {
+    font-family: var(--font-hebrew);
+}
+
+.language-word-original.language-greek {
+    font-family: var(--font-greek);
+}
+
+.language-word-gloss {
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+    text-align: right;
+}
+
+/* Word detail view */
+.language-back-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 16px;
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    color: var(--accent);
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border-light);
+    cursor: pointer;
+}
+
+.language-back-btn:hover {
+    background: var(--bg-secondary);
+}
+
+.language-word-detail {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.language-word-detail:last-child {
+    border-bottom: none;
+}
+
+.language-detail-ref {
+    font-family: var(--font-display);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.language-detail-original {
+    font-size: var(--size-large);
+    margin-bottom: 10px;
+}
+
+.language-detail-original.language-hebrew {
+    font-family: var(--font-hebrew);
+    line-height: 1.7;
+    text-align: right;
+}
+
+.language-detail-original.language-greek {
+    font-family: var(--font-greek);
+}
+
+.language-detail-field {
+    display: flex;
+    gap: 8px;
+    padding: 3px 0;
+    font-size: var(--size-small);
+}
+
+.language-detail-label {
+    font-family: var(--font-reading);
+    color: var(--text-muted);
+    flex-shrink: 0;
+    width: 130px;
+}
+
+.language-detail-value {
+    font-family: var(--font-reading);
+    color: var(--text-primary);
+}
+
+.language-detail-heading {
+    font-family: var(--font-display);
+    font-size: var(--size-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 10px;
+    margin-bottom: 4px;
+}
+
+.language-detail-lexicon {
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    line-height: 1.6;
+    color: var(--text-primary);
+}
+
+.language-detail-lexicon br {
+    content: '';
+    display: block;
+    margin-top: 4px;
 }
 
 /* ============================================================
