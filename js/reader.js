@@ -215,13 +215,23 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
     const chapterBookmarks = getBookmarksForChapter(bookId, chapter);
 
     for (const v of verses) {
+        // verse=0 is a Psalm title row (Psalm_Title_Fix_Spec.md). KJV/ASV/Darby
+        // currently carry it as an empty placeholder (no title text sourced —
+        // see spec); skip rendering entirely rather than leave a stray empty
+        // clickable row. Once populated (Build 6), it renders with distinct
+        // title styling below.
+        const isTitle = v.verse === 0;
+        if (isTitle && !v.text) continue;
+
         const el = document.createElement('div');
-        el.className = 'verse';
+        el.className = isTitle ? 'verse verse-title' : 'verse';
         el.dataset.verseId = v.id;
 
-        const numSpan = document.createElement('span');
-        numSpan.className = 'verse-number';
-        numSpan.textContent = v.verse;
+        const numSpan = isTitle ? null : document.createElement('span');
+        if (numSpan) {
+            numSpan.className = 'verse-number';
+            numSpan.textContent = v.verse;
+        }
 
         const textSpan = document.createElement('span');
         textSpan.className = 'verse-text';
@@ -249,10 +259,12 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
                 el.classList.add('verse-bookmarked');
             }
 
-            numSpan.appendChild(indicators);
+            // No verse-number bubble on a title row — anchor indicators to
+            // the row itself instead (also position: relative).
+            (numSpan || el).appendChild(indicators);
         }
 
-        el.appendChild(numSpan);
+        if (numSpan) el.appendChild(numSpan);
         el.appendChild(textSpan);
         textEl.appendChild(el);
     }

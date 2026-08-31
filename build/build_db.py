@@ -285,6 +285,12 @@ def split_range(kjv_conn, start_book, start_chap, start_verse,
     chap = start_chap
 
     while True:
+        # Deliberately `1`, not `0` — a full intermediate chapter in a
+        # cross-reference range starts at verse 1, not the Psalm title
+        # (verse=0). This is external curated data (OpenBible.info) written
+        # against standard printed verse numbering, which has no concept of
+        # an addressable title; do not "fix" this to include verse=0.
+        # See Psalm_Title_Fix_Spec.md ("Whole-chapter range behavior").
         seg_start_verse = start_verse if (book == start_book and chap == start_chap) else 1
 
         if book == end_book and chap == end_chap:

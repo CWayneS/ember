@@ -108,6 +108,11 @@ def split_range(conn, start_book, start_chap, start_verse,
 
     while True:
         # First verse of this chapter's segment.
+        # Deliberately `1`, not `0` — a full intermediate chapter in a
+        # Nave's Topical range starts at verse 1, not the Psalm title
+        # (verse=0). This is external curated data with no concept of an
+        # addressable title; do not "fix" this to include verse=0.
+        # See Psalm_Title_Fix_Spec.md ("Whole-chapter range behavior").
         seg_start_verse = start_verse if (book == start_book and chap == start_chap) else 1
 
         # Last verse of this chapter's segment.

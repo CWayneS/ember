@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v2';
+const CACHE_NAME = 'ember-v3'; // bumped: reader.js/db.js/style.css changed (Psalm_Title_Fix_Spec.md)
 
 // Files that must be cached on install for the app to work offline.
 // core.db is NOT included here — it is large (18 MB) and already persisted

@@ -68,15 +68,15 @@ This is a deliberate asymmetry: Ember's own user-generated data (bookmarks) trea
 ## Definition of Done
 
 - [x] Sourcing investigated: multiple candidate sources checked directly, titles consistently absent; decision made not to pursue new title text for KJV/ASV/Darby at this time (revisitable)
-- [ ] `verses` table gains verse=0 rows for the 116 affected psalms, populated from TAHOT's own English-aligned title data (via Build 6), not from a separate KJV/ASV/Darby-specific source
-- [ ] Reader renders verse=0 rows with distinct title styling, no verse number shown
-- [ ] Notes/tags/bookmarks can attach to a verse=0 title row (should work with no schema change, given existing `verse_id`-based anchoring — confirm, don't assume)
-- [ ] `getBookmarksForChapter()` (`js/db.js:1242`) patched to include verse=0 in its chapter-start calculation
-- [ ] `split_range()` in `build/build_db.py` and `scripts/build_crossrefs.py` explicitly left unchanged (verse 1 start) — confirm this is a deliberate no-op, not accidentally "fixed" during unrelated future work
-- [ ] Psalm 119's acrostic headings explicitly confirmed out of scope for this fix (separate problem, not addressed here)
-- [ ] Habakkuk 3 confirmed to need no changes (already correct)
-- [ ] `getChapterVerseCount()` (`js/reference.js:78-89`) reviewed — currently would count a title as an extra verse in "N verses" display; decide during implementation whether to exclude verse=0 from that count for accurate display
-- [ ] Clarify in-app: since KJV/ASV/Darby's own base text has no title wording, decide whether the verse=0 row for those translations shows TAHOT's English gloss as a substitute, shows nothing until a real source is found, or some other treatment — this needs its own small decision once Build 6's TAHOT integration is further along
+- [x] `verses` table gains verse=0 rows for the 116 affected psalms. Implemented as empty-text placeholders in `kjv.db`/`asv.db`/`darby.db` (via `scripts/build_translation.py`'s `add_psalm_title_placeholders()`), not sourced from a separate KJV/ASV/Darby-specific text — real title text still comes later, from TAHOT via Build 6. WEB/YLT/BSB were left untouched (title already merged into verse 1 by their own source data; not split out — see "Representation" above).
+- [x] Reader renders verse=0 rows with distinct title styling (`.verse-title` in `css/style.css`), no verse number shown. An empty-text verse=0 row (current KJV/ASV/Darby state) is skipped entirely, not rendered as a blank line — see `renderPane()` in `js/reader.js`.
+- [x] Notes/tags/bookmarks can attach to a verse=0 title row — confirmed, not assumed: `js/notes.js`, `js/selection.js`, `js/tags.js`, `js/bookmarks.js` anchor purely on `verse_id` with no verse-range assumption, so no schema change was needed. (In practice this only becomes reachable through the UI once a title row has non-empty text and is rendered.)
+- [x] `getBookmarksForChapter()` (`js/db.js`) patched to include verse=0 in its chapter-start calculation.
+- [x] `split_range()` in `build/build_db.py` and `scripts/build_crossrefs.py` explicitly left unchanged (verse 1 start) — confirmed deliberate no-op via `MAX(verse)`-based `get_verse_count()` in both files (unaffected by verse=0 rows) and a hardcoded literal `1` for continuation-chapter starts; comments added at both sites pointing back to this spec so it isn't "fixed" by accident later.
+- [x] Psalm 119's acrostic headings explicitly confirmed out of scope for this fix — excluded from `PSALM_TITLE_CHAPTERS` in `scripts/build_translation.py` (116 entries, verified programmatically against KJV/YLT/WEB/BSB text).
+- [x] Habakkuk 3 confirmed to need no changes (already correct standard KJV versification, per spec's own prior investigation — unaffected by this implementation pass, which only touches Psalms).
+- [x] `getChapterVerseCount()` (`js/db.js`) reviewed and patched to exclude verse=0 (`AND verse > 0`), so "N verses" display stays accurate.
+- [ ] Clarify in-app: since KJV/ASV/Darby's own base text has no title wording, decide whether the verse=0 row for those translations shows TAHOT's English gloss as a substitute, shows nothing until a real source is found, or some other treatment — deliberately still open, carried into Build 6 (see `Build_6_Spec.md`'s updated Definition of Done). Interim behavior until then: the reader renders nothing for these empty rows.
 
 ---
 

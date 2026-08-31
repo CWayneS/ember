@@ -861,6 +861,19 @@ body.markup-mode-on .verse.markup-circle {
     font-size: var(--scripture-font-size);
 }
 
+/* Psalm title row (verse=0) — Psalm_Title_Fix_Spec.md. Its own line, not
+   rendered as "verse 0" (no verse-number bubble), visually distinct from
+   ordinary verse text. */
+.verse-title {
+    display: block;
+    margin-bottom: 0.5em;
+}
+
+.verse-title .verse-text {
+    font-style: italic;
+    color: var(--text-muted);
+}
+
 .verse-number {
     font-family: var(--font-display);
     font-size: calc(var(--scripture-font-size) * 0.67);

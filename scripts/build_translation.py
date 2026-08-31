@@ -3,7 +3,8 @@
 build_translation.py — Build a translation .db file for Ember.
 
 Usage (run from project root):
-    python3 scripts/build_translation.py KJV   data/core.db \
+    python3 scripts/build_translation.py KJV \
+        data/translations-prep/data/translations-prep/scrollmapper/formats/sqlite/KJV.db \
         --name "King James Version" --year 1611
 
     python3 scripts/build_translation.py ASV \
@@ -29,10 +30,20 @@ Usage (run from project root):
 Source type is auto-detected from the source path:
   - Directory  → WEB per-chapter files (engwebp_NNN_BOOK_CC_read.txt)
   - .txt file  → BSB TSV ("Book Chapter:Verse<TAB>Text", 3-line header)
-  - .db + KJV  → Ember core.db  (verses table, book_id + translation_id = 'KJV')
-  - .db + other → scrollmapper  ({ABBREV}_verses / {ABBREV}_books tables)
+  - .db file   → scrollmapper  ({ABBREV}_verses / {ABBREV}_books tables)
 
 Output: data/translations-prep/output/{ABBREV}.db
+
+Psalm title placeholders (Psalm_Title_Fix_Spec.md):
+  For KJV/ASV/Darby only, this script also inserts an empty-text verse=0 row
+  for each of the 116 Psalms that carry a title in standard versification
+  (see PSALM_TITLE_CHAPTERS below). These translations' source data has no
+  title text to source (see spec — sourcing was investigated and declined),
+  so the rows are placeholders: they give the title a real, addressable
+  verse_id ahead of Build 6, which populates them from TAHOT's English-
+  aligned gloss. WEB/YLT/BSB are untouched — their titles are already
+  present, merged into verse 1's text by their own source data, and that
+  representation is being kept as-is rather than split out.
 """
 
 import argparse
@@ -162,20 +173,6 @@ BSB_BOOK_NAMES.update({
 # ── Source loaders ────────────────────────────────────────────────────────────
 # Each returns a list of (book_id, chapter, verse, text) tuples where
 # book_id is 1-66 (Genesis = 1, Revelation = 66).
-
-
-def load_from_core_db(source_path: str) -> list[tuple]:
-    """Extract KJV from Ember's core.db (book_id + translation_id = 'KJV')."""
-    conn = sqlite3.connect(source_path)
-    try:
-        rows = conn.execute(
-            "SELECT book_id, chapter, verse, text FROM verses "
-            "WHERE translation_id = 'KJV' "
-            "ORDER BY book_id, chapter, verse"
-        ).fetchall()
-    finally:
-        conn.close()
-    return [(int(b), int(c), int(v), t) for b, c, v, t in rows]
 
 
 def load_from_scrollmapper(source_path: str, abbrev: str) -> list[tuple]:
@@ -333,6 +330,43 @@ def load_from_web_dir(source_path: str) -> list[tuple]:
     return verses
 
 
+# ── Psalm title placeholders (Psalm_Title_Fix_Spec.md) ───────────────────────
+# The 116 Psalms that carry a superscription/title in standard versification
+# (Psalm 119 excluded — its ALEPH/BETH/... acrostic headings are a separate,
+# structurally different problem, out of scope for this fix).
+
+PSALM_TITLE_CHAPTERS = [
+    3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+    24, 25, 26, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 38, 39, 40, 41, 42,
+    44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61,
+    62, 63, 64, 65, 66, 67, 68, 69, 70, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+    81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 92, 98, 100, 101, 102, 103, 108,
+    109, 110, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131,
+    132, 133, 134, 138, 139, 140, 141, 142, 143, 144, 145,
+]
+
+PSALMS_BOOK_ID = 19
+
+# Translations whose own base text has no title wording to source (see spec's
+# "Sourcing" section — investigated, declined). These get an empty-text
+# verse=0 placeholder per titled Psalm now, so the row is addressable ahead
+# of Build 6, which populates the text from TAHOT's English-aligned gloss.
+PLACEHOLDER_ABBREVS = {"KJV", "ASV", "DARBY"}
+
+
+def add_psalm_title_placeholders(verses: list[tuple], abbrev: str) -> list[tuple]:
+    """Append empty-text verse=0 rows for the 116 titled Psalms.
+
+    No-op for any translation not in PLACEHOLDER_ABBREVS — WEB/YLT/BSB
+    already carry title text merged into verse 1 and are left as-is.
+    """
+    if abbrev.upper() not in PLACEHOLDER_ABBREVS:
+        return verses
+    placeholders = [(PSALMS_BOOK_ID, chapter, 0, '') for chapter in PSALM_TITLE_CHAPTERS]
+    print(f"  Added {len(placeholders)} Psalm title placeholder rows (verse=0, empty text).")
+    return sorted(verses + placeholders, key=lambda row: (row[0], row[1], row[2]))
+
+
 # ── DB creation ───────────────────────────────────────────────────────────────
 
 
@@ -422,7 +456,11 @@ def verify(output_path: str, abbrev: str) -> bool:
     conn  = sqlite3.connect(output_path)
     ok    = True
 
-    verse_count = conn.execute("SELECT COUNT(*) FROM verses").fetchone()[0]
+    # verse=0 rows are Psalm title placeholders (Psalm_Title_Fix_Spec.md), not
+    # canonical verses — excluded here so the sanity range below still means
+    # what it says for translations that carry them (KJV/ASV/Darby).
+    verse_count = conn.execute("SELECT COUNT(*) FROM verses WHERE verse > 0").fetchone()[0]
+    title_count = conn.execute("SELECT COUNT(*) FROM verses WHERE verse = 0").fetchone()[0]
     book_count  = conn.execute("SELECT COUNT(*) FROM books").fetchone()[0]
     meta        = dict(conn.execute("SELECT key, value FROM meta").fetchall())
     fts_hits    = conn.execute(
@@ -460,6 +498,8 @@ def verify(output_path: str, abbrev: str) -> bool:
         if verse_ok else f"✗ expected ~{EXPECTED_VERSE_COUNT:,}"
     )
     print(f"  Verses : {verse_count:,}  {verse_note}")
+    if title_count:
+        print(f"  Titles : {title_count} Psalm title placeholder row(s) (verse=0)")
     print(f"  Books  : {book_count}  {'✓' if book_count == 66 else '✗ expected 66'}")
     print(f"  Meta   : {meta}")
     print(f"  FTS    : {len(fts_hits)} hit(s) for 'faith'  {'✓' if fts_hits else '✗ no results'}")
@@ -486,7 +526,7 @@ def main() -> None:
         epilog=__doc__,
     )
     parser.add_argument("abbrev",    help="Translation abbreviation (KJV, ASV, WEB, …)")
-    parser.add_argument("source",    help="Source path: core.db, scrollmapper .db, BSB .txt, or WEB directory")
+    parser.add_argument("source",    help="Source path: scrollmapper .db, BSB .txt, or WEB directory")
     parser.add_argument("--name",    required=True, help="Full translation name")
     parser.add_argument("--year",    default="",    help="Publication year")
     parser.add_argument("--license", default="Public Domain", dest="license_",
@@ -504,9 +544,6 @@ def main() -> None:
     elif source.endswith((".txt", ".tsv")):
         print(f"Loading {abbrev} from BSB TSV: {source}")
         verses = load_from_bsb_tsv(source)
-    elif source.endswith(".db") and abbrev.upper() == "KJV":
-        print(f"Loading KJV from Ember core.db: {source}")
-        verses = load_from_core_db(source)
     elif source.endswith(".db"):
         print(f"Loading {abbrev} from scrollmapper: {source}")
         verses = load_from_scrollmapper(source, abbrev)
@@ -517,6 +554,8 @@ def main() -> None:
         sys.exit(1)
 
     print(f"  Loaded {len(verses):,} verses.")
+
+    verses = add_psalm_title_placeholders(verses, abbrev)
 
     # ── Build output DB ───────────────────────────────────────────────────────
 

@@ -948,8 +948,10 @@ export function getBook(bookId) {
 export function getChapterVerseCount(bookId, chapter) {
     const tdb = _translationDbs.get(1); // always use KJV for canonical count
     if (!tdb) return 0;
+    // verse=0 rows are Psalm title placeholders (Psalm_Title_Fix_Spec.md), not
+    // real verses — excluded so "N verses" display stays accurate.
     return tdb.exec(
-        'SELECT COUNT(*) FROM verses WHERE book = ? AND chapter = ?',
+        'SELECT COUNT(*) FROM verses WHERE book = ? AND chapter = ? AND verse > 0',
         [bookId, chapter]
     )[0]?.values[0][0] || 0;
 }
@@ -1239,7 +1241,12 @@ export function getAllBookmarks() {
 }
 
 export function getBookmarksForChapter(bookId, chapter) {
-    const chapterStart = bookId * 1000000 + chapter * 1000 + 1;
+    // Chapter start includes verse=0 (Psalm title row) — a bookmark placed on
+    // a title is the user's own data, and should count as "in this chapter"
+    // the same as any other bookmark. Deliberately asymmetric with
+    // cross-references/Nave's split_range(), which leave verse=0 out — see
+    // Psalm_Title_Fix_Spec.md.
+    const chapterStart = bookId * 1000000 + chapter * 1000 + 0;
     const chapterEnd   = bookId * 1000000 + chapter * 1000 + 999;
     const result = db.exec(
         'SELECT verse_id, id, label FROM bookmarks WHERE verse_id >= ? AND verse_id <= ?',
