@@ -9,7 +9,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 1. App name: "Ember Bible Study" (short name: "Ember") — manifest.json
 2. PWA manifest present; display mode: `standalone`
-3. Icons: 192×192 and 512×512 PNG (any/maskable)
+3. Icons: manifest.json declares 192×192 and 512×512 PNG entries (any/maskable), but neither PNG file exists in `icons/` (directory contains only `.gitkeep`) — the manifest references icons that are not actually shipped **[NON-FUNCTIONAL]**
 4. Service worker registered (on non-localhost only) — app.js:42
 5. Service worker strategy: cache-first for all static assets; network-first for `data/core.db` — sw.js
 6. App works fully offline after first load (core.db persisted to OPFS/IndexedDB on first run)
@@ -55,7 +55,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 27. Clicking in notes panel or reference panel does NOT clear verse selection — selection.js
 28. Clicking outside reader + panels (e.g. header area): clears selection — selection.js
 29. Verse indicators: 5px circles positioned below the verse-number superscript via `.verse-indicators` (absolute, centered). Gold dot (`.note-indicator`, `var(--note-indicator)`) for verses with notes — tooltip shows count. Green dot (`.bookmark-indicator`, `var(--accent)`) for bookmarked verses — tooltip shows comment or "Bookmarked". When both present, dots stack vertically — reader.js, style.css:`.verse-number`, `.verse-indicators`
-30. Indicator dots updated without full re-render after note writes — reader.js:refreshNoteDots
+30. Indicator dots updated without full re-render after note writes — reader.js:refreshVerseIndicators, called from notes.js:502
 31. Navigating to a chapter via search or tag-view anchor: scrolls target verse into center and simulates a click to select it — reader.js
 31a. Cross-reference click-to-navigate: `selectVerseRange(startId, endId)` in selection.js programmatically selects a verse or range, scrolls to it, and dispatches `selection-changed` — selection.js:selectVerseRange
 31b. Psalm superscription/title rows (`verse=0`, `Psalm_Title_Fix_Spec.md`): 116 titled psalms carry an addressable title row in KJV/ASV/Darby, rendered with distinct styling (`.verse-title` — italic, no verse-number bubble) above verse 1; notes/tags/bookmarks can attach to it like any other verse. WEB/YLT/BSB are unchanged — their titles were already merged into verse 1's own text by their source data — reader.js:renderPane, css:`.verse-title`
@@ -86,7 +86,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 ## Book/Chapter Selector Overlay
 
-42. Opens by clicking the book abbreviation button in pane nav — reader.js:toggleBookOverlay
+42. Opens by clicking the book abbreviation button in pane nav — reader.js:openBookOverlay/closeBookOverlay
 43. Full-screen overlay (fixed, below global header, z-index 200) covering the workspace
 44. Books grouped by testament ("Old Testament" / "New Testament") with bold dividers
 45. Within each testament, books sub-grouped by genre with genre headings: Law, History, Poetry & Wisdom, Prophecy, Gospels, Epistles, Apocalyptic
@@ -129,6 +129,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 ## Reader Help
 
 67. Help popover (? button in reader header): opens a contextual help overlay with metaphor lead, action bullets, and a non-functional "More help" placeholder link — help.js
+67a. **[STALE CONTENT]** The bullet list describes the bookmark button as "The ⬤ button" — the actual button is "☆" (index.html:136, item 51 above). Text not updated since an earlier button design — index.html:198-208
 
 ---
 
@@ -260,7 +261,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 141. Shows cross-references sourced from `cross_references` table in core.db (OpenBible.info data, ~340K pairs with vote scores) — reference.js:renderRelatedTab
 141a. Results filtered to vote ≥ 2 by default; a "Show all" toggle reveals lower-confidence references — reference.js
 141b. References grouped by target book; displayed as clickable buttons showing book+chapter:verse reference — reference.js
-141c. Clicking a cross-reference: navigates the active pane to the target chapter and selects the target verse range — reference.js:navigateToRef, selection.js:selectVerseRange
+141c. Clicking a cross-reference: navigates the active pane to the target chapter and selects the target verse range — reference.js:navigateToCrossRef, selection.js:selectVerseRange
 141d. If no high-signal cross-references exist: shows "No high-signal cross-references for this verse." — reference.js:203
 
 ---
@@ -302,9 +303,9 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 ## Reference Settings
 
 143. Settings popover (⚙ button in reference panel header): opens a positioned popover using the shared `.help-popover` component — reference-settings.js
-144. Default tab selector: three-button toggle group (Info / Tags / Related) — reference-settings.js
-145. Selected default tab activates automatically whenever a verse is selected — reference-settings.js (listens to `selection-changed`)
-146. Reset button returns default to Info — reference-settings.js
+144. Default tab selector: four-button toggle group (Keep / Info / Tags / Related) — reference-settings.js. "Keep" and the auto-switch behavior are not exposed for the Language or Plans tabs — they can only be reached by manually clicking their tab button
+145. Selected default tab activates automatically whenever a verse is selected, unless set to "Keep" (in which case the currently-open tab is left alone) — reference-settings.js:48-54 (listens to `selection-changed`)
+146. Reset button returns default to Info — reference-settings.js (`DEFAULT_TAB = 'info'`)
 147. Default tab persists across reloads via `app_state` key `default_reference_tab` — reference-settings.js
 
 ---
@@ -312,6 +313,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 ## Reference Help
 
 148. Help popover (? button in reference panel header): opens a contextual help overlay with metaphor lead, action bullets (Info / Tags / Related described), and a non-functional "More help" placeholder link — help.js
+148a. **[STALE CONTENT]** The bullet list still labels Related as "cross-references... *(coming soon)*", even though Related has been fully functional since Build 2 (see item 141 above), and does not mention the Language or Plans tabs at all (both added Build 3/6) — index.html:222-230
 
 ---
 
@@ -332,7 +334,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 156. Clicking search input when empty: shows prefix shortcuts panel — search.js:17-20
 157. Typing 1 character: hides overlay (no results) — search.js:30-32
 158. Typing 2+ characters: runs search after 200ms debounce — search.js:33-35
-159. Search covers: Scripture (FTS with LIKE fallback, 50 results max), notes (FTS4, 50 max), tag names + topic names (LIKE), study names (LIKE, 20 max) — db.js:search
+159. Search covers: Scripture (FTS with LIKE fallback, 50 results max), notes (FTS4, 50 max), tag names + topic names (LIKE, combined 20 max via `UNION ... LIMIT 20`), study names (LIKE, 20 max) — db.js:search
 160. Results displayed in labeled sections: "Scripture · {abbrev}" (e.g. "Scripture · KJV"), Notes, Studies, Tags — search.js
 160a. Scripture section runs FTS against the active pane's translation database — search.js:runSearch; db.js:search
 161. Empty results: "No results for 'query'" — search.js:renderEmpty
