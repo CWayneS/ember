@@ -1689,7 +1689,8 @@ export function getCrossReferencesForVerse(verseId, options = {}) {
 }
 
 // ============================================================
-// Language — original-language words + Greek lexicon (Build 6)
+// Language — original-language words, Greek lexicon (Build 6),
+// Greek grammar decode / TEGMC (Grammar Decode spec)
 // ============================================================
 
 // Rows for every selected verse, ordered for interlinear rendering (verse,
@@ -1758,4 +1759,25 @@ export async function getGreekLexiconEntry(strongsNumber) {
     const row = stmt.step() ? stmt.getAsObject() : null;
     stmt.free();
     return row;
+}
+
+// TEGMC grammatical categories for one raw Greek morphology-code fragment
+// (e.g. "V-PAP-NSM" or "CONJ") — NOT the full original_words.morph_code
+// value, which may be an N-way " + " compound; callers split that first (see
+// grammar-decode.js's splitMorphCode). Returns [] (never throws) when the
+// fragment has no TEGMC entry — two known raw-file codes (V-PMO-1S/V-PMO-3P)
+// are absent by design and neither appears in current data; callers must
+// treat [] as "nothing to decode," not an error.
+export async function getGreekMorphCategories(code) {
+    if (!code) return [];
+    const langDb = await getLanguageDb();
+    const stmt = langDb.prepare(
+        `SELECT category, raw_value FROM step_morphology_greek
+         WHERE code = ? ORDER BY sort_order ASC`
+    );
+    stmt.bind([code]);
+    const rows = [];
+    while (stmt.step()) rows.push(stmt.getAsObject());
+    stmt.free();
+    return rows;
 }

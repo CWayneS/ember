@@ -15,6 +15,7 @@ Source files expected in data/stepbible-prep/raw/:
     TAHOT_Gen-Deu.txt, TAHOT_Jos-Est.txt, TAHOT_Job-Sng.txt, TAHOT_Isa-Mal.txt
     TAGNT_Mat-Jhn.txt, TAGNT_Act-Rev.txt
     TBESG.txt
+    TEGMC.txt
 
 All column layouts below were verified directly against the real downloaded
 files (see Build_6_Spec.md's implementation notes), not assumed from
@@ -63,6 +64,16 @@ TAGNT data row — 17 tab-separated columns, only some used:
 
 TBESG — 8 tab-separated columns, all used:
   eStrong / dStrong / uStrong / Greek / Transliteration / Morph / Gloss / Meaning
+
+TEGMC — not tabular. The file has two sections: "BRIEF LEXICAL MORPHOLOGY
+CODES" (uses "G:"/"A:"-language-prefixed codes, e.g. "G:N-F" — does NOT match
+original_words.morph_code's format, NOT ingested) and "FULL MORPHOLOGY CODES"
+(the one used — codes like "V-PAP-NSM" match original_words.morph_code
+exactly). Full-section records are 4 physical lines delimited by lines
+containing only "$": (1) "CODE\\tKey=Value; Key=Value; ..." — the only line
+persisted; (2) a plain-English summary phrase; (3) a description sentence;
+(4) an example sentence. Lines 2-4 are intentionally not parsed/persisted —
+see parse_tegmc_file's docstring.
 """
 
 import os
@@ -84,6 +95,7 @@ SHIPPED_DB   = PROJECT_ROOT / "data" / "language.db"
 TAHOT_FILES = ["TAHOT_Gen-Deu.txt", "TAHOT_Jos-Est.txt", "TAHOT_Job-Sng.txt", "TAHOT_Isa-Mal.txt"]
 TAGNT_FILES = ["TAGNT_Mat-Jhn.txt", "TAGNT_Act-Rev.txt"]
 TBESG_FILE  = "TBESG.txt"
+TEGMC_FILE  = "TEGMC.txt"
 
 # ── Book code map ────────────────────────────────────────────────────────────
 # STEPBible's abbreviations, in the exact order they appear across the 6
@@ -393,6 +405,81 @@ def parse_tbesg_file(path):
             }
 
 
+# ── TEGMC parsing ────────────────────────────────────────────────────────────
+
+def normalize_tegmc_value(s):
+    # Defensive only: verified the current file's line-1 Key=Value strings (the
+    # only line persisted) never contain these — the '‚' (U+201A) comma-lookalike
+    # and stray literal '"' quoting only ever occur in lines 2-4 (summary/
+    # description/example), which this parser doesn't persist. Kept in case a
+    # future re-download introduces either into line 1.
+    return s.replace('‚', ',').strip().strip('"').strip()
+
+
+def parse_tegmc_file(path):
+    """Yields dicts, one per (code, category) pair, from the FULL MORPHOLOGY
+    CODES section of TEGMC.
+
+    Each 4-line record is separated by a line containing only "$"; only each
+    chunk's first non-blank line is read (the "CODE\\tKey=Value; ..." line) —
+    lines 2-4 (summary/description/example) are TEGMC's own prose, not a
+    mechanical source for Ember's reader-facing phrasing (that mapping is
+    authored separately, in js/grammar-decode.js), so they're never parsed.
+
+    Reading only each chunk's first line also makes two known raw-file
+    irregularities self-correcting, with no special-casing:
+      - The file's preamble (title/license text, the "BRIEF LEXICAL
+        MORPHOLOGY CODES" section, and the "FULL MORPHOLOGY CODES" section's
+        own header/column-description prose) all fall before the first "$"
+        in the file, forming one leading chunk whose first line has no tab
+        and no "Key=Value" shape — it fails validation and is skipped, and
+        it is the ONLY chunk that does (verified: exactly 1,644 codes
+        recovered from 1,645 total chunks).
+      - "V-PMO-1S" is missing its closing "$" in the raw file and is
+        immediately followed by a corrupted, non-tabular "V-PMO-3P" block
+        (a spreadsheet-export artifact leaking through, repeating the code
+        across mismatched columns). Both sit in one chunk together; since
+        that chunk's first line is V-PMO-1S's own well-formed line,
+        V-PMO-1S decodes correctly and the garbled V-PMO-3P lines are never
+        inspected. V-PMO-3P is therefore correctly absent from the output —
+        confirmed unused by any current Greek morph_code, so this has no
+        effect on decode coverage.
+      - The file's true final record, "X-NSN", has no trailing "$" at all —
+        it runs straight into a short trailing appendix of KJV/Robinson-
+        apparatus-specific codes (out of scope, not ingested) with no
+        delimiter. Treating the text after the last "$" as one final chunk
+        recovers X-NSN the same way, and the appendix (never a chunk's
+        first line) is correctly never inspected.
+    """
+    with open(path, encoding='utf-8-sig') as f:
+        text = f.read()
+
+    chunks = text.split('\n$\n')
+    for chunk in chunks:
+        first_line = next((line for line in chunk.split('\n') if line.strip()), None)
+        if not first_line or '\t' not in first_line:
+            continue
+        code, kv_string = first_line.split('\t', 1)
+        code = code.strip()
+        pairs = []
+        for part in kv_string.split(';'):
+            part = part.strip()
+            if '=' not in part:
+                pairs = []
+                break
+            category, raw_value = part.split('=', 1)
+            pairs.append((category.strip(), normalize_tegmc_value(raw_value)))
+        if not code or not pairs:
+            continue
+        for i, (category, raw_value) in enumerate(pairs, start=1):
+            yield {
+                'code':       code,
+                'category':   category,
+                'raw_value':  raw_value,
+                'sort_order': i,
+            }
+
+
 # ── Schema + build ───────────────────────────────────────────────────────────
 
 SCHEMA = """
@@ -421,11 +508,27 @@ CREATE TABLE step_lexicon_greek (
     gloss           TEXT,
     meaning         TEXT
 );
+
+-- One row per (code, category) pair from TEGMC's "Full Morphology Codes"
+-- section, e.g. ('A-APF-C', 'Extra', 'Comparative'). No UNIQUE(code, category)
+-- constraint — two real codes legitimately repeat a category key within one
+-- record ("N-NSN-L" has two distinct "Name type" values; "PRT-N" has two
+-- identical "Extra" values). raw_value can legitimately be the empty string
+-- (e.g. "N-OI"/"N-PRI" carry "Indeclinable=" with nothing after "=" — the
+-- key's presence alone is the signal) and must never be coerced to NULL.
+CREATE TABLE step_morphology_greek (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    code        TEXT NOT NULL,
+    category    TEXT NOT NULL,
+    raw_value   TEXT NOT NULL,
+    sort_order  INTEGER NOT NULL
+);
+CREATE INDEX idx_step_morphology_greek_code ON step_morphology_greek(code);
 """
 
 
 def build():
-    for name in TAHOT_FILES + TAGNT_FILES + [TBESG_FILE]:
+    for name in TAHOT_FILES + TAGNT_FILES + [TBESG_FILE, TEGMC_FILE]:
         if not (RAW_DIR / name).exists():
             sys.exit(f"Missing source file: {RAW_DIR / name}")
 
@@ -484,6 +587,44 @@ def build():
     lex_rows = [tuple(r[c] for c in lex_cols) for r in parse_tbesg_file(RAW_DIR / TBESG_FILE)]
     cur.executemany(insert_lex, lex_rows)
     print(f"  {len(lex_rows)} lexicon entries")
+
+    print(f"Parsing {TEGMC_FILE} ...")
+    morph_cols = ['code', 'category', 'raw_value', 'sort_order']
+    insert_morph = f"INSERT INTO step_morphology_greek ({','.join(morph_cols)}) VALUES ({','.join('?' * len(morph_cols))})"
+    morph_rows = [tuple(r[c] for c in morph_cols) for r in parse_tegmc_file(RAW_DIR / TEGMC_FILE)]
+    cur.executemany(insert_morph, morph_rows)
+    tegmc_codes = {row[0] for row in morph_rows}
+    print(f"  {len(morph_rows)} category rows across {len(tegmc_codes)} codes")
+    # 1,644 confirmed at STEPBible-Data commit faf6a35 (2026-03-27); a future
+    # re-download changing this count slightly is expected upstream drift, not
+    # necessarily a bug — floor-check only, don't hard-fail the build on an
+    # exact count.
+    if len(tegmc_codes) < 1600:
+        print(f"WARNING: expected ~1,644 TEGMC codes, got {len(tegmc_codes)} — check raw file for format changes")
+
+    # Mechanizes the coverage claim behind the grammar-decode feature
+    # (docs/Grammar_Decode_Spec_DRAFT.md): every Greek morph_code, once split on
+    # " + " and any "G<digits>=" Strong's-number prefix stripped from each
+    # piece, should resolve against a TEGMC code. Printed diagnostic, not a
+    # hard failure — a genuine gap here doesn't break anything already built,
+    # it just means that one piece won't have a decoded breakdown at runtime.
+    cur.execute(
+        "SELECT DISTINCT morph_code FROM original_words "
+        "WHERE language = 'greek' AND morph_code IS NOT NULL"
+    )
+    strongs_prefix_re = re.compile(r'^G\d+=(.+)$')
+    misses = set()
+    for (morph_code,) in cur.fetchall():
+        for piece in morph_code.split(' + '):
+            piece = piece.strip()
+            m = strongs_prefix_re.match(piece)
+            base_code = m.group(1) if m else piece
+            if base_code not in tegmc_codes:
+                misses.add(base_code)
+    if misses:
+        print(f"WARNING: {len(misses)} distinct Greek morph_code piece(s) have no TEGMC entry: {sorted(misses)[:20]}")
+    else:
+        print("TEGMC coverage: 100% of distinct Greek morph_code pieces resolved")
 
     # A group_id must have >=2 members to mean anything ("shared ID across rows
     # that form one display unit" — Build_6_Spec.md Item 2). A '+'/conjoin marker

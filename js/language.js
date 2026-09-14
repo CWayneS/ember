@@ -9,6 +9,7 @@ import {
     parseVerseId, getBook,
     getOriginalWordsForVerses, getGreekLexiconEntry
 } from './db.js';
+import { decodeMorphCode } from './grammar-decode.js';
 
 const EMPTY_MSG        = 'Select a verse to see its original-language text.';
 const NO_DATA_MSG      = 'No original-language data for this verse yet.';
@@ -204,6 +205,19 @@ async function renderWordSection(word) {
     appendDetailField(section, 'Transliteration', word.transliteration);
     appendDetailField(section, 'Strong’s number', word.strongs_number);
     appendDetailField(section, 'Morphology', word.morph_code);
+
+    if (!isHebrew && word.morph_code) {
+        let parts = [];
+        try {
+            parts = await decodeMorphCode(word.morph_code);
+        } catch (e) {
+            console.error('renderWordSection: morphology decode failed:', e);
+        }
+        if (parts.length > 0) {
+            section.appendChild(await renderMorphDecodeAccordion(parts));
+        }
+    }
+
     appendDetailField(section, 'Contextual gloss', word.gloss_contextual);
     appendDetailField(section, 'Dictionary gloss', word.gloss_dictionary);
 
@@ -231,6 +245,66 @@ async function renderWordSection(word) {
     }
 
     return section;
+}
+
+// Collapsed-by-default, expand-in-place breakdown of a decoded morph_code,
+// beneath the raw Morphology field. Reuses the app's only existing accordion
+// precedent — native <details>/<summary>, as used in
+// reference.js:renderRelatedShowAll — rather than introducing a new
+// interaction pattern (Grammar_Decode_Spec_DRAFT.md's Design Principle).
+async function renderMorphDecodeAccordion(parts) {
+    const details = document.createElement('details');
+    details.className = 'language-morph-decode';
+
+    const summary = document.createElement('summary');
+    summary.className = 'language-morph-decode-toggle';
+    summary.textContent = 'What does this mean?';
+    details.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'language-morph-decode-body';
+    const multi = parts.length > 1;
+
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (multi) {
+            const heading = document.createElement('div');
+            heading.className = 'language-morph-decode-part-heading';
+            heading.textContent = part.code;
+            body.appendChild(heading);
+        }
+        for (const line of part.lines) {
+            const lineEl = document.createElement('div');
+            lineEl.className = 'language-morph-decode-line';
+            lineEl.textContent = line;
+            body.appendChild(lineEl);
+        }
+        if (part.strongsNumber) {
+            // Resolved eagerly here, not lazily on expand — this accordion is
+            // a zero-JS native <details> element with no toggle listener;
+            // deferring this lookup to "on expand" would require adding one.
+            let lex = null;
+            try {
+                lex = await getGreekLexiconEntry(part.strongsNumber);
+            } catch (e) {
+                console.error('renderMorphDecodeAccordion: cross-ref lookup failed:', e);
+            }
+            const refEl = document.createElement('div');
+            refEl.className = 'language-morph-decode-crossref';
+            refEl.textContent = lex && lex.gloss
+                ? `Also joined with ${part.strongsNumber} (${lex.gloss})`
+                : `Also joined with ${part.strongsNumber}`;
+            body.appendChild(refEl);
+        }
+        if (multi && i < parts.length - 1) {
+            const divider = document.createElement('div');
+            divider.className = 'language-morph-decode-divider';
+            body.appendChild(divider);
+        }
+    }
+
+    details.appendChild(body);
+    return details;
 }
 
 function appendDetailField(container, label, value) {

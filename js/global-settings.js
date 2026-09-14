@@ -59,7 +59,7 @@ const SECTIONS = [
                 {
                     name: 'STEPBible-Data',
                     url: 'https://www.stepbible.org',
-                    note: 'Original-language word data (Hebrew/Greek text, glosses, and lexicon entries) powering the Language tab, from Tyndale House, Cambridge.'
+                    note: 'Original-language word data (Hebrew/Greek text, glosses, lexicon entries, and grammar decoding) powering the Language tab, from Tyndale House, Cambridge.'
                 },
                 {
                     name: 'OpenBible.info',

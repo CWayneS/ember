@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v4'; // bumped: language.js/db.js/style.css changed, SILEOT.woff added (Build 6)
+const CACHE_NAME = 'ember-v5'; // bumped: js/grammar-decode.js added, language.js/db.js/style.css changed (Grammar Decode)
 
 // Files that must be cached on install for the app to work offline.
 // core.db is NOT included here — it is large (18 MB) and already persisted
@@ -19,6 +19,7 @@ const PRECACHE = [
     './js/notes.js',
     './js/tags.js',
     './js/language.js',
+    './js/grammar-decode.js',
     './js/search.js',
     './js/panels.js',
     './js/state.js',

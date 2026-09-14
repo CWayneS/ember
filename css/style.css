@@ -2284,6 +2284,68 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     margin-top: 4px;
 }
 
+/* Grammar decode accordion — reuses .ref-crossref-group-header's declaration
+   set, but with the disclosure glyphs inverted (collapsed by default here,
+   vs. that precedent's default-open behavior). No transitions/animations —
+   matches this app's convention that every expand/collapse is instant. */
+.language-morph-decode {
+    margin-top: 6px;
+}
+
+.language-morph-decode-toggle {
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    color: var(--accent);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+}
+
+.language-morph-decode-toggle::-webkit-details-marker { display: none; }
+
+.language-morph-decode-toggle::before {
+    content: '▸ ';
+    font-size: 0.75em;
+    opacity: 0.6;
+}
+
+details.language-morph-decode[open] .language-morph-decode-toggle::before {
+    content: '▾ ';
+}
+
+.language-morph-decode-body {
+    padding: 6px 0 0 4px;
+}
+
+.language-morph-decode-part-heading {
+    font-family: var(--font-display);
+    font-size: var(--size-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 8px;
+}
+
+.language-morph-decode-line {
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    color: var(--text-primary);
+    padding: 2px 0;
+}
+
+.language-morph-decode-crossref {
+    font-family: var(--font-reading);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    padding: 2px 0;
+}
+
+.language-morph-decode-divider {
+    border-top: 1px solid var(--border-light);
+    margin: 6px 0;
+}
+
 /* ============================================================
    Book / Chapter Selector Overlay
    ============================================================ */
