@@ -100,7 +100,7 @@ Ember has shipped through **Build 6**. Current functionality:
 - **Bookmarks** — save and label specific verses for quick return
 - **Text markups** — highlight and underline verses in multiple colors
 - **Reference panel** — Info, Tags, Related (cross-references), and Language tabs, contextual to the current selection, plus a fifth Plans tab (reading plans and study templates) in the same tab bar
-- **Language tab** — original-language word study: interlinear Hebrew/Greek text for any selected verse, word-by-word English glosses, grouped-word handling for multi-word phrases, and a full word detail view (lemma, transliteration, Strong's number, morphology, and lexicon entry for Greek)
+- **Language tab** — original-language word study: interlinear Hebrew/Greek text for any selected verse, word-by-word English glosses, grouped-word handling for multi-word phrases, and an inline word card that expands beneath the tapped word without leaving the verse — progressive disclosure from gloss/morphology/Strong's number up through lemma/transliteration/parsed morphology up to the full Greek lexicon entry
 - **Reading plans** — structured, progress-tracked plans through Scripture
 - **Study templates** — pre-built study structures (Inductive Study, Word Study, Passage Overview) that generate a filled-in study in one step
 - **Backup & restore** — full local data export/import
