@@ -2170,6 +2170,12 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     background: var(--bg-secondary);
 }
 
+.language-word-row.active {
+    background: var(--bg-selected);
+    border-left: 3px solid var(--accent);
+    padding-left: 13px;
+}
+
 .language-word-original {
     font-size: var(--size-base);
     text-align: left;
@@ -2191,56 +2197,7 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     text-align: right;
 }
 
-/* Word detail view */
-.language-back-btn {
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: 10px 16px;
-    font-family: var(--font-reading);
-    font-size: var(--size-small);
-    color: var(--accent);
-    background: none;
-    border: none;
-    border-bottom: 1px solid var(--border-light);
-    cursor: pointer;
-}
-
-.language-back-btn:hover {
-    background: var(--bg-secondary);
-}
-
-.language-word-detail {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-light);
-}
-
-.language-word-detail:last-child {
-    border-bottom: none;
-}
-
-.language-detail-ref {
-    font-family: var(--font-display);
-    font-size: var(--size-xs);
-    color: var(--text-muted);
-    margin-bottom: 6px;
-}
-
-.language-detail-original {
-    font-size: var(--size-large);
-    margin-bottom: 10px;
-}
-
-.language-detail-original.language-hebrew {
-    font-family: var(--font-hebrew);
-    line-height: 1.7;
-    text-align: right;
-}
-
-.language-detail-original.language-greek {
-    font-family: var(--font-greek);
-}
-
+/* Word card fields (tier 2/3) — shared with the retired flat detail view. */
 .language-detail-field {
     display: flex;
     gap: 8px;
@@ -2284,35 +2241,9 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     margin-top: 4px;
 }
 
-/* Grammar decode accordion — reuses .ref-crossref-group-header's declaration
-   set, but with the disclosure glyphs inverted (collapsed by default here,
-   vs. that precedent's default-open behavior). No transitions/animations —
-   matches this app's convention that every expand/collapse is instant. */
-.language-morph-decode {
-    margin-top: 6px;
-}
-
-.language-morph-decode-toggle {
-    font-family: var(--font-reading);
-    font-size: var(--size-small);
-    color: var(--accent);
-    cursor: pointer;
-    user-select: none;
-    list-style: none;
-}
-
-.language-morph-decode-toggle::-webkit-details-marker { display: none; }
-
-.language-morph-decode-toggle::before {
-    content: '▸ ';
-    font-size: 0.75em;
-    opacity: 0.6;
-}
-
-details.language-morph-decode[open] .language-morph-decode-toggle::before {
-    content: '▾ ';
-}
-
+/* Parsed-morphology lines — unfolded directly into tier 2, no accordion
+   wrapper. No transitions/animations — matches this app's convention that
+   every expand/collapse is instant. */
 .language-morph-decode-body {
     padding: 6px 0 0 4px;
 }
@@ -2344,6 +2275,100 @@ details.language-morph-decode[open] .language-morph-decode-toggle::before {
 .language-morph-decode-divider {
     border-top: 1px solid var(--border-light);
     margin: 6px 0;
+}
+
+/* Word card — inline tiered detail, expands beneath the tapped gloss row
+   (Language_Panel_Word_Inspector_Spec). */
+.language-word-card {
+    padding: 10px 16px 12px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-light);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.language-card-member {
+    padding: 6px 0;
+}
+
+.language-card-divider {
+    border-top: 1px solid var(--border-light);
+    margin: 4px 0;
+}
+
+.language-card-tier1-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.language-card-original {
+    font-size: var(--size-large);
+    flex-shrink: 0;
+}
+
+.language-card-original.language-hebrew {
+    font-family: var(--font-hebrew);
+}
+
+.language-card-original.language-greek {
+    font-family: var(--font-greek);
+}
+
+.language-card-strongs {
+    font-family: var(--font-reading);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.language-card-gloss {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    margin-left: auto;
+    text-align: right;
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+}
+
+.language-card-gloss-label {
+    font-family: var(--font-display);
+    font-size: var(--size-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.language-card-morph {
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.language-card-more-btn,
+.language-card-lexicon-btn {
+    display: block;
+    margin-top: 4px;
+    padding: 0;
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    color: var(--accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.language-card-tier2 {
+    margin-top: 6px;
+    padding-left: 4px;
+}
+
+.language-card-lexicon {
+    margin-top: 6px;
+    padding-left: 4px;
 }
 
 /* ============================================================

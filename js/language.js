@@ -1,9 +1,19 @@
-// language.js — Language tab: interlinear view + word detail view (Build 6)
+// language.js — Language tab: interlinear view + inline word card
+// (Language_Panel_Word_Inspector_Spec)
 //
 // Treats verse selection as an input, the same way reference.js's Tags/Related
 // tabs do — no new selection machinery in the reader itself (Build_6_Spec.md's
-// "Design Principle"). Word-level interaction (tap a row -> word detail) lives
+// "Design Principle"). Word-level interaction (tap a row -> word card) lives
 // entirely within this tab.
+//
+// A tapped gloss row expands a word card in place, directly beneath it,
+// instead of replacing the tab with a separate full-page view (the old
+// openWordDetail/renderWordDetail flow this file used to have). Every tap
+// re-runs the same renderInterlinear rebuild, parameterized by a small piece
+// of module state (openCardKey/openTier2Ids/openTier3Ids) — this codebase has
+// no existing precedent for manual DOM patching, and a full rebuild keeps
+// exactly one source of truth for what's open, with "rows shift down" falling
+// out for free as normal document flow.
 
 import {
     parseVerseId, getBook,
@@ -15,13 +25,23 @@ const EMPTY_MSG        = 'Select a verse to see its original-language text.';
 const NO_DATA_MSG      = 'No original-language data for this verse yet.';
 const UNAVAILABLE_MSG  = 'Original-language data is unavailable.';
 
-let currentVerseIds        = [];   // last selection this tab was asked to show
-let lastInterlinearWords   = null; // cached render input, for "back" from word detail
-let lastInterlinearScroll  = 0;
+let currentVerseIds      = [];   // last selection this tab was asked to show
+let lastInterlinearWords = null; // cached render input, for re-renders on tap
+
+// Which row's card is open, and which of its member words have tier 2/tier 3
+// expanded. Invariant: the two sets only ever hold ids belonging to the
+// currently-open card — both are cleared whenever openCardKey changes.
+let openCardKey    = null;
+let openTier2Ids   = new Set();
+let openTier3Ids   = new Set();
+let renderGeneration = 0; // staleness guard for overlapping async rebuilds
 
 export async function renderLanguageTab(verseIds) {
     const container = document.getElementById('language-tab');
     currentVerseIds = verseIds || [];
+    openCardKey = null;
+    openTier2Ids.clear();
+    openTier3Ids.clear();
 
     if (currentVerseIds.length === 0) {
         lastInterlinearWords = null;
@@ -44,20 +64,32 @@ export async function renderLanguageTab(verseIds) {
     if (requestIds !== currentVerseIds) return;
 
     lastInterlinearWords = words;
-    renderInterlinear(container, words);
+    await renderInterlinear(container, words);
+}
+
+// Re-runs the interlinear rebuild against the last-loaded words, preserving
+// scroll position — used by every tap (row, "Click for more", "Lexicon")
+// that only changes disclosure state, not the underlying verse selection.
+async function rerenderInterlinear() {
+    const container = document.getElementById('language-tab');
+    if (!lastInterlinearWords) return;
+    await renderInterlinear(container, lastInterlinearWords, { preserveScroll: true });
 }
 
 // ============================================================
-// Interlinear view — Item 3
+// Interlinear view
 // ============================================================
 
-function renderInterlinear(container, words) {
-    container.innerHTML = '';
+async function renderInterlinear(container, words, opts = {}) {
+    const myGeneration = ++renderGeneration;
 
     if (words.length === 0) {
+        container.innerHTML = '';
         setPlaceholder(container, NO_DATA_MSG);
         return;
     }
+
+    const scrollTop = opts.preserveScroll ? container.scrollTop : 0;
 
     const byVerse = new Map();
     for (const w of words) {
@@ -68,12 +100,36 @@ function renderInterlinear(container, words) {
     const wrap = document.createElement('div');
     wrap.className = 'language-interlinear';
     for (const [verseId, verseWords] of byVerse) {
-        wrap.appendChild(renderVerseBlock(verseId, verseWords));
+        wrap.appendChild(await renderVerseBlock(verseId, verseWords));
     }
+
+    // A newer tap or selection change may have started (and possibly
+    // finished) while this rebuild was awaiting query results — don't let a
+    // stale rebuild clobber it.
+    if (myGeneration !== renderGeneration) return;
+
+    container.innerHTML = '';
     container.appendChild(wrap);
+    container.scrollTop = scrollTop;
+
+    if (openCardKey) {
+        const card = container.querySelector('.language-word-card');
+        if (card) scrollCardIntoViewIfNeeded(container, card);
+    }
 }
 
-function renderVerseBlock(verseId, verseWords) {
+// Fallback only — in-place expansion is what keeps the card visible in the
+// normal case. Only scrolls when the newly-opened card isn't fully visible.
+function scrollCardIntoViewIfNeeded(container, card) {
+    const containerRect = container.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const fullyVisible = cardRect.top >= containerRect.top && cardRect.bottom <= containerRect.bottom;
+    if (!fullyVisible) {
+        card.scrollIntoView({ block: 'nearest' });
+    }
+}
+
+async function renderVerseBlock(verseId, verseWords) {
     const isHebrew = verseWords[0].language === 'hebrew';
 
     const block = document.createElement('div');
@@ -87,28 +143,36 @@ function renderVerseBlock(verseId, verseWords) {
     block.appendChild(heading);
 
     // Running verse line — decorative, non-interactive, continuous text. RTL
-    // as a full block for Hebrew (Item 3's "Layout" section).
+    // as a full block for Hebrew.
     const verseLine = document.createElement('div');
     verseLine.className = `language-verse-line ${isHebrew ? 'language-hebrew' : 'language-greek'}`;
     verseLine.dir = isHebrew ? 'rtl' : 'ltr';
     verseLine.textContent = verseWords.map(w => w.surface_text).join(' ');
     block.appendChild(verseLine);
 
-    // Gloss list — one row per word or grouped-word-unit. Grouped words (per
-    // the precomputed group_id) collapse into a single row: one combined
-    // original-language text span, one combined gloss, one tap target.
+    // Gloss list — one row per word or grouped-word-unit. Grouped words
+    // collapse into a single row: one combined original-language text span,
+    // one combined gloss, one tap target. The tapped row's card, if open,
+    // renders as the next list item — normal document flow pushes later
+    // rows down, no positioning tricks needed.
     const list = document.createElement('div');
     list.className = 'language-word-list';
 
     const seenGroups = new Set();
     for (const w of verseWords) {
+        let members;
         if (w.group_id !== null) {
             if (seenGroups.has(w.group_id)) continue;
             seenGroups.add(w.group_id);
-            const members = verseWords.filter(m => m.group_id === w.group_id);
-            list.appendChild(renderWordRow(members, isHebrew));
+            members = verseWords.filter(m => m.group_id === w.group_id);
         } else {
-            list.appendChild(renderWordRow([w], isHebrew));
+            members = [w];
+        }
+
+        const rowKey = cardKeyFor(members);
+        list.appendChild(renderWordRow(members, isHebrew, rowKey));
+        if (rowKey === openCardKey) {
+            list.appendChild(await renderWordCard(members, isHebrew));
         }
     }
     block.appendChild(list);
@@ -116,13 +180,18 @@ function renderVerseBlock(verseId, verseWords) {
     return block;
 }
 
+function cardKeyFor(members) {
+    const first = members[0];
+    return first.group_id != null ? `g${first.group_id}` : `w${first.id}`;
+}
+
 // Row layout is fixed LTR regardless of language: original-language column
-// always left, gloss always right (Item 3's "RTL and Typography Specifics").
-// Grouped words render in their natural reading order within the left cell —
-// no reordering needed, per the same section.
-function renderWordRow(members, isHebrew) {
+// always left, gloss always right. Grouped words render in their natural
+// reading order within the left cell — no reordering needed.
+function renderWordRow(members, isHebrew, rowKey) {
     const row = document.createElement('div');
     row.className = 'language-word-row';
+    row.classList.toggle('active', rowKey === openCardKey);
     row.setAttribute('role', 'button');
     row.tabIndex = 0;
 
@@ -138,12 +207,17 @@ function renderWordRow(members, isHebrew) {
     row.appendChild(original);
     row.appendChild(gloss);
 
-    const open = () => openWordDetail(members);
-    row.addEventListener('click', open);
+    const toggle = async () => {
+        openCardKey = (openCardKey === rowKey) ? null : rowKey;
+        openTier2Ids.clear();
+        openTier3Ids.clear();
+        await rerenderInterlinear();
+    };
+    row.addEventListener('click', toggle);
     row.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            open();
+            toggle();
         }
     });
 
@@ -151,116 +225,161 @@ function renderWordRow(members, isHebrew) {
 }
 
 // ============================================================
-// Word detail view — Item 4
+// Word card — tier 1 (always visible once tapped), tier 2 ("Click for
+// more"), tier 3 ("Lexicon")
 // ============================================================
 
-function openWordDetail(members) {
-    const container = document.getElementById('language-tab');
-    lastInterlinearScroll = container.scrollTop;
-    renderWordDetail(container, members);
-}
+async function renderWordCard(members, isHebrew) {
+    const card = document.createElement('div');
+    card.className = 'language-word-card';
 
-async function renderWordDetail(container, members) {
-    container.innerHTML = '';
-
-    const backBtn = document.createElement('button');
-    backBtn.className = 'language-back-btn';
-    backBtn.type = 'button';
-    backBtn.textContent = '← Back';
-    backBtn.addEventListener('click', () => {
-        if (!lastInterlinearWords) return;
-        renderInterlinear(container, lastInterlinearWords);
-        container.scrollTop = lastInterlinearScroll;
-    });
-    container.appendChild(backBtn);
-
-    // A grouped row taps to more than one lexical word (e.g. "ho logos") — show
-    // each member's full data as its own stacked section rather than picking
-    // one arbitrarily (Item 4's layout is left open; this keeps every word's
-    // data available honestly instead of guessing which member is "the" word).
-    for (const word of members) {
-        container.appendChild(await renderWordSection(word));
+    for (let i = 0; i < members.length; i++) {
+        if (i > 0) {
+            const divider = document.createElement('div');
+            divider.className = 'language-card-divider';
+            card.appendChild(divider);
+        }
+        card.appendChild(await renderCardMember(members[i], isHebrew));
     }
+
+    return card;
 }
 
-async function renderWordSection(word) {
-    const isHebrew = word.language === 'hebrew';
-    const section = document.createElement('div');
-    section.className = 'language-word-detail';
+async function renderCardMember(word, isHebrew) {
+    const member = document.createElement('div');
+    member.className = 'language-card-member';
 
-    const parsed = parseVerseId(word.verse_id);
-    const book = getBook(parsed.book);
-    const ref = document.createElement('div');
-    ref.className = 'language-detail-ref';
-    ref.textContent = book ? `${book.name} ${parsed.chapter}:${parsed.verse}` : '';
-    section.appendChild(ref);
+    const tier2Open = openTier2Ids.has(word.id);
+    const tier3Open = openTier3Ids.has(word.id);
 
-    const original = document.createElement('div');
-    original.className = `language-detail-original ${isHebrew ? 'language-hebrew' : 'language-greek'}`;
+    const row = document.createElement('div');
+    row.className = 'language-card-tier1-row';
+
+    const original = document.createElement('span');
+    original.className = `language-card-original ${isHebrew ? 'language-hebrew' : 'language-greek'}`;
     original.dir = isHebrew ? 'rtl' : 'ltr';
     original.textContent = word.surface_text;
-    section.appendChild(original);
+    row.appendChild(original);
 
-    appendDetailField(section, 'Lemma', word.lemma);
-    appendDetailField(section, 'Transliteration', word.transliteration);
-    appendDetailField(section, 'Strong’s number', word.strongs_number);
-    appendDetailField(section, 'Morphology', word.morph_code);
-
-    if (!isHebrew && word.morph_code) {
-        let parts = [];
-        try {
-            parts = await decodeMorphCode(word.morph_code);
-        } catch (e) {
-            console.error('renderWordSection: morphology decode failed:', e);
+    if (word.gloss_contextual) {
+        const gloss = document.createElement('span');
+        gloss.className = 'language-card-gloss';
+        if (tier2Open) {
+            const label = document.createElement('span');
+            label.className = 'language-card-gloss-label';
+            label.textContent = 'This occurrence';
+            gloss.appendChild(label);
         }
-        if (parts.length > 0) {
-            section.appendChild(await renderMorphDecodeAccordion(parts));
-        }
+        gloss.appendChild(document.createTextNode(word.gloss_contextual));
+        row.appendChild(gloss);
     }
 
-    appendDetailField(section, 'Contextual gloss', word.gloss_contextual);
-    appendDetailField(section, 'Dictionary gloss', word.gloss_dictionary);
+    member.appendChild(row);
 
-    // Greek: TBESG lexicon entry. Hebrew: none — TBESH's Meaning field carries
-    // its own unresolved rights-holder restriction (Build_6_Spec.md Item 1); a
-    // documented gap, not a bug.
-    if (!isHebrew && word.strongs_number) {
-        let lex = null;
-        try {
-            lex = await getGreekLexiconEntry(word.strongs_number);
-        } catch (e) {
-            console.error('renderWordSection: lexicon lookup failed:', e);
-        }
-        if (lex && lex.meaning) {
-            const lexHeading = document.createElement('div');
-            lexHeading.className = 'language-detail-heading';
-            lexHeading.textContent = 'Lexicon (TBESG)';
-            section.appendChild(lexHeading);
-
-            const lexBody = document.createElement('div');
-            lexBody.className = 'language-detail-lexicon';
-            lexBody.innerHTML = sanitizeLexiconMeaning(lex.meaning);
-            section.appendChild(lexBody);
-        }
+    if (word.strongs_number) {
+        const strongs = document.createElement('div');
+        strongs.className = 'language-card-strongs';
+        strongs.textContent = word.strongs_number;
+        member.appendChild(strongs);
     }
 
-    return section;
+    if (word.morph_code) {
+        const morph = document.createElement('div');
+        morph.className = 'language-card-morph';
+        morph.textContent = word.morph_code;
+        member.appendChild(morph);
+    }
+
+    const moreBtn = document.createElement('button');
+    moreBtn.type = 'button';
+    moreBtn.className = 'language-card-more-btn';
+    moreBtn.textContent = tier2Open ? 'Click for less' : 'Click for more';
+    moreBtn.addEventListener('click', async () => {
+        if (openTier2Ids.has(word.id)) {
+            openTier2Ids.delete(word.id);
+            openTier3Ids.delete(word.id);
+        } else {
+            openTier2Ids.add(word.id);
+        }
+        await rerenderInterlinear();
+    });
+    member.appendChild(moreBtn);
+
+    if (tier2Open) {
+        member.appendChild(await renderTier2(word, isHebrew, tier3Open));
+    }
+
+    return member;
 }
 
-// Collapsed-by-default, expand-in-place breakdown of a decoded morph_code,
-// beneath the raw Morphology field. Reuses the app's only existing accordion
-// precedent — native <details>/<summary>, as used in
-// reference.js:renderRelatedShowAll — rather than introducing a new
-// interaction pattern (Grammar_Decode_Spec_DRAFT.md's Design Principle).
-async function renderMorphDecodeAccordion(parts) {
-    const details = document.createElement('details');
-    details.className = 'language-morph-decode';
+async function renderTier2(word, isHebrew, tier3Open) {
+    const tier2 = document.createElement('div');
+    tier2.className = 'language-card-tier2';
 
-    const summary = document.createElement('summary');
-    summary.className = 'language-morph-decode-toggle';
-    summary.textContent = 'What does this mean?';
-    details.appendChild(summary);
+    appendDetailField(tier2, 'Lemma', word.lemma);
+    appendDetailField(tier2, 'Transliteration', word.transliteration);
 
+    const morphHeading = document.createElement('div');
+    morphHeading.className = 'language-detail-heading';
+    morphHeading.textContent = 'Morphology';
+    tier2.appendChild(morphHeading);
+
+    if (word.morph_code) {
+        const morphCode = document.createElement('div');
+        morphCode.className = 'language-detail-value';
+        morphCode.textContent = word.morph_code;
+        tier2.appendChild(morphCode);
+    }
+
+    // Called unconditionally for both languages — decodeMorphCode is
+    // Greek-only by data source (TEGMC) and returns [] for anything it can't
+    // decode, so Hebrew rows fall back to showing just the raw code above
+    // with no parsed lines. Hebrew's own decode (TEHMC) is a documented,
+    // separate follow-up (Grammar_Decode_Spec_DRAFT.md) — not implemented
+    // here, and not blocked on anything in this file.
+    let parts = [];
+    try {
+        parts = await decodeMorphCode(word.morph_code);
+    } catch (e) {
+        console.error('renderTier2: morphology decode failed:', e);
+    }
+    if (parts.length > 0) {
+        tier2.appendChild(await renderMorphDecodeBody(parts));
+    }
+
+    appendDetailField(tier2, 'General usage', word.gloss_dictionary);
+
+    // Greek: TBESG lexicon entry, gated behind an explicit "Lexicon" tap.
+    // Hebrew: no Lexicon link — TBESH's Meaning field carries its own
+    // unresolved rights-holder restriction (Build_6_Spec.md Item 1); a
+    // documented gap, not a bug.
+    if (!isHebrew && word.strongs_number) {
+        const lexBtn = document.createElement('button');
+        lexBtn.type = 'button';
+        lexBtn.className = 'language-card-lexicon-btn';
+        lexBtn.textContent = tier3Open ? 'Hide lexicon' : 'Lexicon';
+        lexBtn.addEventListener('click', async () => {
+            if (openTier3Ids.has(word.id)) {
+                openTier3Ids.delete(word.id);
+            } else {
+                openTier3Ids.add(word.id);
+            }
+            await rerenderInterlinear();
+        });
+        tier2.appendChild(lexBtn);
+
+        if (tier3Open) {
+            tier2.appendChild(await renderTier3(word));
+        }
+    }
+
+    return tier2;
+}
+
+// Parsed-morphology lines — same content the old collapsed "What does this
+// mean?" accordion rendered, now unfolded directly into tier 2 with no
+// separate toggle.
+async function renderMorphDecodeBody(parts) {
     const body = document.createElement('div');
     body.className = 'language-morph-decode-body';
     const multi = parts.length > 1;
@@ -280,14 +399,11 @@ async function renderMorphDecodeAccordion(parts) {
             body.appendChild(lineEl);
         }
         if (part.strongsNumber) {
-            // Resolved eagerly here, not lazily on expand — this accordion is
-            // a zero-JS native <details> element with no toggle listener;
-            // deferring this lookup to "on expand" would require adding one.
             let lex = null;
             try {
                 lex = await getGreekLexiconEntry(part.strongsNumber);
             } catch (e) {
-                console.error('renderMorphDecodeAccordion: cross-ref lookup failed:', e);
+                console.error('renderMorphDecodeBody: cross-ref lookup failed:', e);
             }
             const refEl = document.createElement('div');
             refEl.className = 'language-morph-decode-crossref';
@@ -303,8 +419,37 @@ async function renderMorphDecodeAccordion(parts) {
         }
     }
 
-    details.appendChild(body);
-    return details;
+    return body;
+}
+
+async function renderTier3(word) {
+    const tier3 = document.createElement('div');
+    tier3.className = 'language-card-lexicon';
+
+    let lex = null;
+    try {
+        lex = await getGreekLexiconEntry(word.strongs_number);
+    } catch (e) {
+        console.error('renderTier3: lexicon lookup failed:', e);
+    }
+
+    const heading = document.createElement('div');
+    heading.className = 'language-detail-heading';
+    heading.textContent = 'Lexicon (TBESG)';
+    tier3.appendChild(heading);
+
+    const body = document.createElement('div');
+    body.className = 'language-detail-lexicon';
+    if (lex && lex.meaning) {
+        body.innerHTML = sanitizeLexiconMeaning(lex.meaning);
+    } else {
+        // Rare (~0.2% of Greek codes, per db.js) — a disambiguation-suffix
+        // mismatch between TAGNT and TBESG in the source data itself.
+        body.textContent = 'No lexicon entry available.';
+    }
+    tier3.appendChild(body);
+
+    return tier3;
 }
 
 function appendDetailField(container, label, value) {
