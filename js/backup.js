@@ -7,6 +7,7 @@
 // its own confirm dialogs and calls into db.js purely for data operations.
 
 import { looksLikeCoreDb, restoreCoreDb } from './db.js';
+import { openConfirmDialog } from './dialogs.js';
 
 // Opens a .db file picker. On selection: reads the file, runs the minimal
 // structural check, confirms with the user, then destructively replaces
@@ -42,7 +43,17 @@ export function restoreFromBackup() {
             return;
         }
 
-        const confirmed = await openRestoreConfirmDialog();
+        // States consequences in plain language; the shared dialog is built
+        // from textContent only, so this copy can never be read as markup.
+        const confirmed = await openConfirmDialog({
+            title: 'Restore from backup?',
+            lines: [
+                'This will replace all current notes, tags, bookmarks, markups, and reading plan progress with the contents of the selected file.',
+                'This cannot be undone.'
+            ],
+            confirmLabel: 'Restore',
+            danger: true
+        });
         if (!confirmed) return;
 
         try {
@@ -57,69 +68,4 @@ export function restoreFromBackup() {
     });
 
     input.click();
-}
-
-// Built the same way plans.js's openConfirmDialog() is built — DOM nodes and
-// textContent only, no innerHTML — since this dialog states consequences in
-// plain language and must never be able to interpret its own copy as markup.
-// Resolves true on confirm, false on cancel/Escape/backdrop click.
-function openRestoreConfirmDialog() {
-    return new Promise((resolve) => {
-        const overlay = document.createElement('div');
-        overlay.className = 'plan-metadata-overlay';
-
-        const dialog = document.createElement('div');
-        dialog.className = 'plan-metadata-dialog';
-        dialog.setAttribute('role', 'dialog');
-        dialog.setAttribute('aria-modal', 'true');
-
-        const heading = document.createElement('h2');
-        heading.textContent = 'Restore from backup?';
-        dialog.appendChild(heading);
-
-        const lines = [
-            'This will replace all current notes, tags, bookmarks, markups, and reading plan progress with the contents of the selected file.',
-            'This cannot be undone.'
-        ];
-        for (const line of lines) {
-            const p = document.createElement('p');
-            p.className   = 'plan-confirm-line';
-            p.textContent = line;
-            dialog.appendChild(p);
-        }
-
-        const actions = document.createElement('div');
-        actions.className = 'plan-metadata-actions';
-
-        const cancelBtn = document.createElement('button');
-        cancelBtn.type        = 'button';
-        cancelBtn.className   = 'plan-metadata-cancel';
-        cancelBtn.textContent = 'Cancel';
-
-        const confirmBtn = document.createElement('button');
-        confirmBtn.type        = 'button';
-        confirmBtn.className   = 'plan-metadata-confirm danger';
-        confirmBtn.textContent = 'Restore';
-
-        actions.appendChild(cancelBtn);
-        actions.appendChild(confirmBtn);
-        dialog.appendChild(actions);
-        overlay.appendChild(dialog);
-        document.body.appendChild(overlay);
-
-        function cleanup() {
-            document.removeEventListener('keydown', onKeydown);
-            overlay.remove();
-        }
-        function onCancel()  { cleanup(); resolve(false); }
-        function onConfirm() { cleanup(); resolve(true); }
-        function onKeydown(e) { if (e.key === 'Escape') onCancel(); }
-
-        cancelBtn.addEventListener('click', onCancel);
-        confirmBtn.addEventListener('click', onConfirm);
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) onCancel(); });
-        document.addEventListener('keydown', onKeydown);
-
-        confirmBtn.focus();
-    });
 }

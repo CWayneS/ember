@@ -289,6 +289,16 @@ def scenario_smoke(app):
     p.click('.plan-card-info')
     p.wait_for_selector('.plan-detail-dialog')
     check(p.evaluate("document.querySelectorAll('.plan-detail-day-row').length") > 300, 'plan detail day list')
+    # shared confirm dialog: Restart → Escape cancels; Delete → Cancel button cancels
+    p.click('.plan-detail-restart')
+    p.wait_for_selector('.plan-confirm-line')
+    check(p.evaluate("document.querySelector('.plan-metadata-dialog h2').textContent").startswith('Restart'), 'restart confirm dialog opens')
+    p.keyboard.press('Escape')
+    check(p.evaluate("!document.querySelector('.plan-confirm-line') && !!document.querySelector('.plan-detail-dialog')"), 'Escape cancels confirm, detail popover stays')
+    p.click('.plan-detail-delete')
+    p.wait_for_selector('.plan-metadata-confirm.danger')
+    p.click('.plan-metadata-cancel')
+    check(p.evaluate("document.querySelectorAll('.plan-card').length") == 3, 'Cancel leaves all three plans')
     p.click('.plan-detail-continue')
     p.wait_for_timeout(300)
     check(not app.visible('#template-bar'), 'template bar shown') if False else check(app.visible('#template-bar'), 'template bar shown')
@@ -313,6 +323,16 @@ def scenario_smoke(app):
     # global settings sections
     p.click('#global-settings-btn')
     check(p.evaluate("document.querySelectorAll('#global-settings-popover .settings-section').length") == 2, 'global settings sections')
+    # restore flow up to the confirm dialog, then cancel — feeds the real core.db so validation passes
+    with p.expect_file_chooser() as chooser_info:
+        p.click('#global-settings-popover .settings-action-btn.danger')
+    chooser_info.value.set_files(os.path.join(ROOT, 'data', 'core.db'))
+    p.wait_for_selector('.plan-metadata-confirm.danger', timeout=60_000)
+    check(p.evaluate("document.querySelector('.plan-metadata-dialog h2').textContent") == 'Restore from backup?', 'restore confirm dialog opens')
+    p.click('.plan-metadata-overlay', position={'x': 3, 'y': 3})  # backdrop click cancels
+    p.wait_for_timeout(300)
+    check(p.evaluate("!document.querySelector('.plan-metadata-overlay')"), 'backdrop click cancels restore')
+    check(p.evaluate("document.querySelectorAll('.study-list-item, #notes-active-view .note-block').length") > 0, 'nothing reloaded after cancel')
     p.keyboard.press('Escape')
     # delete note + study
     p.click('#notes-tabs [data-study-id="all"]')
