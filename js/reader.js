@@ -1,6 +1,6 @@
 // reader.js — Scripture rendering and navigation
 
-import { getChapter, getBooks, getBook, getTranslations, getTranslationDb, getNotesForVerse, getMarkupsForChapter, getBookmarksForChapter, getOriginalWordsForVerses } from './db.js';
+import { getChapter, getBooks, getBook, getTranslations, chapterExistsInTranslation, getNotesForVerse, getMarkupsForChapter, getBookmarksForChapter, getOriginalWordsForVerses } from './db.js';
 
 // ============================================================
 // Per-pane state — persisted to localStorage
@@ -489,15 +489,9 @@ function renderTranslationRow(paneId) {
 // (Shared English versification means this should never trigger for the
 //  six bundled translations, but the logic is here as insurance.)
 function findValidReference(translationId, bookId, chapter) {
-    const tdb = getTranslationDb(translationId);
-    if (!tdb) return { bookId, chapter };
-
-    const chapterExists = tdb.exec(
-        'SELECT 1 FROM verses WHERE book = ? AND chapter = ? LIMIT 1',
-        [bookId, chapter]
-    )[0]?.values.length > 0;
-
-    if (chapterExists) return { bookId, chapter };
+    if (chapterExistsInTranslation(translationId, bookId, chapter)) {
+        return { bookId, chapter };
+    }
 
     // Chapter is missing — fall back to chapter 1 verse 1.
     return { bookId, chapter: 1 };

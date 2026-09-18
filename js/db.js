@@ -23,18 +23,53 @@ let _storageWorker = null;
 let _SQL           = null; // cached sql.js module — reused by restore's validation step
 
 // Translation handles — keyed by integer translation ID (1 = KJV, 2 = ASV, …).
-// Populated during initDatabase(); read-only after that.
+// Populated during initDatabase(); read-only after that. Never handed out:
+// every query against a translation goes through a function in this file.
 const _translationDbs = new Map();
-
-export function getTranslationDb(id) {
-    return _translationDbs.get(id) ?? null;
-}
 
 function getStorageWorker() {
     if (!_storageWorker) {
         _storageWorker = new Worker('./js/storage-worker.js');
     }
     return _storageWorker;
+}
+
+// ============================================================
+// Query helpers — the sql.js prepare/bind/step/free dance, once
+// ============================================================
+//
+// `database` is whichever handle the query targets: the core `db`, a
+// translation handle from _translationDbs, or the lazily-opened language.db.
+// Rows come back as objects keyed by column name (SQL aliases apply), so a
+// query's SELECT list is also its result shape.
+
+function queryAll(database, sql, params = []) {
+    const stmt = database.prepare(sql);
+    stmt.bind(params);
+    const rows = [];
+    while (stmt.step()) rows.push(stmt.getAsObject());
+    stmt.free();
+    return rows;
+}
+
+// First row as an object, or null when the query matches nothing.
+function queryOne(database, sql, params = []) {
+    const stmt = database.prepare(sql);
+    stmt.bind(params);
+    const row = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+    return row;
+}
+
+// First column of the first row (for COUNT(*), a single id, a single
+// value), or `fallback` when the query matches nothing.
+function queryValue(database, sql, params = [], fallback = null) {
+    const row = queryOne(database, sql, params);
+    return row ? Object.values(row)[0] : fallback;
+}
+
+function lastInsertRowId() {
+    return queryValue(db, 'SELECT last_insert_rowid()');
 }
 
 // ============================================================
@@ -99,14 +134,12 @@ async function seedTranslations() {
         return;
     }
 
-    const rows = db.exec(
-        'SELECT id, filename FROM translations WHERE is_bundled = 1 ORDER BY id'
-    )[0]?.values ?? [];
+    const rows = queryAll(db, 'SELECT id, filename FROM translations WHERE is_bundled = 1 ORDER BY id');
 
     const loadingEl = document.getElementById('loading');
     let seeded = 0;
 
-    for (const [, filename] of rows) {
+    for (const { filename } of rows) {
         // Skip if already in OPFS.
         try {
             await transDir.getFileHandle(filename);
@@ -141,11 +174,9 @@ async function seedTranslations() {
 // Reads from OPFS; falls back to a direct network fetch if OPFS is unavailable
 // (e.g. in browsers without OPFS support — handles are in-memory only in that case).
 async function openTranslationHandles(SQL) {
-    const rows = db.exec(
-        'SELECT id, filename FROM translations WHERE is_bundled = 1 ORDER BY id'
-    )[0]?.values ?? [];
+    const rows = queryAll(db, 'SELECT id, filename FROM translations WHERE is_bundled = 1 ORDER BY id');
 
-    for (const [id, filename] of rows) {
+    for (const { id, filename } of rows) {
         try {
             const buffer = await loadTranslationBuffer(filename);
             if (buffer) {
@@ -285,10 +316,9 @@ function createUserTables() {
     // Ensure notes_fts exists as fts4. If a previous version stored it as fts5
     // (which sql.js WASM does not support), migrate it.
     // Strategy: read the current schema, then create/recreate as needed.
-    const noteFtsRow = db.exec(
+    const noteFtsSql = (queryValue(db,
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='notes_fts'"
-    );
-    const noteFtsSql = (noteFtsRow[0]?.values[0]?.[0] || '').toLowerCase();
+    ) || '').toLowerCase();
 
     if (noteFtsSql.includes('fts5')) {
         // DROP TABLE requires the fts5 module (xDestroy), which isn't available.
@@ -307,8 +337,8 @@ function createUserTables() {
 
     // Repopulate fts index if it is empty but notes exist (post-migration).
     try {
-        const ftsCount  = db.exec('SELECT COUNT(*) FROM notes_fts')[0].values[0][0];
-        const noteCount = db.exec('SELECT COUNT(*) FROM notes')[0].values[0][0];
+        const ftsCount  = queryValue(db, 'SELECT COUNT(*) FROM notes_fts');
+        const noteCount = queryValue(db, 'SELECT COUNT(*) FROM notes');
         if (ftsCount === 0 && noteCount > 0) {
             db.run('INSERT INTO notes_fts(rowid, body) SELECT id, body FROM notes');
         }
@@ -435,7 +465,7 @@ function ensureMetaTable() {
         );
     `);
 
-    const rowCount = db.exec('SELECT COUNT(*) FROM meta')[0].values[0][0];
+    const rowCount = queryValue(db, 'SELECT COUNT(*) FROM meta');
     if (rowCount === 0) {
         db.run(
             'INSERT INTO meta (schema_version, created_at, app_name) VALUES (?, ?, ?)',
@@ -453,8 +483,8 @@ function ensureMetaTable() {
 // schema. Detected by checking whether plans.plan_id is missing — if the
 // table exists but lacks that column, it's the old placeholder shape.
 function migratePlanTables() {
-    const planCols = db.exec("PRAGMA table_info(plans)")[0]?.values ?? [];
-    const isLegacyPlansTable = planCols.length > 0 && !planCols.some(row => row[1] === 'plan_id');
+    const planCols = queryAll(db, 'PRAGMA table_info(plans)');
+    const isLegacyPlansTable = planCols.length > 0 && !planCols.some(col => col.name === 'plan_id');
 
     if (isLegacyPlansTable) {
         db.run('DROP TABLE IF EXISTS plan_progress');
@@ -517,8 +547,7 @@ function migratePlanTables() {
 // Throws an Error with `.code === 'DUPLICATE_PLAN_ID'` if meta.id is already
 // installed. Returns { planRowId, approximateCount, unresolvedCount }.
 export function insertPlan(meta, days, source) {
-    const existing = db.exec('SELECT id FROM plans WHERE plan_id = ?', [meta.id]);
-    if (existing.length > 0) {
+    if (queryOne(db, 'SELECT id FROM plans WHERE plan_id = ?', [meta.id])) {
         const err = new Error(`Plan already installed: ${meta.id}`);
         err.code = 'DUPLICATE_PLAN_ID';
         throw err;
@@ -553,7 +582,7 @@ export function insertPlan(meta, days, source) {
         ]
     );
 
-    const planRowId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+    const planRowId = lastInsertRowId();
     let approximateCount = 0;
     let unresolvedCount = 0;
 
@@ -631,8 +660,7 @@ async function seedBundledPlans() {
 // with this name is already installed — study_templates has no separate
 // stable key column (see Build_5_Spec.md Item 1), so name is the dedupe key.
 export function insertTemplate(meta, steps) {
-    const existing = db.exec('SELECT id FROM study_templates WHERE name = ?', [meta.name]);
-    if (existing.length > 0) {
+    if (queryOne(db, 'SELECT id FROM study_templates WHERE name = ?', [meta.name])) {
         const err = new Error(`Template already installed: ${meta.name}`);
         err.code = 'DUPLICATE_TEMPLATE_NAME';
         throw err;
@@ -642,7 +670,7 @@ export function insertTemplate(meta, steps) {
         'INSERT INTO study_templates (name, description) VALUES (?, ?)',
         [meta.name, meta.description ?? null]
     );
-    const templateRowId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+    const templateRowId = lastInsertRowId();
 
     for (const step of steps) {
         db.run(
@@ -685,35 +713,19 @@ async function seedBundledTemplates() {
 // Returns all built-in study templates, ordered by id (seed order — see
 // BUNDLED_TEMPLATE_FILES). Only three exist today, so no filter/sort needed.
 export function getStudyTemplates() {
-    return db.exec(
-        'SELECT id, name, description FROM study_templates ORDER BY id'
-    )[0]?.values.map(row => ({
-        id:          row[0],
-        name:        row[1],
-        description: row[2]
-    })) || [];
+    return queryAll(db, 'SELECT id, name, description FROM study_templates ORDER BY id');
 }
 
 // Returns all installed plans, sorted active (in progress) first, then
 // not_started, then completed; alphabetically by title within each group.
 export function getPlans() {
-    return db.exec(`
+    return queryAll(db, `
         SELECT id, plan_id, title, description, author, duration_days, source, current_step, status
         FROM plans
         ORDER BY
             CASE status WHEN 'active' THEN 0 WHEN 'not_started' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
             title COLLATE NOCASE
-    `)[0]?.values.map(row => ({
-        id:            row[0],
-        plan_id:       row[1],
-        title:         row[2],
-        description:   row[3],
-        author:        row[4],
-        duration_days: row[5],
-        source:        row[6],
-        current_step:  row[7],
-        status:        row[8]
-    })) || [];
+    `);
 }
 
 // Deletes a plan and its days/scripture rows. ON DELETE CASCADE is declared
@@ -729,42 +741,39 @@ export function deletePlan(planRowId) {
 // Full detail for the plan popover: plan fields plus every day with its
 // optional title and the display string of its first (sequence=1) passage.
 export function getPlanDetail(planRowId) {
-    const planRows = db.exec(
+    const plan = queryOne(db,
         `SELECT id, plan_id, title, description, author, duration_days, current_step, status
          FROM plans WHERE id = ?`,
         [planRowId]
-    )[0]?.values;
-    if (!planRows || planRows.length === 0) return null;
+    );
+    if (!plan) return null;
 
-    const [id, plan_id, title, description, author, duration_days, current_step, status] = planRows[0];
-
-    const dayRows = db.exec(
+    const dayRows = queryAll(db,
         'SELECT day_number, title FROM plan_days WHERE plan_id = ? ORDER BY day_number',
         [planRowId]
-    )[0]?.values ?? [];
+    );
 
-    const firstPassageRows = db.exec(
+    const firstPassageRows = queryAll(db,
         'SELECT day_number, display FROM plan_day_scripture WHERE plan_id = ? AND sequence = 1',
         [planRowId]
-    )[0]?.values ?? [];
-    const firstPassageByDay = new Map(firstPassageRows.map(([dayNumber, display]) => [dayNumber, display]));
+    );
+    const firstPassageByDay = new Map(firstPassageRows.map(r => [r.day_number, r.display]));
 
-    const days = dayRows.map(([day_number, dayTitle]) => ({
+    const days = dayRows.map(({ day_number, title }) => ({
         day_number,
-        title: dayTitle,
+        title,
         first_passage_display: firstPassageByDay.get(day_number) ?? null
     }));
 
-    return { id, plan_id, title, description, author, duration_days, current_step, status, days };
+    return { ...plan, days };
 }
 
 // Sets current_step to dayNumber and recomputes status (active, or
 // completed if dayNumber reaches duration_days). Used by both Continue and
 // clicking a specific day row in the plan detail popover.
 export function setPlanProgress(planRowId, dayNumber) {
-    const rows = db.exec('SELECT duration_days FROM plans WHERE id = ?', [planRowId])[0]?.values;
-    if (!rows || rows.length === 0) return;
-    const durationDays = rows[0][0];
+    const durationDays = queryValue(db, 'SELECT duration_days FROM plans WHERE id = ?', [planRowId]);
+    if (durationDays === null) return;
     const status = dayNumber >= durationDays ? 'completed' : 'active';
     db.run('UPDATE plans SET current_step = ?, status = ? WHERE id = ?', [dayNumber, status, planRowId]);
     saveToStorage(db.export());
@@ -778,31 +787,20 @@ export function restartPlan(planRowId) {
 
 // Minimal plan fields needed by the template bar (no days/scripture).
 export function getPlan(planRowId) {
-    const rows = db.exec(
+    return queryOne(db,
         'SELECT id, plan_id, title, duration_days, current_step, status FROM plans WHERE id = ?',
         [planRowId]
-    )[0]?.values;
-    if (!rows || rows.length === 0) return null;
-    const [id, plan_id, title, duration_days, current_step, status] = rows[0];
-    return { id, plan_id, title, duration_days, current_step, status };
+    );
 }
 
 // Every passage for one day, in sequence order, with pre-resolved
 // book/chapter/verse for navigation.
 export function getPlanDayScripture(planRowId, dayNumber) {
-    return db.exec(
+    return queryAll(db,
         `SELECT sequence, ref, display, book, chapter, verse_start, verse_end
          FROM plan_day_scripture WHERE plan_id = ? AND day_number = ? ORDER BY sequence`,
         [planRowId, dayNumber]
-    )[0]?.values.map(row => ({
-        sequence:    row[0],
-        ref:         row[1],
-        display:     row[2],
-        book:        row[3],
-        chapter:     row[4],
-        verse_start: row[5],
-        verse_end:   row[6]
-    })) ?? [];
+    );
 }
 
 // Closes the template bar's hold on a plan without losing progress:
@@ -847,10 +845,9 @@ export function looksLikeCoreDb(bytes) {
     let testDb = null;
     try {
         testDb = new _SQL.Database(bytes);
-        const rows = testDb.exec(
+        return queryOne(testDb,
             "SELECT name FROM sqlite_master WHERE type='table' AND name='books'"
-        );
-        return rows.length > 0 && rows[0].values.length > 0;
+        ) !== null;
     } catch (e) {
         return false;
     } finally {
@@ -959,51 +956,40 @@ export function parseVerseId(id) {
 export function getChapter(translationId, bookId, chapter) {
     const tdb = _translationDbs.get(translationId) ?? _translationDbs.get(1);
     if (!tdb) return [];
-    const stmt = tdb.prepare(
+    return queryAll(tdb,
         `SELECT book * 1000000 + chapter * 1000 + verse AS id,
                 verse, text
          FROM verses
          WHERE book = ? AND chapter = ?
-         ORDER BY verse`
+         ORDER BY verse`,
+        [bookId, chapter]
     );
-    stmt.bind([bookId, chapter]);
-    const results = [];
-    while (stmt.step()) {
-        results.push(stmt.getAsObject());
-    }
-    stmt.free();
-    return results;
+}
+
+// True if the translation has any verse for (bookId, chapter). Used by the
+// reader when switching a pane's translation to keep the passage in view.
+export function chapterExistsInTranslation(translationId, bookId, chapter) {
+    const tdb = _translationDbs.get(translationId);
+    if (!tdb) return true; // unknown handle — let the caller keep its reference
+    return queryOne(tdb,
+        'SELECT 1 FROM verses WHERE book = ? AND chapter = ? LIMIT 1',
+        [bookId, chapter]
+    ) !== null;
 }
 
 export function getTranslations() {
-    return db.exec(
-        'SELECT id, name, abbreviation FROM translations ORDER BY id'
-    )[0]?.values.map(r => ({ id: r[0], name: r[1], abbreviation: r[2] })) || [];
+    return queryAll(db, 'SELECT id, name, abbreviation FROM translations ORDER BY id');
 }
 
 export function getBooks() {
     if (!_booksCache) {
-        _booksCache = db.exec('SELECT * FROM books ORDER BY id')[0]?.values.map(row => ({
-            id:        row[0],
-            name:      row[1],
-            abbrev:    row[2],
-            testament: row[3],
-            genre:     row[4],
-            chapters:  row[5]
-        })) || [];
+        _booksCache = queryAll(db, 'SELECT id, name, abbrev, testament, genre, chapters FROM books ORDER BY id');
     }
     return _booksCache;
 }
 
 export function getBook(bookId) {
-    const stmt = db.prepare('SELECT * FROM books WHERE id = ?');
-    stmt.bind([bookId]);
-    let book = null;
-    if (stmt.step()) {
-        book = stmt.getAsObject();
-    }
-    stmt.free();
-    return book;
+    return queryOne(db, 'SELECT * FROM books WHERE id = ?', [bookId]);
 }
 
 export function getChapterVerseCount(bookId, chapter) {
@@ -1011,31 +997,31 @@ export function getChapterVerseCount(bookId, chapter) {
     if (!tdb) return 0;
     // verse=0 rows are Psalm title placeholders (Psalm_Title_Fix_Spec.md), not
     // real verses — excluded so "N verses" display stays accurate.
-    return tdb.exec(
+    return queryValue(tdb,
         'SELECT COUNT(*) FROM verses WHERE book = ? AND chapter = ? AND verse > 0',
-        [bookId, chapter]
-    )[0]?.values[0][0] || 0;
+        [bookId, chapter], 0
+    );
 }
 
 export function getTopicsForVerse(verseId) {
-    return db.exec(
+    return queryAll(db,
         `SELECT t.id, t.name FROM topics t
          JOIN topic_verses tv ON tv.topic_id = t.id
          WHERE tv.verse_id = ? AND t.display = 1
          ORDER BY t.name`,
         [verseId]
-    )[0]?.values.map(r => ({ id: r[0], name: r[1] })) || [];
+    );
 }
 
 export function getVersesForTopic(topicName, translationId = 1, limit = 100, offset = 0) {
     // Step 1: get verse IDs from core.db (topic_verses + topics are in core.db)
-    const verseIds = db.exec(
+    const verseIds = queryAll(db,
         `SELECT tv.verse_id FROM topic_verses tv
          JOIN topics t ON t.id = tv.topic_id
          WHERE t.name = ? AND t.display = 1
          ORDER BY tv.verse_id LIMIT ? OFFSET ?`,
         [topicName, limit, offset]
-    )[0]?.values.map(r => r[0]) || [];
+    ).map(r => r.verse_id);
 
     if (verseIds.length === 0) return [];
 
@@ -1044,15 +1030,15 @@ export function getVersesForTopic(topicName, translationId = 1, limit = 100, off
     if (!tdb) return [];
 
     const placeholders = verseIds.map(() => '?').join(', ');
-    const rows = tdb.exec(
+    const rows = queryAll(tdb,
         `SELECT book, chapter, verse, text
          FROM verses
          WHERE book * 1000000 + chapter * 1000 + verse IN (${placeholders})
          ORDER BY book * 1000000 + chapter * 1000 + verse`,
         verseIds
-    )[0]?.values || [];
+    );
 
-    return rows.map(([book, chapter, verse, text]) => ({
+    return rows.map(({ book, chapter, verse, text }) => ({
         id:       book * 1000000 + chapter * 1000 + verse,
         book_id:  book,
         chapter,
@@ -1063,16 +1049,16 @@ export function getVersesForTopic(topicName, translationId = 1, limit = 100, off
 }
 
 export function getTopicVerseCount(topicName) {
-    return db.exec(
+    return queryValue(db,
         `SELECT COUNT(*) FROM topic_verses tv
          JOIN topics t ON t.id = tv.topic_id
          WHERE t.name = ? AND t.display = 1`,
-        [topicName]
-    )[0]?.values[0][0] || 0;
+        [topicName], 0
+    );
 }
 
 export function getUserTagsForVerse(verseId) {
-    return db.exec(
+    return queryAll(db,
         `SELECT DISTINCT tg.name FROM tags tg
          JOIN tag_assignments ta ON ta.tag_id = tg.id
          JOIN notes n ON n.id = ta.note_id
@@ -1080,7 +1066,7 @@ export function getUserTagsForVerse(verseId) {
          WHERE a.verse_start <= ? AND COALESCE(a.verse_end, a.verse_start) >= ?
          ORDER BY tg.name`,
         [verseId, verseId]
-    )[0]?.values.map(r => r[0]) || [];
+    ).map(r => r.name);
 }
 
 // ============================================================
@@ -1092,7 +1078,7 @@ export function saveNote(body, anchors, tagNames, studyId = null) {
         'INSERT INTO notes (body, study_id) VALUES (?, ?)',
         [body, studyId]
     );
-    const noteId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+    const noteId = lastInsertRowId();
 
     for (const anchor of anchors) {
         db.run(
@@ -1103,12 +1089,8 @@ export function saveNote(body, anchors, tagNames, studyId = null) {
     }
 
     for (const name of tagNames) {
-        const normalized = name.trim().toLowerCase();
-        if (!normalized) continue;
-        db.run('INSERT OR IGNORE INTO tags (name) VALUES (?)', [normalized]);
-        const tagId = db.exec(
-            'SELECT id FROM tags WHERE name = ?', [normalized]
-        )[0].values[0][0];
+        const tagId = ensureTag(name);
+        if (tagId === null) continue;
         db.run(
             'INSERT OR IGNORE INTO tag_assignments (tag_id, note_id) VALUES (?, ?)',
             [tagId, noteId]
@@ -1137,8 +1119,7 @@ export function updateNote(noteId, body) {
     db.run('INSERT INTO notes_fts(rowid, body) VALUES (?, ?)', [noteId, body]);
 
     // Propagate modified_at to the parent study if one exists
-    const result = db.exec('SELECT study_id FROM notes WHERE id = ?', [noteId]);
-    const studyId = result[0]?.values[0]?.[0];
+    const studyId = queryValue(db, 'SELECT study_id FROM notes WHERE id = ?', [noteId]);
     if (studyId) {
         db.run(
             "UPDATE studies SET modified_at = datetime('now') WHERE id = ?",
@@ -1166,7 +1147,7 @@ export function deleteNote(noteId) {
 }
 
 export function getNotesForVerse(verseId) {
-    const stmt = db.prepare(
+    const results = queryAll(db,
         `SELECT DISTINCT n.id, n.body, n.created_at, n.modified_at,
                 n.study_id, s.name AS study_name
          FROM notes n
@@ -1174,46 +1155,33 @@ export function getNotesForVerse(verseId) {
          LEFT JOIN studies s ON s.id = n.study_id
          WHERE a.verse_start <= ? AND COALESCE(a.verse_end, a.verse_start) >= ?
          AND n.parent_note_id IS NULL
-         ORDER BY n.created_at DESC`
+         ORDER BY n.created_at DESC`,
+        [verseId, verseId]
     );
-    stmt.bind([verseId, verseId]);
-    const results = [];
-    while (stmt.step()) {
-        results.push(stmt.getAsObject());
-    }
-    stmt.free();
+    return attachTagsAndAnchors(results);
+}
 
-    for (const note of results) {
+// Fills in `tags` and `anchors` on each note row — every note-list query
+// wants both, so they're attached in one place.
+function attachTagsAndAnchors(notes) {
+    for (const note of notes) {
         note.tags    = getTagsForNote(note.id);
         note.anchors = getAnchorsForNote(note.id);
     }
-    return results;
+    return notes;
 }
 
 export function getTagsForNote(noteId) {
-    const stmt = db.prepare(
+    return queryAll(db,
         `SELECT t.id, t.name, t.type FROM tags t
          JOIN tag_assignments ta ON ta.tag_id = t.id
-         WHERE ta.note_id = ?`
+         WHERE ta.note_id = ?`,
+        [noteId]
     );
-    stmt.bind([noteId]);
-    const results = [];
-    while (stmt.step()) {
-        results.push(stmt.getAsObject());
-    }
-    stmt.free();
-    return results;
 }
 
 export function getAnchorsForNote(noteId) {
-    const stmt = db.prepare('SELECT * FROM note_anchors WHERE note_id = ?');
-    stmt.bind([noteId]);
-    const results = [];
-    while (stmt.step()) {
-        results.push(stmt.getAsObject());
-    }
-    stmt.free();
-    return results;
+    return queryAll(db, 'SELECT * FROM note_anchors WHERE note_id = ?', [noteId]);
 }
 
 export function addAnchorToNote(noteId, verseStart, verseEnd = null) {
@@ -1229,49 +1197,46 @@ export function addAnchorToNote(noteId, verseStart, verseEnd = null) {
 // ============================================================
 
 export function getAllTags() {
-    return db.exec('SELECT id, name, type FROM tags ORDER BY name')[0]?.values.map(
-        row => ({ id: row[0], name: row[1], type: row[2] })
-    ) || [];
+    return queryAll(db, 'SELECT id, name, type FROM tags ORDER BY name');
+}
+
+// Normalizes a tag name (trimmed, lowercase), creates the tag row if it
+// doesn't exist, and returns its id — or null for a blank name. Shared by
+// saveNote() and addNoteTag() so the normalization rule lives once.
+function ensureTag(name) {
+    const normalized = name.trim().toLowerCase();
+    if (!normalized) return null;
+    db.run('INSERT OR IGNORE INTO tags (name) VALUES (?)', [normalized]);
+    return queryValue(db, 'SELECT id FROM tags WHERE name = ?', [normalized]);
 }
 
 export function addNoteTag(noteId, tagName) {
-    const normalized = tagName.trim().toLowerCase();
-    if (!normalized) return;
-    db.run('INSERT OR IGNORE INTO tags (name) VALUES (?)', [normalized]);
-    const tagId = db.exec('SELECT id FROM tags WHERE name = ?', [normalized])[0].values[0][0];
+    const tagId = ensureTag(tagName);
+    if (tagId === null) return;
     db.run('INSERT OR IGNORE INTO tag_assignments (tag_id, note_id) VALUES (?, ?)', [tagId, noteId]);
     saveToStorage(db.export());
 }
 
 export function removeNoteTag(noteId, tagName) {
     const normalized = tagName.trim().toLowerCase();
-    const result = db.exec('SELECT id FROM tags WHERE name = ?', [normalized]);
-    const tagId  = result[0]?.values[0]?.[0];
+    const tagId = queryValue(db, 'SELECT id FROM tags WHERE name = ?', [normalized]);
     if (!tagId) return;
     db.run('DELETE FROM tag_assignments WHERE tag_id = ? AND note_id = ?', [tagId, noteId]);
     saveToStorage(db.export());
 }
 
 export function getNotesForTag(tagName) {
-    const stmt = db.prepare(
+    const results = queryAll(db,
         `SELECT n.id, n.body, n.study_id, s.name AS study_name
          FROM notes n
          JOIN tag_assignments ta ON ta.note_id = n.id
          JOIN tags t ON t.id = ta.tag_id
          LEFT JOIN studies s ON s.id = n.study_id
          WHERE t.name = ?
-         ORDER BY n.created_at`
+         ORDER BY n.created_at`,
+        [tagName]
     );
-    stmt.bind([tagName]);
-    const results = [];
-    while (stmt.step()) {
-        const note   = stmt.getAsObject();
-        note.anchors = getAnchorsForNote(note.id);
-        note.tags    = getTagsForNote(note.id);
-        results.push(note);
-    }
-    stmt.free();
-    return results;
+    return attachTagsAndAnchors(results);
 }
 
 // ============================================================
@@ -1283,21 +1248,15 @@ export function getNotesForTag(tagName) {
 // ============================================================
 
 export function getAllBookmarks() {
-    const result = db.exec(`
+    return queryAll(db, `
         SELECT b.id, b.verse_id, b.label, b.created_at, bk.name AS book_name
         FROM bookmarks b
         JOIN books bk ON bk.id = (b.verse_id / 1000000)
         ORDER BY b.created_at DESC
-    `);
-    if (!result[0]) return [];
-    return result[0].values.map(([id, verse_id, label, created_at, book_name]) => ({
-        id,
-        verse_id,
-        label,
-        created_at,
-        book_name,
-        chapter: Math.floor((verse_id % 1000000) / 1000),
-        verse:   verse_id % 1000,
+    `).map(row => ({
+        ...row,
+        chapter: Math.floor((row.verse_id % 1000000) / 1000),
+        verse:   row.verse_id % 1000,
     }));
 }
 
@@ -1309,35 +1268,29 @@ export function getBookmarksForChapter(bookId, chapter) {
     // Psalm_Title_Fix_Spec.md.
     const chapterStart = bookId * 1000000 + chapter * 1000 + 0;
     const chapterEnd   = bookId * 1000000 + chapter * 1000 + 999;
-    const result = db.exec(
+    const rows = queryAll(db,
         'SELECT verse_id, id, label FROM bookmarks WHERE verse_id >= ? AND verse_id <= ?',
         [chapterStart, chapterEnd]
     );
     const map = new Map();
-    if (result[0]) {
-        for (const [verse_id, id, label] of result[0].values) {
-            map.set(verse_id, { id, label });
-        }
+    for (const { verse_id, id, label } of rows) {
+        map.set(verse_id, { id, label });
     }
     return map;
 }
 
 export function getBookmarkForVerse(verseId) {
-    const result = db.exec(
+    return queryOne(db,
         'SELECT id, verse_id, label, created_at FROM bookmarks WHERE verse_id = ? LIMIT 1',
         [verseId]
     );
-    if (!result[0]) return null;
-    const [id, verse_id, label, created_at] = result[0].values[0];
-    return { id, verse_id, label, created_at };
 }
 
 export function addBookmark(verseId, label) {
     const trimmed = (label || '').trim() || null;
     db.run('INSERT INTO bookmarks (verse_id, label) VALUES (?, ?)', [verseId, trimmed]);
     saveToStorage(db.export());
-    const result = db.exec('SELECT last_insert_rowid()');
-    return result[0].values[0][0];
+    return lastInsertRowId();
 }
 
 export function removeBookmark(bookmarkId) {
@@ -1353,39 +1306,31 @@ export function search(query, translationId = 1) {
 
     // Scripture full-text search — routes to the active translation db
     const tdb = _translationDbs.get(translationId) ?? _translationDbs.get(1);
+    const VERSE_COLUMNS = `book * 1000000 + chapter * 1000 + verse AS id,
+                           book AS book_id, chapter, verse, text`;
+    const toVerseResult = row => ({
+        type: 'verse',
+        ...row,
+        book_name: getBook(row.book_id)?.name || `Book ${row.book_id}`
+    });
     if (tdb) {
         try {
-            const vstmt = tdb.prepare(
-                `SELECT book * 1000000 + chapter * 1000 + verse AS id,
-                        book AS book_id, chapter, verse, text
+            const rows = queryAll(tdb,
+                `SELECT ${VERSE_COLUMNS}
                  FROM verses
                  WHERE rowid IN (SELECT rowid FROM verses_fts WHERE verses_fts MATCH ?)
-                 LIMIT 50`
+                 LIMIT 50`,
+                [query]
             );
-            vstmt.bind([query]);
-            while (vstmt.step()) {
-                const row = vstmt.getAsObject();
-                row.book_name = getBook(row.book_id)?.name || `Book ${row.book_id}`;
-                verseResults.push({ type: 'verse', ...row });
-            }
-            vstmt.free();
+            verseResults.push(...rows.map(toVerseResult));
         } catch (e) {
             console.error('FTS verse search failed, trying LIKE fallback:', e);
             try {
-                const vstmt = tdb.prepare(
-                    `SELECT book * 1000000 + chapter * 1000 + verse AS id,
-                            book AS book_id, chapter, verse, text
-                     FROM verses
-                     WHERE text LIKE ?
-                     LIMIT 50`
+                const rows = queryAll(tdb,
+                    `SELECT ${VERSE_COLUMNS} FROM verses WHERE text LIKE ? LIMIT 50`,
+                    [`%${query}%`]
                 );
-                vstmt.bind([`%${query}%`]);
-                while (vstmt.step()) {
-                    const row = vstmt.getAsObject();
-                    row.book_name = getBook(row.book_id)?.name || `Book ${row.book_id}`;
-                    verseResults.push({ type: 'verse', ...row });
-                }
-                vstmt.free();
+                verseResults.push(...rows.map(toVerseResult));
             } catch (e2) {
                 console.error('LIKE verse search also failed:', e2);
             }
@@ -1394,51 +1339,37 @@ export function search(query, translationId = 1) {
 
     // Notes full-text search
     try {
-        const nstmt = db.prepare(
+        const rows = queryAll(db,
             `SELECT n.id, n.body, n.created_at, n.study_id, s.name AS study_name
              FROM notes_fts fts
              JOIN notes n ON n.id = fts.rowid
              LEFT JOIN studies s ON s.id = n.study_id
              WHERE notes_fts MATCH ?
-             LIMIT 50`
+             LIMIT 50`,
+            [query]
         );
-        nstmt.bind([query]);
-        while (nstmt.step()) {
-            const note = nstmt.getAsObject();
-            note.type    = 'note';
-            note.tags    = getTagsForNote(note.id);
-            note.anchors = getAnchorsForNote(note.id);
+        for (const note of attachTagsAndAnchors(rows)) {
+            note.type = 'note';
             noteResults.push(note);
         }
-        nstmt.free();
     } catch (e) {
         console.error('FTS note search failed:', e);
     }
 
     // Tag name search — user tags + system topics
-    const tagResults = [];
-    const tstmt = db.prepare(
+    const tagResults = queryAll(db,
         `SELECT name FROM tags WHERE name LIKE ?
          UNION
          SELECT name FROM topics WHERE name LIKE ? AND display = 1
-         LIMIT 20`
-    );
-    tstmt.bind([`%${query.toLowerCase()}%`, `%${query}%`]);
-    while (tstmt.step()) {
-        tagResults.push({ type: 'tag', name: tstmt.getAsObject().name });
-    }
-    tstmt.free();
+         LIMIT 20`,
+        [`%${query.toLowerCase()}%`, `%${query}%`]
+    ).map(row => ({ type: 'tag', name: row.name }));
 
     // Study name search
-    const studyResults = [];
-    const sstmt = db.prepare(
-        `SELECT id, name FROM studies WHERE name LIKE ? ORDER BY modified_at DESC LIMIT 20`
-    );
-    sstmt.bind([`%${query}%`]);
-    while (sstmt.step()) {
-        studyResults.push({ type: 'study', ...sstmt.getAsObject() });
-    }
-    sstmt.free();
+    const studyResults = queryAll(db,
+        `SELECT id, name FROM studies WHERE name LIKE ? ORDER BY modified_at DESC LIMIT 20`,
+        [`%${query}%`]
+    ).map(row => ({ type: 'study', ...row }));
 
     return { verses: verseResults, notes: noteResults, tags: tagResults, studies: studyResults };
 }
@@ -1448,8 +1379,7 @@ export function search(query, translationId = 1) {
 // ============================================================
 
 export function getState(key) {
-    const result = db.exec('SELECT value FROM app_state WHERE key = ?', [key]);
-    return result[0]?.values[0]?.[0] || null;
+    return queryValue(db, 'SELECT value FROM app_state WHERE key = ?', [key]) || null;
 }
 
 export function setState(key, value) {
@@ -1466,10 +1396,7 @@ export function getCurrentTranslation() {
 
 export function getCurrentTranslationId() {
     const abbrev = getCurrentTranslation();
-    const result = db.exec(
-        'SELECT id FROM translations WHERE abbreviation = ?', [abbrev]
-    );
-    return result[0]?.values[0]?.[0] ?? 1;
+    return queryValue(db, 'SELECT id FROM translations WHERE abbreviation = ?', [abbrev], 1);
 }
 
 // ============================================================
@@ -1478,7 +1405,7 @@ export function getCurrentTranslationId() {
 
 export function createStudy(name = 'Untitled Study') {
     db.run('INSERT INTO studies (name) VALUES (?)', [name]);
-    const studyId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+    const studyId = lastInsertRowId();
     saveToStorage(db.export());
     return studyId;
 }
@@ -1498,19 +1425,19 @@ export function createStudy(name = 'Untitled Study') {
 // the notes table's own DEFAULT 'private' — the same thing saveNote() does.
 export function generateStudyFromTemplate(templateId, studyName) {
     db.run('INSERT INTO studies (name, template_id) VALUES (?, ?)', [studyName, templateId]);
-    const studyId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+    const studyId = lastInsertRowId();
 
-    const steps = db.exec(
+    const steps = queryAll(db,
         'SELECT id, prompt_text FROM template_steps WHERE template_id = ? ORDER BY step_index',
         [templateId]
-    )[0]?.values ?? [];
+    );
 
-    for (const [stepId, promptText] of steps) {
+    for (const { id: stepId, prompt_text: promptText } of steps) {
         db.run(
             'INSERT INTO notes (body, study_id, template_step_id) VALUES (?, ?, ?)',
             [promptText, studyId, stepId]
         );
-        const noteId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+        const noteId = lastInsertRowId();
         db.run('INSERT INTO notes_fts(rowid, body) VALUES (?, ?)', [noteId, promptText]);
     }
 
@@ -1519,7 +1446,7 @@ export function generateStudyFromTemplate(templateId, studyName) {
 }
 
 export function getStudyName(studyId) {
-    return db.exec('SELECT name FROM studies WHERE id = ?', [studyId])[0]?.values[0][0] || '';
+    return queryValue(db, 'SELECT name FROM studies WHERE id = ?', [studyId]) || '';
 }
 
 export function renameStudy(studyId, name) {
@@ -1528,30 +1455,21 @@ export function renameStudy(studyId, name) {
 }
 
 export function getStudies() {
-    return db.exec(
+    return queryAll(db,
         `SELECT s.id, s.name, s.created_at, s.modified_at, s.status,
                 COUNT(n.id) AS note_count
          FROM studies s
          LEFT JOIN notes n ON n.study_id = s.id
          GROUP BY s.id
          ORDER BY s.modified_at DESC`
-    )[0]?.values.map(row => ({
-        id:         row[0],
-        name:       row[1],
-        created_at: row[2],
-        modified_at: row[3],
-        status:     row[4],
-        note_count: row[5]
-    })) || [];
+    );
 }
 
 export function deleteStudy(studyId) {
     // notes.study_id has no CASCADE at all (and even where CASCADE is
     // declared elsewhere, sql.js doesn't enforce it) — delete every note's
     // rows explicitly via the same helper deleteNote() uses.
-    const noteIds = db.exec(
-        'SELECT id FROM notes WHERE study_id = ?', [studyId]
-    )[0]?.values.map(r => r[0]) ?? [];
+    const noteIds = queryAll(db, 'SELECT id FROM notes WHERE study_id = ?', [studyId]).map(r => r.id);
     for (const noteId of noteIds) {
         deleteNoteRows(noteId);
     }
@@ -1560,24 +1478,14 @@ export function deleteStudy(studyId) {
 }
 
 export function getNotesForStudy(studyId) {
-    const stmt = db.prepare(
+    const results = queryAll(db,
         `SELECT n.id, n.body, n.created_at, n.modified_at
          FROM notes n
          WHERE n.study_id = ?
-         ORDER BY n.created_at ASC`
+         ORDER BY n.created_at ASC`,
+        [studyId]
     );
-    stmt.bind([studyId]);
-    const results = [];
-    while (stmt.step()) {
-        results.push(stmt.getAsObject());
-    }
-    stmt.free();
-
-    for (const note of results) {
-        note.tags    = getTagsForNote(note.id);
-        note.anchors = getAnchorsForNote(note.id);
-    }
-    return results;
+    return attachTagsAndAnchors(results);
 }
 
 // ============================================================
@@ -1590,7 +1498,7 @@ export function createMarkup(verseStart, verseEnd, type, color) {
         'INSERT INTO markups (verse_start, verse_end, type, color, created_at) VALUES (?, ?, ?, ?, ?)',
         [verseStart, verseEnd ?? null, type, color, now]
     );
-    const id = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+    const id = lastInsertRowId();
     saveToStorage(db.export());
     return id;
 }
@@ -1600,19 +1508,17 @@ export function deleteMarkup(id) {
     saveToStorage(db.export());
 }
 
+const MARKUP_COLUMNS = 'id, verse_start, verse_end, type, color, created_at';
+
 // Returns all markups whose range covers verseId.
 export function getMarkupsForVerse(verseId) {
-    const stmt = db.prepare(
-        `SELECT id, verse_start, verse_end, type, color, created_at
+    return queryAll(db,
+        `SELECT ${MARKUP_COLUMNS}
          FROM markups
          WHERE verse_start <= ? AND COALESCE(verse_end, verse_start) >= ?
-         ORDER BY created_at DESC`
+         ORDER BY created_at DESC`,
+        [verseId, verseId]
     );
-    stmt.bind([verseId, verseId]);
-    const results = [];
-    while (stmt.step()) results.push(stmt.getAsObject());
-    stmt.free();
-    return results;
 }
 
 // Returns all markups that overlap the given chapter (BBCCC prefix).
@@ -1620,34 +1526,27 @@ export function getMarkupsForVerse(verseId) {
 export function getMarkupsForChapter(bookChapter) {
     const chapterStart = bookChapter * 1000 + 1;
     const chapterEnd   = bookChapter * 1000 + 999;
-    const stmt = db.prepare(
-        `SELECT id, verse_start, verse_end, type, color, created_at
+    return queryAll(db,
+        `SELECT ${MARKUP_COLUMNS}
          FROM markups
          WHERE verse_start <= ? AND COALESCE(verse_end, verse_start) >= ?
-         ORDER BY created_at DESC`
+         ORDER BY created_at DESC`,
+        [chapterEnd, chapterStart]
     );
-    stmt.bind([chapterEnd, chapterStart]);
-    const results = [];
-    while (stmt.step()) results.push(stmt.getAsObject());
-    stmt.free();
-    return results;
 }
 
 // Returns the existing markup row that exactly matches range + type, or null.
 // Used to implement toggle: applying the same markup twice removes the first.
 export function getExistingMarkup(verseStart, verseEnd, type) {
-    const stmt = db.prepare(
-        `SELECT id, verse_start, verse_end, type, color, created_at
+    return queryOne(db,
+        `SELECT ${MARKUP_COLUMNS}
          FROM markups
          WHERE verse_start = ?
            AND (verse_end IS ? OR (verse_end IS NOT NULL AND verse_end = ?))
            AND type = ?
-         LIMIT 1`
+         LIMIT 1`,
+        [verseStart, verseEnd ?? null, verseEnd ?? null, type]
     );
-    stmt.bind([verseStart, verseEnd ?? null, verseEnd ?? null, type]);
-    const row = stmt.step() ? stmt.getAsObject() : null;
-    stmt.free();
-    return row;
 }
 
 // Returns cross-references for a single verse (use verse_start for ranges).
@@ -1662,30 +1561,23 @@ export function getCrossReferencesForVerse(verseId, options = {}) {
     const limit = options.showAll ? null
         : (options.limit   ?? window.emberDebug?.crossrefTopN   ?? CROSSREF_TOP_N_DEFAULT);
 
-    let stmt;
     if (options.showAll) {
-        stmt = db.prepare(
+        return queryAll(db,
             `SELECT target_start, target_end, votes
              FROM cross_references
              WHERE source_verse = ?
-             ORDER BY votes DESC, target_start ASC`
+             ORDER BY votes DESC, target_start ASC`,
+            [verseId]
         );
-        stmt.bind([verseId]);
-    } else {
-        stmt = db.prepare(
-            `SELECT target_start, target_end, votes
-             FROM cross_references
-             WHERE source_verse = ? AND votes >= ?
-             ORDER BY votes DESC, target_start ASC
-             LIMIT ?`
-        );
-        stmt.bind([verseId, floor, limit]);
     }
-
-    const results = [];
-    while (stmt.step()) results.push(stmt.getAsObject());
-    stmt.free();
-    return results;
+    return queryAll(db,
+        `SELECT target_start, target_end, votes
+         FROM cross_references
+         WHERE source_verse = ? AND votes >= ?
+         ORDER BY votes DESC, target_start ASC
+         LIMIT ?`,
+        [verseId, floor, limit]
+    );
 }
 
 // ============================================================
@@ -1693,53 +1585,41 @@ export function getCrossReferencesForVerse(verseId, options = {}) {
 // Greek grammar decode / TEGMC (Grammar Decode spec)
 // ============================================================
 
+const ORIGINAL_WORD_COLUMNS = `id, verse_id, word_position, language, surface_text, transliteration, lemma,
+                               gloss_contextual, gloss_dictionary, strongs_number, morph_code, group_id`;
+
 // Rows for every selected verse, ordered for interlinear rendering (verse,
 // then word_position within it). All async — language.db is lazy-loaded.
 export async function getOriginalWordsForVerses(verseIds) {
     if (verseIds.length === 0) return [];
     const langDb = await getLanguageDb();
     const placeholders = verseIds.map(() => '?').join(',');
-    const stmt = langDb.prepare(
-        `SELECT id, verse_id, word_position, language, surface_text, transliteration, lemma,
-                gloss_contextual, gloss_dictionary, strongs_number, morph_code, group_id
+    return queryAll(langDb,
+        `SELECT ${ORIGINAL_WORD_COLUMNS}
          FROM original_words
          WHERE verse_id IN (${placeholders})
-         ORDER BY verse_id ASC, word_position ASC`
+         ORDER BY verse_id ASC, word_position ASC`,
+        verseIds
     );
-    stmt.bind(verseIds);
-    const results = [];
-    while (stmt.step()) results.push(stmt.getAsObject());
-    stmt.free();
-    return results;
 }
 
 // All rows sharing a group_id (a collapsed multi-word display unit), for the
 // word detail view when a grouped row is tapped.
 export async function getOriginalWordsForGroup(groupId) {
     const langDb = await getLanguageDb();
-    const stmt = langDb.prepare(
-        `SELECT id, verse_id, word_position, language, surface_text, transliteration, lemma,
-                gloss_contextual, gloss_dictionary, strongs_number, morph_code, group_id
-         FROM original_words WHERE group_id = ? ORDER BY word_position ASC`
+    return queryAll(langDb,
+        `SELECT ${ORIGINAL_WORD_COLUMNS}
+         FROM original_words WHERE group_id = ? ORDER BY word_position ASC`,
+        [groupId]
     );
-    stmt.bind([groupId]);
-    const results = [];
-    while (stmt.step()) results.push(stmt.getAsObject());
-    stmt.free();
-    return results;
 }
 
 export async function getOriginalWord(id) {
     const langDb = await getLanguageDb();
-    const stmt = langDb.prepare(
-        `SELECT id, verse_id, word_position, language, surface_text, transliteration, lemma,
-                gloss_contextual, gloss_dictionary, strongs_number, morph_code, group_id
-         FROM original_words WHERE id = ?`
+    return queryOne(langDb,
+        `SELECT ${ORIGINAL_WORD_COLUMNS} FROM original_words WHERE id = ?`,
+        [id]
     );
-    stmt.bind([id]);
-    const row = stmt.step() ? stmt.getAsObject() : null;
-    stmt.free();
-    return row;
 }
 
 // TBESG entry for a Greek word's exact (disambiguated) Strong's number. Hebrew
@@ -1751,14 +1631,11 @@ export async function getOriginalWord(id) {
 export async function getGreekLexiconEntry(strongsNumber) {
     if (!strongsNumber) return null;
     const langDb = await getLanguageDb();
-    const stmt = langDb.prepare(
+    return queryOne(langDb,
         `SELECT strongs_number, lemma, transliteration, morph, gloss, meaning
-         FROM step_lexicon_greek WHERE strongs_number = ?`
+         FROM step_lexicon_greek WHERE strongs_number = ?`,
+        [strongsNumber]
     );
-    stmt.bind([strongsNumber]);
-    const row = stmt.step() ? stmt.getAsObject() : null;
-    stmt.free();
-    return row;
 }
 
 // TEGMC grammatical categories for one raw Greek morphology-code fragment
@@ -1771,13 +1648,9 @@ export async function getGreekLexiconEntry(strongsNumber) {
 export async function getGreekMorphCategories(code) {
     if (!code) return [];
     const langDb = await getLanguageDb();
-    const stmt = langDb.prepare(
+    return queryAll(langDb,
         `SELECT category, raw_value FROM step_morphology_greek
-         WHERE code = ? ORDER BY sort_order ASC`
+         WHERE code = ? ORDER BY sort_order ASC`,
+        [code]
     );
-    stmt.bind([code]);
-    const rows = [];
-    while (stmt.step()) rows.push(stmt.getAsObject());
-    stmt.free();
-    return rows;
 }
