@@ -249,18 +249,7 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
         if (needsGloss) populateTitleGloss(el, textSpan, v.id);
     }
 
-    // Apply markup classes to verse elements (always; visibility gated by body.markup-mode-on).
-    const bookChapter = bookId * 1000 + chapter;
-    const markups     = getMarkupsForChapter(bookChapter);
-    for (const verseEl of textEl.querySelectorAll('.verse')) {
-        const verseId = parseInt(verseEl.dataset.verseId);
-        for (const markup of markups) {
-            const end = markup.verse_end ?? markup.verse_start;
-            if (markup.verse_start <= verseId && verseId <= end) {
-                applyMarkupClass(verseEl, markup);
-            }
-        }
-    }
+    applyChapterMarkups(paneId);
 
     if (highlightVerseId) {
         const target = textEl.querySelector(`[data-verse-id="${highlightVerseId}"]`);
@@ -302,29 +291,34 @@ async function populateTitleGloss(el, textSpan, verseId) {
 // Note dots refresh — updates both panes
 // ============================================================
 
-// Clears and re-applies markup classes on all rendered verse elements in both
-// panes. Called after any markup create/delete so visuals stay in sync with DB.
+// Re-applies markup classes in both panes. Called after any markup
+// create/delete so visuals stay in sync with the database.
 export function refreshMarkupClasses() {
-    for (const paneId of ['a', 'b']) {
-        const textEl      = getTextEl(paneId);
-        const { bookId, chapter } = panes[paneId];
+    for (const paneId of ['a', 'b']) applyChapterMarkups(paneId);
+}
 
-        // Strip all existing markup classes before re-applying.
-        for (const verseEl of textEl.querySelectorAll('.verse')) {
-            for (const cls of [...verseEl.classList]) {
-                if (cls.startsWith('markup-')) verseEl.classList.remove(cls);
-            }
+// Sets a pane's markup classes from scratch: strips every markup-* class
+// from its rendered verses, then applies one class per markup row covering
+// each verse. The single implementation behind both the initial chapter
+// render and the post-write refresh. Classes are always applied;
+// body.markup-mode-on gates whether they are visible.
+function applyChapterMarkups(paneId) {
+    const { bookId, chapter } = panes[paneId];
+    const verseEls = getTextEl(paneId).querySelectorAll('.verse');
+
+    for (const verseEl of verseEls) {
+        for (const cls of [...verseEl.classList]) {
+            if (cls.startsWith('markup-')) verseEl.classList.remove(cls);
         }
+    }
 
-        const bookChapter = bookId * 1000 + chapter;
-        const markups     = getMarkupsForChapter(bookChapter);
-        for (const verseEl of textEl.querySelectorAll('.verse')) {
-            const verseId = parseInt(verseEl.dataset.verseId);
-            for (const markup of markups) {
-                const end = markup.verse_end ?? markup.verse_start;
-                if (markup.verse_start <= verseId && verseId <= end) {
-                    applyMarkupClass(verseEl, markup);
-                }
+    const markups = getMarkupsForChapter(bookId * 1000 + chapter);
+    for (const verseEl of verseEls) {
+        const verseId = parseInt(verseEl.dataset.verseId);
+        for (const markup of markups) {
+            const end = markup.verse_end ?? markup.verse_start;
+            if (markup.verse_start <= verseId && verseId <= end) {
+                applyMarkupClass(verseEl, markup);
             }
         }
     }
