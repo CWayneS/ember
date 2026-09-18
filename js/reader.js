@@ -240,35 +240,9 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
         textSpan.className = 'verse-text';
         textSpan.textContent = v.text;
 
-        const notes    = getNotesForVerse(v.id);
-        const bookmark = chapterBookmarks.get(v.id);
-
-        if (notes.length > 0 || bookmark) {
-            const indicators = document.createElement('span');
-            indicators.className = 'verse-indicators';
-
-            if (notes.length > 0) {
-                const dot = document.createElement('span');
-                dot.className = 'note-indicator';
-                dot.title = notes.length === 1 ? '1 note' : `${notes.length} notes`;
-                indicators.appendChild(dot);
-            }
-
-            if (bookmark) {
-                const dot = document.createElement('span');
-                dot.className = 'bookmark-indicator';
-                dot.title = bookmark.label || 'Bookmarked';
-                indicators.appendChild(dot);
-                el.classList.add('verse-bookmarked');
-            }
-
-            // No verse-number bubble on a title row — anchor indicators to
-            // the row itself instead (also position: relative).
-            (numSpan || el).appendChild(indicators);
-        }
-
         if (numSpan) el.appendChild(numSpan);
         el.appendChild(textSpan);
+        applyIndicators(el, getNotesForVerse(v.id), chapterBookmarks.get(v.id));
         textEl.appendChild(el);
 
         if (needsGloss) populateTitleGloss(el, textSpan, v.id);
@@ -361,37 +335,43 @@ export function refreshVerseIndicators() {
         const bookmarks = getBookmarksForChapter(bookId, chapter);
 
         for (const verseEl of getTextEl(paneId).querySelectorAll('.verse')) {
-            const verseId  = parseInt(verseEl.dataset.verseId);
-            const notes    = getNotesForVerse(verseId);
-            const bookmark = bookmarks.get(verseId);
-            const numSpan  = verseEl.querySelector('.verse-number');
-
-            numSpan.querySelector('.verse-indicators')?.remove();
-            verseEl.classList.remove('verse-bookmarked');
-
-            if (notes.length === 0 && !bookmark) continue;
-
-            const indicators = document.createElement('span');
-            indicators.className = 'verse-indicators';
-
-            if (notes.length > 0) {
-                const dot = document.createElement('span');
-                dot.className = 'note-indicator';
-                dot.title = notes.length === 1 ? '1 note' : `${notes.length} notes`;
-                indicators.appendChild(dot);
-            }
-
-            if (bookmark) {
-                const dot = document.createElement('span');
-                dot.className = 'bookmark-indicator';
-                dot.title = bookmark.label || 'Bookmarked';
-                indicators.appendChild(dot);
-                verseEl.classList.add('verse-bookmarked');
-            }
-
-            numSpan.appendChild(indicators);
+            const verseId = parseInt(verseEl.dataset.verseId);
+            applyIndicators(verseEl, getNotesForVerse(verseId), bookmarks.get(verseId));
         }
     }
+}
+
+// Sets a verse row's note/bookmark indicator dots and bookmarked class from
+// scratch — the single builder for both the initial chapter render and the
+// post-write refresh, so the two can't drift. A Psalm-title row has no
+// verse-number bubble; its indicators anchor to the row itself (also
+// position: relative). Passing an empty notes list and no bookmark clears
+// any indicators the row had.
+function applyIndicators(verseEl, notes, bookmark) {
+    verseEl.querySelector('.verse-indicators')?.remove();
+    verseEl.classList.remove('verse-bookmarked');
+
+    if (notes.length === 0 && !bookmark) return;
+
+    const indicators = document.createElement('span');
+    indicators.className = 'verse-indicators';
+
+    if (notes.length > 0) {
+        const dot = document.createElement('span');
+        dot.className = 'note-indicator';
+        dot.title = notes.length === 1 ? '1 note' : `${notes.length} notes`;
+        indicators.appendChild(dot);
+    }
+
+    if (bookmark) {
+        const dot = document.createElement('span');
+        dot.className = 'bookmark-indicator';
+        dot.title = bookmark.label || 'Bookmarked';
+        indicators.appendChild(dot);
+        verseEl.classList.add('verse-bookmarked');
+    }
+
+    (verseEl.querySelector('.verse-number') || verseEl).appendChild(indicators);
 }
 
 // ============================================================
