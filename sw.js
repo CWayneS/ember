@@ -1,29 +1,51 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v5'; // bumped: js/grammar-decode.js added, language.js/db.js/style.css changed (Grammar Decode)
+const CACHE_NAME = 'ember-v6'; // bumped: PRECACHE now lists every module in js/ (14 were missing since Builds 3–5)
 
 // Files that must be cached on install for the app to work offline.
-// core.db is NOT included here — it is large (18 MB) and already persisted
-// in OPFS/IndexedDB by db.js on first load. data/language.db (Build 6, ~51MB)
-// is the same story — not precached, seeded into OPFS lazily on first
-// Language-tab use by db.js's getLanguageDb(), then served from there.
+// Every ES module app.js reaches, directly or transitively, must be here:
+// cache.addAll() is all-or-nothing, and a module missing from this list is
+// simply not available offline until some online visit happened to fetch
+// it. When a file is added to js/, add it here and bump CACHE_NAME
+// (tests/verify.py sw checks the list against js/ on disk).
+//
+// core.db is NOT included here — it is large (23 MB) and already persisted
+// in OPFS/IndexedDB by db.js on first load. The translation .db files and
+// data/language.db (~57 MB) are the same story — seeded into OPFS by db.js
+// (eagerly / lazily on first Language-tab use) and served from there. The
+// bundled plan/template JSON is only read while seeding core.db on a first
+// install, which can't happen offline anyway.
 const PRECACHE = [
     './',
     './index.html',
     './manifest.json',
     './css/style.css',
     './js/app.js',
+    './js/backup.js',
+    './js/bookmarks.js',
     './js/db.js',
-    './js/reader.js',
-    './js/selection.js',
-    './js/notes.js',
-    './js/tags.js',
-    './js/language.js',
+    './js/global-settings.js',
     './js/grammar-decode.js',
-    './js/search.js',
+    './js/help.js',
+    './js/language.js',
+    './js/markups.js',
+    './js/notes.js',
+    './js/notes-settings.js',
     './js/panels.js',
+    './js/plans.js',
+    './js/popover-registry.js',
+    './js/reader.js',
+    './js/reader-settings.js',
+    './js/reference.js',
+    './js/reference-settings.js',
+    './js/search.js',
+    './js/selection.js',
     './js/state.js',
     './js/storage-worker.js',
+    './js/study-templates.js',
+    './js/tags.js',
+    './js/template-bar.js',
+    './js/usfm.js',
     './js/vendor/sql-wasm.js',
     './js/vendor/sql-wasm.wasm',
     './fonts/SILEOT.woff'

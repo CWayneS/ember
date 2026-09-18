@@ -12,6 +12,7 @@ Usage (from the repo root):
                                          #   translation switch, split view, global settings
    python3 tests/verify.py indicators    # note/bookmark dots on a titled Psalm (verse=0 row)
    python3 tests/verify.py notes         # removing tags and verse anchors from a note
+   python3 tests/verify.py sw            # service worker installs and precaches every js/ file
    python3 tests/verify.py dbsnapshot out.json          # results of ~36 db.js calls as JSON
    python3 tests/verify.py dbcompare before.json after.json
 
@@ -47,8 +48,8 @@ class App:
         page.on('console', lambda m: self.errors.append(f'console.error: {m.text}')
                 if m.type == 'error' and not any(k in m.text for k in KNOWN_ERRORS) else None)
 
-    def boot(self):
-        self.page.goto(URL)
+    def boot(self, url=URL):
+        self.page.goto(url)
         self.page.wait_for_selector('#loading.hidden', state='attached', timeout=180_000)
         self.page.wait_for_selector('#reader-pane-a .verse', timeout=30_000)
 
@@ -363,6 +364,40 @@ def scenario_notes(app):
     return FAILURES
 
 
+# ---------------------------------------------------------------- service worker
+def scenario_sw(app):
+    """app.js skips service-worker registration only for hostname 'localhost',
+    so booting via 127.0.0.1 registers it for real. Precache install is
+    all-or-nothing, so a wrong path would leave the cache empty."""
+    p = app.page
+    p.evaluate("navigator.serviceWorker.ready")
+    p.wait_for_timeout(1500)
+    info = p.evaluate("""async () => {
+        const names = await caches.keys();
+        const out = {};
+        for (const n of names) out[n] = (await (await caches.open(n)).keys()).map(r => new URL(r.url).pathname);
+        return out;
+    }""")
+    names = list(info)
+    check(len(names) == 1, f'exactly one cache after install ({names})')
+    cached = set(info[names[0]]) if names else set()
+    js_on_disk = sorted('/' + os.path.relpath(os.path.join(d, f), ROOT)
+                        for d, _, fs in os.walk(os.path.join(ROOT, 'js')) for f in fs if f.endswith(('.js', '.wasm')))
+    missing = [f for f in js_on_disk if f not in cached]
+    check(missing == [], f'every file under js/ is precached (missing: {missing})')
+    for must in ('/', '/index.html', '/css/style.css', '/fonts/SILEOT.woff', '/manifest.json'):
+        check(must in cached, f'{must} precached')
+    # PRECACHE list in sw.js vs js/ on disk — catches a stale list even if the
+    # cache happened to be populated by earlier fetches
+    sw_src = open(os.path.join(ROOT, 'sw.js')).read()
+    listed = set('/' + m for m in __import__('re').findall(r"'\./(js/[^']+)'", sw_src))
+    unlisted = [f for f in js_on_disk if f not in listed]
+    check(unlisted == [], f'sw.js PRECACHE lists every js/ file (unlisted: {unlisted})')
+    stale = [f for f in listed if not os.path.exists(os.path.join(ROOT, f.lstrip('/')))]
+    check(stale == [], f'sw.js PRECACHE has no entries for deleted files (stale: {stale})')
+    return FAILURES
+
+
 # ---------------------------------------------------------------- indicators
 def scenario_indicators(app):
     p = app.page
@@ -432,9 +467,10 @@ def main():
             browser = pw.chromium.launch()
             ctx = browser.new_context(viewport={'width': 1600, 'height': 1000})
             app = App(ctx.new_page())
-            app.boot()
+            app.boot(URL.replace('localhost', '127.0.0.1') if args[0] == 'sw' else URL)
             print(f'== {args[0]}')
-            if args[0] == 'popovers':   failures = scenario_popovers(app)
+            if args[0] == 'sw':         failures = scenario_sw(app)
+            elif args[0] == 'popovers': failures = scenario_popovers(app)
             elif args[0] == 'smoke':    failures = scenario_smoke(app)
             elif args[0] == 'indicators': failures = scenario_indicators(app)
             elif args[0] == 'notes':      failures = scenario_notes(app)
