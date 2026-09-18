@@ -195,7 +195,7 @@ Shows the original Hebrew or Greek text for the selected verse (or verses, for a
 
 Tap any row to open a card beneath it with that word's original-language spelling, its English meaning in this verse, its Strong's number, and its grammar code — without leaving your place in the verse. Only one card is open at a time; tapping a different row (or the same one again) closes it.
 
-Tap **Click for more** on a word for its dictionary form (lemma), transliteration, and a plain-English breakdown of its grammar. Greek words also get a **Lexicon** button revealing the full dictionary entry. Hebrew words don't have a Lexicon button yet — that source is still pending a rights clearance.
+Tap **Click for more** on a word for its dictionary form (lemma), transliteration, and a plain-English breakdown of its grammar. Greek words also get a **Show Lexicon** button revealing the full dictionary entry. Hebrew words don't have this button yet — that source is still pending a rights clearance.
 
 ### Plans
 

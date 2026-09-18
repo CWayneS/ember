@@ -2151,9 +2151,14 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
 
 /* Gloss list — plain text rows, minimal visual weight (no per-word card/box
    treatment). Original-language column fixed left, gloss fixed right,
-   regardless of language — only the running verse line above flips for RTL. */
+   regardless of language — only the running verse line above flips for RTL.
+   A heavier top border (vs. the 1px rule between individual rows below)
+   marks this as a section break from the running verse line above, not just
+   another row. */
 .language-word-list {
+    margin-top: 6px;
     padding-bottom: 4px;
+    border-top: 2px solid var(--border-light);
 }
 
 .language-word-row {
@@ -2164,6 +2169,10 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     padding: 6px 16px;
     border-top: 1px solid var(--border-light);
     cursor: pointer;
+}
+
+.language-word-row:first-child {
+    border-top: none;
 }
 
 .language-word-row:hover {
@@ -2258,18 +2267,21 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     margin-top: 8px;
 }
 
+/* Indented further than the code/part-heading above them — these are its
+   parsed-out attributes (e.g. "Singular"/"Masculine"/"Accusative" under
+   "P-ASM"), not siblings at the same level. */
 .language-morph-decode-line {
     font-family: var(--font-reading);
     font-size: var(--size-small);
     color: var(--text-primary);
-    padding: 2px 0;
+    padding: 2px 0 2px 10px;
 }
 
 .language-morph-decode-crossref {
     font-family: var(--font-reading);
     font-size: var(--size-xs);
     color: var(--text-muted);
-    padding: 2px 0;
+    padding: 2px 0 2px 10px;
 }
 
 .language-morph-decode-divider {
@@ -2348,6 +2360,10 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     margin-top: 2px;
 }
 
+/* Chevron mirrors the disclosure-toggle idiom the old morph-decode accordion
+   used (▸ collapsed / ▾ expanded, via .open) — same affordance, applied here
+   instead, so it still reads as "this text reveals more" at a glance and not
+   just accent-colored text. */
 .language-card-more-btn,
 .language-card-lexicon-btn {
     display: block;
@@ -2361,14 +2377,34 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     cursor: pointer;
 }
 
+.language-card-more-btn::before,
+.language-card-lexicon-btn::before {
+    content: '▸ ';
+    font-size: 0.75em;
+    opacity: 0.7;
+}
+
+.language-card-more-btn.open::before,
+.language-card-lexicon-btn.open::before {
+    content: '▾ ';
+}
+
+.language-card-more-btn:hover,
+.language-card-lexicon-btn:hover {
+    text-decoration: underline;
+}
+
+/* Left rule + indent brackets the nested tier as one unit hanging off the
+   word above it, rather than text at the same level. */
 .language-card-tier2 {
-    margin-top: 6px;
-    padding-left: 4px;
+    margin-top: 8px;
+    padding: 2px 0 2px 12px;
+    border-left: 2px solid var(--border-light);
 }
 
 .language-card-lexicon {
     margin-top: 6px;
-    padding-left: 4px;
+    padding-left: 12px;
 }
 
 /* ============================================================

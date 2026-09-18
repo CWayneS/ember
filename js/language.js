@@ -293,6 +293,7 @@ async function renderCardMember(word, isHebrew) {
     const moreBtn = document.createElement('button');
     moreBtn.type = 'button';
     moreBtn.className = 'language-card-more-btn';
+    moreBtn.classList.toggle('open', tier2Open);
     moreBtn.textContent = tier2Open ? 'Click for less' : 'Click for more';
     moreBtn.addEventListener('click', async () => {
         if (openTier2Ids.has(word.id)) {
@@ -357,7 +358,8 @@ async function renderTier2(word, isHebrew, tier3Open) {
         const lexBtn = document.createElement('button');
         lexBtn.type = 'button';
         lexBtn.className = 'language-card-lexicon-btn';
-        lexBtn.textContent = tier3Open ? 'Hide lexicon' : 'Lexicon';
+        lexBtn.classList.toggle('open', tier3Open);
+        lexBtn.textContent = tier3Open ? 'Hide Lexicon' : 'Show Lexicon';
         lexBtn.addEventListener('click', async () => {
             if (openTier3Ids.has(word.id)) {
                 openTier3Ids.delete(word.id);
