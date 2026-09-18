@@ -202,7 +202,7 @@ STEPBible-Data's license permits inclusion in software without requesting permis
 |---|---|
 | `Technical_Spec_Build_1.md` | Build 1 technical specification — schema, module specs, code |
 | `Build_N_Spec.md` (per build, plus `Psalm_Title_Fix_Spec.md`) | Per-build specifications |
-| `BUILD_N_ACTUAL_STATE.md` (per build) | Ground-truth audit of each build's shipped code, derived from source, not planning docs |
+| `BUILD_N_ACTUAL_STATE.md` (per build) | Ground-truth audit of each build's shipped code, derived from source, not planning docs. Latest: `BUILD_6.1_ACTUAL_STATE.md` (post-Build-6 Language tab rework + September 2026 architecture-review pass) |
 | `FEATURE_INVENTORY.md` | Full working-feature audit, traced to live code |
 | `USER_MANUAL.md` | End-user documentation |
 | `docs/ANCHOR_QUERIES.md` | SQL query convention for range-aware verse-anchor lookups |
