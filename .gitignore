@@ -1,5 +1,4 @@
 node_modules/
-js/vendor/sql-wasm.wasm
 .DS_Store
 *.swp
 *.swo
