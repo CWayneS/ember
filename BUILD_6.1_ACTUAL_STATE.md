@@ -302,3 +302,23 @@ The review (2026-09-17) was asked four questions. Its findings and where each la
 - **Whole-database export on every settings write** (each font-size click serializes the 23 MB `core.db` to the worker) — correct as designed since Build 1; revisit only if a slider-style setting appears.
 - **Resize handles (×3), tab switchers (×2), placeholder helpers (×2)** — judged fine as repetition; small, stable since Build 1, and different enough in axis/clamp/orientation that sharing would obscure more than it saved.
 - **Stale help copy, missing icons, install prompt** — §7, deferred to their own builds.
+
+---
+
+## 11. ADDENDUM — 2026-09-18, commits `6f23f20`..`90808aa`
+
+A second look at the four areas the review had not opened (service-worker fetch handler, storage worker, the repository itself, the stylesheet) produced six more commits after this document's `7e146b8` snapshot. Everything above remains accurate; these are the deltas.
+
+**Two fixes**
+
+- **`6f23f20` — `js/vendor/sql-wasm.wasm` is now tracked.** It had been gitignored since the first `.gitignore` commit, so a clone from GitHub had the sql.js loader but not the binary: `initSqlJs()` 404'd and the app never left the loading screen, and `sw.js`'s precache (all-or-nothing) failed too. Verified by cloning the repository fresh into a scratch directory and running `tests/verify.py sw` from the clone: boots, worker installs, every file cached.
+- **`94ca0fa` — the service worker no longer copies `data/` responses into Cache Storage.** The generic cache-first branch had been caching every same-origin GET; `language.db`, fetched lazily after the worker takes control, was being stored twice (57 MB in Cache Storage plus the OPFS copy db.js actually reads — measured 183 MB usage against ~125 MB of real data). Requests under `/data/` now pass straight through and are never cached; the old network-first special case for `core.db` is subsumed. `CACHE_NAME` is `ember-v9`. The `sw` scenario opens the Language tab and asserts no `/data/` path is in any cache.
+
+**Housekeeping**
+
+- **`12aaa37`** — `db.js:search()` remembers that FTS5 is unavailable after the first failed MATCH (`_verseFtsUnavailable`), so later searches go straight to LIKE instead of preparing a doomed statement and logging `console.error` per keystroke. One `console.warn` per session now.
+- **`ced8c86`** — `data/translations-prep/output/` is gitignored and its six `.db` files untracked (they duplicated `data/translations/`; 45 MB). `__pycache__/` ignored. History is not rewritten, so the repository does not shrink; this stops the growth. §1's file tree above still shows the staging dir — its `output/` is now untracked, matching `stepbible-prep/output/`.
+- **`bd382a9`** — the three untracked analysis files at the repo root (`crossref_audit_bundle.md`, `grammar_decode_audit_bundle.md`, `tegmc_value_domain.md`) moved to `docs/`; the `grammar-decode.js` comment citing the last one updated. §1's "untracked working-copy files" note is superseded.
+- **`90808aa`** — `css/style.css` 3,175 → 3,000 lines: the Build 1 "Notes List" and "Note Editor" sections (replaced by the study-document view in Build 1.5), `.chapter-heading`, and `#study-name-btn` deleted. A scan of every class and id selector against `index.html` + `js/` now finds zero unreferenced selectors (prefix-built families `markup-*`, `plan-status-*`, `theme-*` excepted). The live `.tag-chip` rules head their own section.
+
+**Looked at and left alone:** `storage-worker.js` (30 lines, correct); `USER_MANUAL.md` (current, including the reworked Language tab). One unverified platform note: OPFS `createWritable()` is not available in Safari, so `restoreCoreDb()` would reject there with the "could not be written" alert while ordinary writes fall back to IndexedDB correctly. The README targets Chromium; recorded here, not fixed.
