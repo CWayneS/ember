@@ -242,6 +242,22 @@ def scenario_smoke(app):
     check(p.evaluate("document.querySelectorAll('.note-indicator').length") >= 1, 'note indicator rendered')
     check(p.evaluate("document.querySelectorAll('.bookmark-indicator').length") >= 1, 'bookmark indicator rendered')
     check(p.evaluate("!!document.querySelector('.verse[data-verse-id=\"1001001\"][class*=markup-]')"), 'markup class applied')
+    # markup survives a re-render (initial-render path) and clears via toggle (refresh path)
+    p.click('#reader-pane-a .pane-next'); p.wait_for_timeout(150); p.click('#reader-pane-a .pane-prev'); p.wait_for_timeout(150)
+    check(p.evaluate("!!document.querySelector('.verse[data-verse-id=\"1001001\"][class*=markup-]')"), 'markup class re-applied after chapter re-render')
+    app.select_verse(1001001)
+    p.click('.markup-tool'); p.wait_for_timeout(150)
+    check(not p.evaluate("!!document.querySelector('.verse[data-verse-id=\"1001001\"][class*=markup-]')"), 'same tool again removes the markup class')
+    p.click('.markup-tool'); p.wait_for_timeout(150)
+    # range markup: shift-select 1:2-1:4 then apply → three verses classed; both edges and middle
+    p.click('.verse[data-verse-id="1001004"]', modifiers=['Shift']); p.wait_for_timeout(100)
+    check(p.evaluate("document.querySelectorAll('.verse.selected').length") == 4, 'shift-click range selects 1:1-1:4')
+    # programmatic range selection (cross-ref path) mirrors click selection
+    sel = p.evaluate("""import('./js/selection.js').then(m => { m.selectVerseRange(1001006, 1001008); return [document.querySelectorAll('.verse.selected').length, m.getSelectedVerses()]; })""")
+    check(sel == [3, [1001006, 1001007, 1001008]], f'selectVerseRange selects 1:6-1:8 ({sel})')
+    sel = p.evaluate("""import('./js/selection.js').then(m => { m.selectVerseRange(1001010); return [document.querySelectorAll('.verse.selected').length, m.getSelectedVerses(), document.querySelector('.verse.selected').classList.contains('glow')]; })""")
+    check(sel == [1, [1001010], True], f'selectVerseRange single verse glows ({sel})')
+    app.select_verse(1001001)
     check(p.evaluate("document.querySelectorAll('#notes-active-view .tag-chip').length") == 1, 'tag chip on note')
     # reference tabs
     p.click('#reference-tabs [data-tab="info"]')
