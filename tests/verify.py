@@ -29,7 +29,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PORT = 8765
 URL  = f'http://localhost:{PORT}/'
 
-# Pre-existing, documented: sql.js WASM lacks FTS5 → LIKE fallback logs an error.
+# Console errors matching any of these are not failures. (The FTS5→LIKE
+# fallback used to log an error per search; it is a one-time warning now,
+# and warnings are never collected — kept here in case an old build is run.)
 KNOWN_ERRORS = ('FTS verse search failed',)
 
 
@@ -436,6 +438,21 @@ def scenario_sw(app):
     check(unlisted == [], f'sw.js PRECACHE lists every js/ file (unlisted: {unlisted})')
     stale = [f for f in listed if not os.path.exists(os.path.join(ROOT, f.lstrip('/')))]
     check(stale == [], f'sw.js PRECACHE has no entries for deleted files (stale: {stale})')
+    # data/ must never be copied into Cache Storage: db.js keeps those files in
+    # OPFS. Open the Language tab so language.db is fetched with the worker
+    # in control, then check nothing under /data/ is in any cache.
+    app.select_verse(1001001)
+    p.click('#reference-tabs [data-tab="language"]')
+    p.wait_for_selector('.language-word-row', timeout=120_000)
+    p.wait_for_timeout(1000)
+    data_cached = p.evaluate("""async () => {
+        const out = [];
+        for (const n of await caches.keys())
+            for (const r of await (await caches.open(n)).keys())
+                if (new URL(r.url).pathname.includes('/data/')) out.push(new URL(r.url).pathname);
+        return out;
+    }""")
+    check(data_cached == [], f'no data/ files duplicated into Cache Storage ({data_cached})')
     return FAILURES
 
 

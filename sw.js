@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v8'; // bumped: js/state.js removed
+const CACHE_NAME = 'ember-v9'; // bumped: data/ responses no longer copied into Cache Storage
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:
@@ -82,10 +82,17 @@ self.addEventListener('activate', (event) => {
 });
 
 // ============================================================
-// Fetch — cache-first for precached assets, network-first for
-// data/core.db (large binary, served only on first run before
-// OPFS takes over; subsequent loads hit OPFS directly from db.js)
+// Fetch — cache-first for static assets; data/ is pass-through
 // ============================================================
+//
+// Everything under data/ (core.db, the translation .db files, language.db,
+// the bundled plan/template JSON) is fetched by db.js at most once per
+// install and then persisted in OPFS/IndexedDB, or only read while seeding
+// core.db. Copying those responses into Cache Storage as well would store
+// a second ~57 MB language.db (and any translation fetched after the worker
+// took control) that nothing ever reads back — db.js goes to OPFS first and
+// only re-fetches when OPFS is empty. So data/ requests go straight to the
+// network and are never cached here.
 
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
@@ -95,20 +102,16 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // core.db — network-first (only fetched once; OPFS takes over after that)
-    if (url.pathname.endsWith('/data/core.db')) {
-        event.respondWith(
-            fetch(event.request).catch(() => caches.match(event.request))
-        );
+    // data/ — network only, never cached (OPFS-managed by db.js, see above)
+    if (url.pathname.includes('/data/')) {
         return;
     }
 
-    // Everything else — cache-first
+    // Everything else — cache-first, caching valid responses for offline use
     event.respondWith(
         caches.match(event.request).then(cached => {
             if (cached) return cached;
             return fetch(event.request).then(response => {
-                // Cache valid responses for future offline use
                 if (response && response.status === 200 && response.type === 'basic') {
                     const clone = response.clone();
                     caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
