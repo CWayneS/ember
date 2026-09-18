@@ -302,7 +302,7 @@ const TENSE_WITH_TIME_PHRASES = {
 // Mood, or a Participle / Infinitive Form with no Mood at all). These
 // describe only the KIND of action and never claim a past/present/future.
 // Imperfect and Pluperfect never occur outside the Indicative in the current
-// data (tegmc_value_domain.md cross-tab) and are included defensively only.
+// data (docs/tegmc_value_domain.md cross-tab) and are included defensively only.
 const TENSE_ASPECT_ONLY_PHRASES = {
     'Present': 'Ongoing or repeated action, seen as in progress (no time stated)',
     '2nd Present': 'Ongoing or repeated action, seen as in progress (no time stated)',
