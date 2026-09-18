@@ -86,6 +86,8 @@ ember/
 ├── build/
 │   └── build_db.py            # Builds core.db's schema, books table, and Nave's Topical Bible topics/topic_verses
 │                               # (run before scripts/build_crossrefs.py, which adds cross-references to the same file)
+├── tests/
+│   └── verify.py              # Live Playwright verification of the running app — see "Verifying Changes"
 └── icons/                     # icon-192.png / icon-512.png referenced by manifest.json — not currently present
                                 # in the repo; PWA install currently falls back to no custom icon
 ```
@@ -141,6 +143,29 @@ python3 -m http.server 8000
 Open `http://localhost:8000` in a Chromium-based browser. Databases load on first visit and are cached locally (OPFS) for all subsequent launches.
 
 To install as a PWA, use your browser's install option (usually in the address bar or menu). The app will open in its own window without browser chrome.
+
+## Verifying Changes
+
+There is no unit test suite; the app is exercised live instead. `tests/verify.py` serves the repo, boots Ember in headless Chromium with a fresh profile, drives it with Playwright, and prints one pass/fail line per check plus any console errors (the known FTS5-to-LIKE fallback message is filtered out).
+
+```bash
+pip install playwright && playwright install chromium
+
+python3 tests/verify.py popovers     # every help/settings popover, bookmark prompt + dropdown
+python3 tests/verify.py smoke        # notes, tags, bookmarks, markups, reference tabs, search,
+                                     #   plans, template bar, study templates, split view
+python3 tests/verify.py indicators   # note/bookmark dots on a titled Psalm (verse=0 row)
+```
+
+For changes to `js/db.js`, snapshot the results of its query functions before and after and compare:
+
+```bash
+python3 tests/verify.py dbsnapshot /tmp/before.json   # on the old code
+python3 tests/verify.py dbsnapshot /tmp/after.json    # on the new code
+python3 tests/verify.py dbcompare /tmp/before.json /tmp/after.json
+```
+
+Every key should report identical except creation timestamps on the seeded user rows, which differ between runs. Each scenario takes a few minutes on first run while translations seed into OPFS.
 
 ## Roadmap
 
