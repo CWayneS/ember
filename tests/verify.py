@@ -11,6 +11,7 @@ Usage (from the repo root):
                                          #   tabs, search, plans, template bar, templates,
                                          #   translation switch, split view, global settings
    python3 tests/verify.py indicators    # note/bookmark dots on a titled Psalm (verse=0 row)
+   python3 tests/verify.py notes         # removing tags and verse anchors from a note
    python3 tests/verify.py dbsnapshot out.json          # results of ~36 db.js calls as JSON
    python3 tests/verify.py dbcompare before.json after.json
 
@@ -321,6 +322,47 @@ def scenario_smoke(app):
     return FAILURES
 
 
+# ---------------------------------------------------------------- notes
+def scenario_notes(app):
+    """Removing a tag and removing a verse anchor from a note, and the
+    reference panel / reader indicators following each write."""
+    p = app.page
+    seed_user_data(app)  # study + note on Gen 1:1 tagged 'faith', bookmark, markup
+    check(p.evaluate("document.querySelectorAll('#notes-active-view .tag-chip-editable').length") == 1, 'editable tag chip present')
+    check(p.evaluate("document.querySelectorAll('#tags-tab .tag-chip:not(.system-tag)').length") == 1, 'Tags tab shows the user tag after Enter-key add')
+    # autocomplete must still exclude the applied tag despite the ✕ in chip text
+    p.click('.note-block-tag-input'); p.keyboard.type('fai')
+    check(p.evaluate("document.querySelectorAll('.tag-suggestion-item').length") == 0, 'autocomplete excludes already-applied tag')
+    p.keyboard.press('Escape'); p.fill('.note-block-tag-input', '')
+    # remove the tag
+    p.click('.tag-chip-remove')
+    p.wait_for_timeout(200)
+    check(p.evaluate("document.querySelectorAll('#notes-active-view .tag-chip').length") == 0, 'tag chip removed from note')
+    check(p.evaluate("document.querySelectorAll('#tags-tab .tag-chip:not(.system-tag)').length") == 0, 'Tags tab no longer lists the removed tag')
+    tags_in_db = p.evaluate("import('./js/db.js').then(db => db.getUserTagsForVerse(1001001))")
+    check(tags_in_db == [], f'tag assignment gone from db ({tags_in_db})')
+    # attach a second verse, then remove the first
+    app.select_verse(1001003)
+    p.click('.note-block-attach-btn')
+    p.wait_for_timeout(200)
+    check(p.evaluate("document.querySelectorAll('#notes-active-view .note-block-anchor').length") == 2, 'second anchor attached')
+    p.click('.note-block-anchor-remove')  # first chip = Gen 1:1
+    p.wait_for_timeout(300)
+    anchors = p.evaluate("[...document.querySelectorAll('#notes-active-view .note-block-anchor-link')].map(a => a.textContent)")
+    check(anchors == ['Genesis 1:3'], f'first anchor removed, second kept ({anchors})')
+    check(not p.evaluate("!!document.querySelector('.verse[data-verse-id=\"1001001\"] .note-indicator')"), 'reader dot gone from Gen 1:1')
+    check(p.evaluate("!!document.querySelector('.verse[data-verse-id=\"1001003\"] .note-indicator')"), 'reader dot present on Gen 1:3')
+    # range anchor coalesced from two rows removes as one chip
+    app.select_verse(1001004)
+    p.click('.note-block-attach-btn'); p.wait_for_timeout(200)
+    anchors = p.evaluate("[...document.querySelectorAll('#notes-active-view .note-block-anchor-link')].map(a => a.textContent)")
+    check(anchors == ['Genesis 1:3–4'], f'contiguous anchors coalesce into one chip ({anchors})')
+    p.click('.note-block-anchor-remove'); p.wait_for_timeout(300)
+    rows = p.evaluate("import('./js/db.js').then(db => db.getNotesForVerse(1001003).length + db.getNotesForVerse(1001004).length)")
+    check(rows == 0 and p.evaluate("document.querySelectorAll('#notes-active-view .note-block-anchor').length") == 0, f'coalesced chip removal deletes both rows ({rows})')
+    return FAILURES
+
+
 # ---------------------------------------------------------------- indicators
 def scenario_indicators(app):
     p = app.page
@@ -395,6 +437,7 @@ def main():
             if args[0] == 'popovers':   failures = scenario_popovers(app)
             elif args[0] == 'smoke':    failures = scenario_smoke(app)
             elif args[0] == 'indicators': failures = scenario_indicators(app)
+            elif args[0] == 'notes':      failures = scenario_notes(app)
             elif args[0] == 'dbsnapshot': failures = scenario_dbsnapshot(app, args[1])
             else: print('unknown scenario'); sys.exit(2)
             for e in app.errors:

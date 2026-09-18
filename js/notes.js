@@ -4,7 +4,7 @@ import {
     saveNote, updateNote, deleteNote,
     getNotesForStudy, getStudies, getNotesForTag, getVersesForTopic, getTopicVerseCount,
     parseVerseId, getBooks, createStudy, deleteStudy, renameStudy, getStudyName,
-    addNoteTag, removeNoteTag, addAnchorToNote
+    addNoteTag, removeNoteTag, addAnchorToNote, removeAnchorsFromNote
 } from './db.js';
 import { refreshVerseIndicators, navigateTo, getActivePaneTranslationId } from './reader.js';
 import { openStudy, closeStudy, getActiveStudyId, openTagView, renameStudyTab } from './panels.js';
@@ -100,13 +100,34 @@ function buildNoteBlock(note, studyId) {
     anchorsArea.className = 'note-block-anchors';
 
     for (const anchor of coalesceAnchors(note.anchors || [])) {
-        const chip       = document.createElement('div');
-        chip.className   = 'note-block-anchor note-block-anchor-link';
-        chip.textContent = formatAnchor(anchor);
-        chip.addEventListener('click', () => {
+        const chip     = document.createElement('div');
+        chip.className = 'note-block-anchor';
+
+        const link       = document.createElement('span');
+        link.className   = 'note-block-anchor-link';
+        link.textContent = formatAnchor(anchor);
+        link.addEventListener('click', () => {
             const parsed = parseVerseId(anchor.verse_start);
             navigateTo(parsed.book, parsed.chapter, anchor.verse_start);
         });
+        chip.appendChild(link);
+
+        // Detach this verse/range from the note. The chip is a coalesced
+        // display range, so removal is by containment (db.js).
+        const remove = document.createElement('button');
+        remove.type        = 'button';
+        remove.className   = 'note-block-anchor-remove';
+        remove.textContent = '✕';
+        remove.title       = 'Remove this verse from the note';
+        remove.setAttribute('aria-label', `Remove ${link.textContent} from note`);
+        remove.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeAnchorsFromNote(note.id, anchor.verse_start, anchor.verse_end);
+            renderStudyDocument(studyId);
+            refreshAfterWrite();
+        });
+        chip.appendChild(remove);
+
         anchorsArea.appendChild(chip);
     }
 
@@ -149,7 +170,7 @@ function buildTagsArea(note) {
     container.className = 'note-block-tags';
 
     for (const tag of note.tags) {
-        container.appendChild(makeTagChip(tag.name, note.id, container));
+        container.appendChild(makeTagChip(tag.name, note.id));
     }
 
     // Tag input — Enter to add, autocomplete wired by tags.js
@@ -160,10 +181,11 @@ function buildTagsArea(note) {
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && input.value.trim()) {
             e.preventDefault();
-            const name = input.value.trim();
+            const name = input.value.trim().toLowerCase();
             addNoteTag(note.id, name);
-            container.insertBefore(makeTagChip(name, note.id, container), input);
+            container.insertBefore(makeTagChip(name, note.id), input);
             input.value = '';
+            refreshAfterWrite();
         }
     });
 
@@ -182,11 +204,34 @@ function buildTagsArea(note) {
     return container;
 }
 
-function makeTagChip(name, noteId, tagsContainer) {
-    const chip     = document.createElement('span');
-    chip.className = 'tag-chip';
-    chip.textContent = name;
-    chip.addEventListener('click', () => openTagView(name));
+// Editable tag chip for a note in the study view: the name opens the tag
+// view, the ✕ removes the tag from this note. data-tag carries the bare
+// name for tags.js's autocomplete, since textContent now includes the ✕.
+function makeTagChip(name, noteId) {
+    const chip       = document.createElement('span');
+    chip.className   = 'tag-chip tag-chip-editable';
+    chip.dataset.tag = name;
+
+    const label       = document.createElement('span');
+    label.className   = 'tag-chip-name';
+    label.textContent = name;
+    label.addEventListener('click', () => openTagView(name));
+    chip.appendChild(label);
+
+    const remove = document.createElement('button');
+    remove.type        = 'button';
+    remove.className   = 'tag-chip-remove';
+    remove.textContent = '✕';
+    remove.title       = 'Remove tag';
+    remove.setAttribute('aria-label', `Remove tag ${name}`);
+    remove.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeNoteTag(noteId, name);
+        chip.remove();
+        refreshAfterWrite();
+    });
+    chip.appendChild(remove);
+
     return chip;
 }
 

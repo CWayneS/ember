@@ -126,6 +126,10 @@ When you have a verse selected, a small **+** button appears next to the anchor 
 
 Clicking any anchor chip on a note navigates the reader to that verse.
 
+### Removing verses from a note
+
+Each anchor chip has a small **✕**. Click it to detach that verse (or range) from the note. The note itself and its text are untouched; only the link to that passage is removed. A note can be left with no anchors at all.
+
 ### Deleting a note
 
 Click **Delete** in the note footer. You'll be asked to confirm.
@@ -140,7 +144,7 @@ As you type, a dropdown shows matching tags from your existing tag library (up t
 
 If you type a tag that doesn't exist yet and press **Enter**, it's created. Tags are always stored in lowercase.
 
-Tags appear as green-tinted chips on the note. Click any tag chip to open a tag view for that tag.
+Tags appear as green-tinted chips on the note. Click a tag's name to open a tag view for that tag. Click the small **✕** on a chip to remove the tag from this note — the tag stays in your library for reuse on other notes.
 
 ---
 

@@ -173,7 +173,8 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 88. Note body autosaves 800ms after last input — notes.js:scheduleSave
 89. Note body placeholder text "Write your note…" when empty — notes.js:131
 90. Note block gains accent-color border when focused (`focus-within`) — style.css
-91. Anchor chip(s) above note body: show verse reference(s), clickable to navigate to that verse — notes.js:106-110
+91. Anchor chip(s) above note body: show verse reference(s), clickable to navigate to that verse — notes.js:buildNoteBlock
+91a. Each anchor chip has a ✕ that detaches that verse or range from the note. Chips are coalesced display ranges (item 184), so removal deletes every stored anchor row lying within the chip's range — db.js:removeAnchorsFromNote. The study re-renders, reader dots and the Info/Tags tabs refresh
 92. Attach button appears next to anchor chips when a verse is selected; labeled "+ BookName Chapter:Verse" — notes.js:updateAttachButtons
 93. Clicking attach: adds selected verse as additional anchor to that note (no duplicate check if same verse) — notes.js:115-123
 94. Attach button hidden when no verse is selected — notes.js:82
@@ -186,7 +187,9 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 ## Tag Chips on Notes
 
 98. Existing tags shown as chips (rounded pill, green-tinted) — style.css`.tag-chip`
-99. Clicking a tag chip navigates to tag view — notes.js:189
+99. Clicking a tag chip's name navigates to tag view — notes.js:makeTagChip
+99a. Each chip in the study view has a ✕ that removes the tag from that note (the tag row itself is kept for reuse); the chip carries the bare name in `data-tag` so autocomplete still excludes it — notes.js:makeTagChip, db.js:removeNoteTag, tags.js. Chips in the tag view, Info tab, and search results are read-only
+99b. Any tag add or remove, and any anchor add or remove, refreshes the reader's note dots and re-renders both the Info and Tags reference tabs — notes.js:refreshAfterWrite, reference.js:refreshReference
 100. Tag input: always-visible "Add tag…" field at end of tags row — notes.js:156-168
 101. Typing in tag input: filters existing tags (case-insensitive substring match), excludes already-applied tags, shows up to 8 suggestions — tags.js
 102. Up/Down arrows navigate suggestion list; highlighted suggestion fills on Enter — tags.js

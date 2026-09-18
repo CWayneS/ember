@@ -1560,15 +1560,41 @@ body.markup-mode-on .verse.markup-circle {
     border-radius: 10px;
 }
 
-.tag-chip.removable {
+/* Editable chip (study view only): name opens the tag view, ✕ removes the
+   tag from the note. Read-only chips elsewhere (tag view, Info tab, search)
+   are plain .tag-chip. */
+.tag-chip-editable {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding-right: 4px;
+}
+
+.tag-chip-name {
     cursor: pointer;
 }
 
-.tag-chip.removable:hover {
+.tag-chip-name:hover {
+    text-decoration: underline;
+}
+
+.tag-chip-remove,
+.note-block-anchor-remove {
+    font-size: 10px;
+    line-height: 1;
+    padding: 1px 3px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.tag-chip-remove:hover,
+.note-block-anchor-remove:hover {
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
     color: var(--danger);
-    text-decoration: line-through;
-    text-decoration-color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 #tag-suggestions {
@@ -1643,6 +1669,9 @@ body.markup-mode-on .verse.markup-circle {
 }
 
 .note-block-anchor {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     font-family: var(--font-display);
     font-size: var(--size-xs);
     font-weight: 700;

@@ -1228,6 +1228,20 @@ export function addAnchorToNote(noteId, verseStart, verseEnd = null) {
     saveToStorage(db.export());
 }
 
+// Removes every anchor row on `noteId` that lies entirely within
+// [verseStart, verseEnd]. The notes panel shows anchors coalesced into
+// contiguous display ranges (notes.js coalesceAnchors), so one chip can
+// stand for several stored rows; deleting by containment removes exactly
+// the rows that chip was built from and nothing that reaches outside it.
+export function removeAnchorsFromNote(noteId, verseStart, verseEnd = null) {
+    db.run(
+        `DELETE FROM note_anchors
+         WHERE note_id = ? AND verse_start >= ? AND COALESCE(verse_end, verse_start) <= ?`,
+        [noteId, verseStart, verseEnd ?? verseStart]
+    );
+    saveToStorage(db.export());
+}
+
 // ============================================================
 // Tag Queries
 // ============================================================

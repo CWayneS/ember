@@ -35,9 +35,10 @@ export function setupTagInput(inputEl, noteId, chipsEl, suggestionsEl) {
             return;
         }
 
-        // Exclude tags already on this note
+        // Exclude tags already on this note. Chips carry the tag name in
+        // data-tag because their text also includes the remove control.
         const existing = new Set(
-            [...chipsEl.querySelectorAll('.tag-chip')].map(c => c.textContent.trim().toLowerCase())
+            [...chipsEl.querySelectorAll('.tag-chip')].map(c => (c.dataset.tag ?? c.textContent).trim().toLowerCase())
         );
         filtered = tags.filter(t => t.includes(q) && !existing.has(t)).slice(0, 8);
 

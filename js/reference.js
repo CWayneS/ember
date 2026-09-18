@@ -12,10 +12,14 @@ import { renderLanguageTab as renderLanguageTabContent } from './language.js';
 
 const EMPTY_MSG = 'Select a verse to see reference material.';
 
+// Called by notes.js after any note write. Re-renders the two tabs whose
+// content derives from the user's own notes: Info (the verse's notes) and
+// Tags ("Your Tags"). Related and Language depend only on reference data.
 export function refreshReference(verseId) {
     const parsed = parseVerseId(verseId);
     const book   = getBook(parsed.book);
     renderInfoTab(book, parsed.chapter, verseId);
+    renderTagsTab(verseId);
 }
 
 export function initReference() {
