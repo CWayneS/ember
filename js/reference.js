@@ -1,7 +1,7 @@
 // reference.js — Reference panel: Info, Tags, Related, Language tabs
 
 import {
-    getBook, parseVerseId,
+    getBook, parseVerseId, formatReference,
     getChapterVerseCount, getTopicsForVerse, getUserTagsForVerse,
     getNotesForVerse, getCrossReferencesForVerse
 } from './db.js';
@@ -198,11 +198,9 @@ function renderRelatedTab(verseId, book, parsed) {
     const container = document.getElementById('related-tab');
     container.innerHTML = '';
 
-    const label = `${book.name} ${parsed.chapter}:${parsed.verse}`;
-
     const header = document.createElement('div');
     header.className   = 'ref-related-header';
-    header.textContent = `Related to ${label}`;
+    header.textContent = `Related to ${formatReference(verseId)}`;
     container.appendChild(header);
 
     const topRefs = getCrossReferencesForVerse(verseId);
@@ -236,11 +234,9 @@ function renderRelatedTab(verseId, book, parsed) {
 function renderRelatedShowAll(container, verseId, book, parsed) {
     container.innerHTML = '';
 
-    const label = `${book.name} ${parsed.chapter}:${parsed.verse}`;
-
     const header = document.createElement('div');
     header.className   = 'ref-related-header';
-    header.textContent = `Related to ${label}`;
+    header.textContent = `Related to ${formatReference(verseId)}`;
     container.appendChild(header);
 
     const allRefs = getCrossReferencesForVerse(verseId, { showAll: true });
@@ -248,7 +244,7 @@ function renderRelatedShowAll(container, verseId, book, parsed) {
     // Group by target book in canonical (book ID) order.
     const groups = new Map();
     for (const ref of allRefs) {
-        const bookId = Math.floor(ref.target_start / 1_000_000);
+        const bookId = parseVerseId(ref.target_start).book;
         if (!groups.has(bookId)) {
             const b = getBook(bookId);
             groups.set(bookId, { name: b ? b.name : `Book ${bookId}`, refs: [] });
@@ -285,7 +281,7 @@ function renderRefList(refs) {
         li.className = 'ref-crossref-item';
         const btn = document.createElement('button');
         btn.className   = 'ref-crossref-btn';
-        btn.textContent = refLabel(ref.target_start, ref.target_end);
+        btn.textContent = formatReference(ref.target_start, ref.target_end);
         btn.addEventListener('click', () =>
             navigateToCrossRef(ref.target_start, ref.target_end || null)
         );
@@ -314,26 +310,6 @@ function makeShowAllBtn(onClick) {
     btn.textContent = 'Show all';
     btn.addEventListener('click', onClick);
     return btn;
-}
-
-// Converts BBCCCVVV pair to "Book Chapter:Verse" or "Book Chapter:Start–End".
-function refLabel(startId, endId) {
-    const s     = parseVerseId(startId);
-    const sBook = getBook(s.book);
-    const name  = sBook ? sBook.name : `Book ${s.book}`;
-
-    if (!endId) return `${name} ${s.chapter}:${s.verse}`;
-
-    const e = parseVerseId(endId);
-    if (s.book === e.book && s.chapter === e.chapter) {
-        return `${name} ${s.chapter}:${s.verse}–${e.verse}`;
-    }
-    if (s.book === e.book) {
-        return `${name} ${s.chapter}:${s.verse}–${e.chapter}:${e.verse}`;
-    }
-    const eBook = getBook(e.book);
-    const eName = eBook ? eBook.name : `Book ${e.book}`;
-    return `${name} ${s.chapter}:${s.verse}–${eName} ${e.chapter}:${e.verse}`;
 }
 
 // ============================================================

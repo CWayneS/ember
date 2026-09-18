@@ -949,6 +949,27 @@ export function parseVerseId(id) {
     return { book, chapter, verse };
 }
 
+// Human-readable reference for a verse id or a range of two ids:
+//   "Genesis 1:1"   "Genesis 1:1–3"   "Genesis 1:30–2:5"   "Genesis 50:26–Exodus 1:1"
+// A null endId, or one equal to startId, formats as a single verse. An
+// unknown book id renders as "Book N" rather than throwing. This is the one
+// place reference labels are formatted — every chip, heading, result row,
+// and tooltip goes through it.
+export function formatReference(startId, endId = null) {
+    const s    = parseVerseId(startId);
+    const name = bookName(s.book);
+    if (!endId || endId === startId) return `${name} ${s.chapter}:${s.verse}`;
+
+    const e = parseVerseId(endId);
+    if (s.book === e.book && s.chapter === e.chapter) return `${name} ${s.chapter}:${s.verse}–${e.verse}`;
+    if (s.book === e.book) return `${name} ${s.chapter}:${s.verse}–${e.chapter}:${e.verse}`;
+    return `${name} ${s.chapter}:${s.verse}–${bookName(e.book)} ${e.chapter}:${e.verse}`;
+}
+
+function bookName(bookId) {
+    return getBooks().find(b => b.id === bookId)?.name ?? `Book ${bookId}`;
+}
+
 // ============================================================
 // Scripture Queries
 // ============================================================

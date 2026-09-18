@@ -1,6 +1,6 @@
 // bookmarks.js — Bookmark button behavior
 
-import { getBookmarkForVerse, addBookmark, removeBookmark, getAllBookmarks } from './db.js';
+import { getBookmarkForVerse, addBookmark, removeBookmark, getAllBookmarks, parseVerseId, formatReference } from './db.js';
 import { getSelectedVerses } from './selection.js';
 import { navigateTo, refreshVerseIndicators } from './reader.js';
 import { registerPopover, closeAllPopovers } from './popover-registry.js';
@@ -172,7 +172,7 @@ function renderDropdown(dropdown) {
 
         const ref = document.createElement('span');
         ref.className   = 'bookmark-ref';
-        ref.textContent = `${bm.book_name} ${bm.chapter}:${bm.verse}`;
+        ref.textContent = formatReference(bm.verse_id);
 
         const label = document.createElement('span');
         label.className   = 'bookmark-label';
@@ -203,10 +203,8 @@ function renderDropdown(dropdown) {
         row.appendChild(del);
 
         row.addEventListener('click', () => {
-            navigateTo(
-                Math.floor(bm.verse_id / 1000000),
-                bm.chapter
-            );
+            const { book, chapter } = parseVerseId(bm.verse_id);
+            navigateTo(book, chapter, bm.verse_id);
             closeDropdown(dropdown);
         });
 

@@ -1,6 +1,6 @@
 // search.js — Full-text search UI
 
-import { search, parseVerseId, getBooks, getAllBookmarks } from './db.js';
+import { search, parseVerseId, formatReference, getAllBookmarks } from './db.js';
 import { navigateTo, getActivePaneTranslationId, getActivePaneTranslationAbbrev } from './reader.js';
 import { openTagView, openStudy }           from './panels.js';
 
@@ -107,8 +107,6 @@ function runSearch(query) {
 // ============================================================
 
 function renderVerseResult(verse) {
-    const book    = getBooks().find(b => b.id === verse.book_id);
-    const ref     = `${book?.name || ''} ${verse.chapter}:${verse.verse}`;
     const verseId = verse.id;
 
     const item     = document.createElement('div');
@@ -116,7 +114,7 @@ function renderVerseResult(verse) {
 
     const ref_el       = document.createElement('div');
     ref_el.className   = 'search-result-ref';
-    ref_el.textContent = ref;
+    ref_el.textContent = formatReference(verseId);
 
     const text_el       = document.createElement('div');
     text_el.className   = 'search-result-text';
@@ -143,10 +141,7 @@ function renderNoteResult(note) {
     label.textContent = 'Note';
 
     if (note.anchors && note.anchors.length > 0) {
-        const anchor = note.anchors[0];
-        const parsed = parseVerseId(anchor.verse_start);
-        const book   = getBooks().find(b => b.id === parsed.book);
-        label.textContent = `${book?.name || 'Note'} ${parsed.chapter}:${parsed.verse}`;
+        label.textContent = formatReference(note.anchors[0].verse_start);
     }
 
     const body_el       = document.createElement('div');
@@ -235,7 +230,7 @@ function matchBookmarks(q) {
     const lq = q.toLowerCase();
     return getAllBookmarks().filter(bm => {
         if (bm.label) return bm.label.toLowerCase().includes(lq);
-        return `${bm.book_name} ${bm.chapter}:${bm.verse}`.toLowerCase().includes(lq);
+        return formatReference(bm.verse_id).toLowerCase().includes(lq);
     });
 }
 
@@ -256,7 +251,7 @@ function renderBookmarkResult(bm) {
 
     const ref_el       = document.createElement('div');
     ref_el.className   = 'search-result-ref';
-    ref_el.textContent = `${bm.book_name} ${bm.chapter}:${bm.verse}`;
+    ref_el.textContent = formatReference(bm.verse_id);
 
     item.appendChild(ref_el);
 
@@ -268,7 +263,8 @@ function renderBookmarkResult(bm) {
     }
 
     item.addEventListener('click', () => {
-        navigateTo(Math.floor(bm.verse_id / 1000000), bm.chapter);
+        const { book, chapter } = parseVerseId(bm.verse_id);
+        navigateTo(book, chapter, bm.verse_id);
         hideOverlay();
         document.getElementById('search-input').value = '';
     });

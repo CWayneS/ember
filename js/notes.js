@@ -3,7 +3,7 @@
 import {
     saveNote, updateNote, deleteNote,
     getNotesForStudy, getStudies, getNotesForTag, getVersesForTopic, getTopicVerseCount,
-    parseVerseId, getBooks, createStudy, deleteStudy, renameStudy, getStudyName,
+    parseVerseId, formatReference, getBooks, createStudy, deleteStudy, renameStudy, getStudyName,
     addNoteTag, removeNoteTag, addAnchorToNote, removeAnchorsFromNote
 } from './db.js';
 import { refreshVerseIndicators, navigateTo, getActivePaneTranslationId } from './reader.js';
@@ -82,10 +82,7 @@ function updateAttachButtons() {
             btn.classList.add('hidden');
             return;
         }
-        const verseStart = Math.min(...currentVerseIds);
-        const parsed     = parseVerseId(verseStart);
-        const book       = getBooks().find(b => b.id === parsed.book);
-        btn.textContent  = `+ ${book?.name || ''} ${parsed.chapter}:${parsed.verse}`;
+        btn.textContent = `+ ${formatReference(Math.min(...currentVerseIds))}`;
         btn.classList.remove('hidden');
     });
 }
@@ -342,7 +339,7 @@ function buildTopicVerseCard(verse) {
 
     const anchor     = document.createElement('div');
     anchor.className = 'note-block-anchor note-block-anchor-link';
-    anchor.textContent = `${verse.book_name} ${verse.chapter}:${verse.verse}`;
+    anchor.textContent = formatReference(verse.id);
     anchor.addEventListener('click', () => navigateTo(verse.book_id, verse.chapter, verse.id));
     block.appendChild(anchor);
 
@@ -588,14 +585,6 @@ function coalesceAnchors(anchors) {
 }
 
 function formatAnchor(anchor) {
-    const parsed = parseVerseId(anchor.verse_start);
-    const book   = getBooks().find(b => b.id === parsed.book);
-    const label  = `${book?.name || ''} ${parsed.chapter}:${parsed.verse}`;
-
-    if (anchor.verse_end && anchor.verse_end !== anchor.verse_start) {
-        const end = parseVerseId(anchor.verse_end);
-        return `${label}–${end.verse}`;
-    }
-    return label;
+    return formatReference(anchor.verse_start, anchor.verse_end);
 }
 

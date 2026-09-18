@@ -348,6 +348,11 @@ def scenario_notes(app):
     """Removing a tag and removing a verse anchor from a note, and the
     reference panel / reader indicators following each write."""
     p = app.page
+    labels = p.evaluate("""import('./js/db.js').then(db => [
+        db.formatReference(1001001), db.formatReference(1001001, 1001001), db.formatReference(1001001, 1001003),
+        db.formatReference(1001030, 1002005), db.formatReference(1050026, 2001001), db.formatReference(99001001)])""")
+    check(labels == ['Genesis 1:1', 'Genesis 1:1', 'Genesis 1:1–3', 'Genesis 1:30–2:5', 'Genesis 50:26–Exodus 1:1', 'Book 99 1:1'],
+          f'formatReference shapes ({labels})')
     seed_user_data(app)  # study + note on Gen 1:1 tagged 'faith', bookmark, markup
     check(p.evaluate("document.querySelectorAll('#notes-active-view .tag-chip-editable').length") == 1, 'editable tag chip present')
     check(p.evaluate("document.querySelectorAll('#tags-tab .tag-chip:not(.system-tag)').length") == 1, 'Tags tab shows the user tag after Enter-key add')

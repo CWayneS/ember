@@ -15,10 +15,7 @@
 // exactly one source of truth for what's open, with "rows shift down" falling
 // out for free as normal document flow.
 
-import {
-    parseVerseId, getBook,
-    getOriginalWordsForVerses, getGreekLexiconEntry
-} from './db.js';
+import { formatReference, getOriginalWordsForVerses, getGreekLexiconEntry } from './db.js';
 import { decodeMorphCode } from './grammar-decode.js';
 
 const EMPTY_MSG        = 'Select a verse to see its original-language text.';
@@ -135,11 +132,9 @@ async function renderVerseBlock(verseId, verseWords) {
     const block = document.createElement('div');
     block.className = 'language-verse-block';
 
-    const parsed = parseVerseId(verseId);
-    const book = getBook(parsed.book);
     const heading = document.createElement('div');
     heading.className = 'language-verse-heading';
-    heading.textContent = book ? `${book.name} ${parsed.chapter}:${parsed.verse}` : '';
+    heading.textContent = formatReference(verseId);
     block.appendChild(heading);
 
     // Running verse line — decorative, non-interactive, continuous text. RTL
