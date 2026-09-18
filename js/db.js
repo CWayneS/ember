@@ -228,7 +228,7 @@ async function loadTranslationBuffer(filename) {
 let _languageDb        = null;
 let _languageDbPromise = null;
 
-export function getLanguageDb() {
+function getLanguageDb() {
     if (_languageDb) return Promise.resolve(_languageDb);
     if (_languageDbPromise) return _languageDbPromise;
 
@@ -659,7 +659,7 @@ async function seedBundledPlans() {
 // Throws an Error with `.code === 'DUPLICATE_TEMPLATE_NAME'` if a template
 // with this name is already installed — study_templates has no separate
 // stable key column (see Build_5_Spec.md Item 1), so name is the dedupe key.
-export function insertTemplate(meta, steps) {
+function insertTemplate(meta, steps) {
     if (queryOne(db, 'SELECT id FROM study_templates WHERE name = ?', [meta.name])) {
         const err = new Error(`Template already installed: ${meta.name}`);
         err.code = 'DUPLICATE_TEMPLATE_NAME';
@@ -1171,7 +1171,7 @@ function attachTagsAndAnchors(notes) {
     return notes;
 }
 
-export function getTagsForNote(noteId) {
+function getTagsForNote(noteId) {
     return queryAll(db,
         `SELECT t.id, t.name, t.type FROM tags t
          JOIN tag_assignments ta ON ta.tag_id = t.id
@@ -1180,7 +1180,7 @@ export function getTagsForNote(noteId) {
     );
 }
 
-export function getAnchorsForNote(noteId) {
+function getAnchorsForNote(noteId) {
     return queryAll(db, 'SELECT * FROM note_anchors WHERE note_id = ?', [noteId]);
 }
 
@@ -1390,15 +1390,6 @@ export function setState(key, value) {
     saveToStorage(db.export());
 }
 
-export function getCurrentTranslation() {
-    return getState('translation') || 'KJV';
-}
-
-export function getCurrentTranslationId() {
-    const abbrev = getCurrentTranslation();
-    return queryValue(db, 'SELECT id FROM translations WHERE abbreviation = ?', [abbrev], 1);
-}
-
 // ============================================================
 // Study Queries
 // ============================================================
@@ -1510,17 +1501,6 @@ export function deleteMarkup(id) {
 
 const MARKUP_COLUMNS = 'id, verse_start, verse_end, type, color, created_at';
 
-// Returns all markups whose range covers verseId.
-export function getMarkupsForVerse(verseId) {
-    return queryAll(db,
-        `SELECT ${MARKUP_COLUMNS}
-         FROM markups
-         WHERE verse_start <= ? AND COALESCE(verse_end, verse_start) >= ?
-         ORDER BY created_at DESC`,
-        [verseId, verseId]
-    );
-}
-
 // Returns all markups that overlap the given chapter (BBCCC prefix).
 // Efficient for rendering a whole chapter — one query, not one per verse.
 export function getMarkupsForChapter(bookChapter) {
@@ -1600,25 +1580,6 @@ export async function getOriginalWordsForVerses(verseIds) {
          WHERE verse_id IN (${placeholders})
          ORDER BY verse_id ASC, word_position ASC`,
         verseIds
-    );
-}
-
-// All rows sharing a group_id (a collapsed multi-word display unit), for the
-// word detail view when a grouped row is tapped.
-export async function getOriginalWordsForGroup(groupId) {
-    const langDb = await getLanguageDb();
-    return queryAll(langDb,
-        `SELECT ${ORIGINAL_WORD_COLUMNS}
-         FROM original_words WHERE group_id = ? ORDER BY word_position ASC`,
-        [groupId]
-    );
-}
-
-export async function getOriginalWord(id) {
-    const langDb = await getLanguageDb();
-    return queryOne(langDb,
-        `SELECT ${ORIGINAL_WORD_COLUMNS} FROM original_words WHERE id = ?`,
-        [id]
     );
 }
 
