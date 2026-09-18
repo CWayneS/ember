@@ -18,6 +18,7 @@ Every new query touching `note_anchors` must follow this pattern.
 
 | Location | Function |
 |----------|----------|
-| `db.js:300` | `getUserTagsForVerse()` |
-| `db.js:384` | `getNotesForVerse()` |
-| `reader.js:123` | Note indicator dots (inherits via `getNotesForVerse`) |
+| `db.js` | `getUserTagsForVerse()` |
+| `db.js` | `getNotesForVerse()` |
+| `db.js` | `getNoteCountsForChapter()` — chapter-wide overlap query, then each anchor is expanded in JS to every verse it covers, clamped to the chapter |
+| `reader.js` | Note indicator dots (inherit via `getNoteCountsForChapter`) |

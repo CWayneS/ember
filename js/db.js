@@ -1161,6 +1161,42 @@ export function getNotesForVerse(verseId) {
     return attachTagsAndAnchors(results);
 }
 
+// Distinct note count per verse for one chapter, from a single query. The
+// reader's indicator dots need only counts, and a chapter can be 176 verses
+// (Psalm 119), so a per-verse getNotesForVerse() round-trip is the wrong
+// shape for rendering — this mirrors getBookmarksForChapter() and
+// getMarkupsForChapter(). Range-aware per docs/ANCHOR_QUERIES.md: each
+// anchor overlapping the chapter is expanded here to every verse it covers
+// (clamped to the chapter), and a note with several anchors on one verse
+// counts once, matching getNotesForVerse()'s DISTINCT. The chapter range
+// starts at verse 0 so a note on a Psalm-title row counts.
+export function getNoteCountsForChapter(bookId, chapter) {
+    const chapterStart = makeVerseId(bookId, chapter, 0);
+    const chapterEnd   = makeVerseId(bookId, chapter, 999);
+    const anchors = queryAll(db,
+        `SELECT a.note_id, a.verse_start, COALESCE(a.verse_end, a.verse_start) AS verse_end
+         FROM note_anchors a
+         JOIN notes n ON n.id = a.note_id
+         WHERE a.verse_start <= ? AND COALESCE(a.verse_end, a.verse_start) >= ?
+           AND n.parent_note_id IS NULL`,
+        [chapterEnd, chapterStart]
+    );
+
+    const noteIdsByVerse = new Map();
+    for (const { note_id, verse_start, verse_end } of anchors) {
+        const from = Math.max(verse_start, chapterStart);
+        const to   = Math.min(verse_end, chapterEnd);
+        for (let verseId = from; verseId <= to; verseId++) {
+            if (!noteIdsByVerse.has(verseId)) noteIdsByVerse.set(verseId, new Set());
+            noteIdsByVerse.get(verseId).add(note_id);
+        }
+    }
+
+    const counts = new Map();
+    for (const [verseId, noteIds] of noteIdsByVerse) counts.set(verseId, noteIds.size);
+    return counts;
+}
+
 // Fills in `tags` and `anchors` on each note row — every note-list query
 // wants both, so they're attached in one place.
 function attachTagsAndAnchors(notes) {

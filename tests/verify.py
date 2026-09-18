@@ -346,6 +346,33 @@ def scenario_indicators(app):
     app.select_verse(19003001)
     p.click('#bookmark-btn'); p.wait_for_timeout(200)
     check(not p.evaluate("!!document.querySelector('.verse[data-verse-id=\"19003001\"] .bookmark-indicator')"), 'bookmark indicator removed')
+    # range anchor: a note on verses 2-4 must dot all three
+    app.select_verse(19003002)
+    p.click('.verse[data-verse-id="19003004"]', modifiers=['Shift'])
+    p.click('.add-note-btn')
+    p.wait_for_timeout(300)
+    dotted = p.evaluate("[...document.querySelectorAll('#reader-pane-a .verse .note-indicator')].map(d => d.closest('.verse').dataset.verseId)")
+    check(all(str(v) in dotted for v in (19003002, 19003003, 19003004)), f'range note dots verses 2-4 (dotted: {dotted})')
+    # second note on verse 3 alone → its dot reads "2 notes", neighbours still "1 note"
+    app.select_verse(19003003)
+    p.click('.add-note-btn')
+    p.wait_for_timeout(300)
+    titles = p.evaluate("[2,3,4].map(v => document.querySelector(`.verse[data-verse-id=\"1900300${v}\"] .note-indicator`)?.title)")
+    check(titles == ['1 note', '2 notes', '1 note'], f'note counts per verse ({titles})')
+    # batched chapter counts must equal the per-verse query for every rendered verse
+    mismatches = p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        const counts = db.getNoteCountsForChapter(19, 3);
+        const out = [];
+        for (const el of document.querySelectorAll('#reader-pane-a .verse')) {
+            const id = parseInt(el.dataset.verseId);
+            const perVerse = db.getNotesForVerse(id).length;
+            const batched  = counts.get(id) ?? 0;
+            if (perVerse !== batched) out.push([id, perVerse, batched]);
+        }
+        return out;
+    }""")
+    check(mismatches == [], f'batched counts equal per-verse counts (mismatches: {mismatches})')
     return FAILURES
 
 

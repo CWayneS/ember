@@ -1,6 +1,6 @@
 // reader.js — Scripture rendering and navigation
 
-import { getChapter, getBooks, getBook, getTranslations, chapterExistsInTranslation, getNotesForVerse, getMarkupsForChapter, getBookmarksForChapter, getOriginalWordsForVerses } from './db.js';
+import { getChapter, getBooks, getBook, getTranslations, chapterExistsInTranslation, getNoteCountsForChapter, getMarkupsForChapter, getBookmarksForChapter, getOriginalWordsForVerses } from './db.js';
 
 // ============================================================
 // Per-pane state — persisted to localStorage
@@ -212,7 +212,8 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
     navEl(paneId, '.pane-location').textContent = `${book.name} ${chapter}`;
 
     textEl.innerHTML = '';
-    const chapterBookmarks = getBookmarksForChapter(bookId, chapter);
+    const chapterBookmarks  = getBookmarksForChapter(bookId, chapter);
+    const chapterNoteCounts = getNoteCountsForChapter(bookId, chapter);
 
     for (const v of verses) {
         // verse=0 is a Psalm title row (Psalm_Title_Fix_Spec.md). KJV/ASV/Darby
@@ -242,7 +243,7 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
 
         if (numSpan) el.appendChild(numSpan);
         el.appendChild(textSpan);
-        applyIndicators(el, getNotesForVerse(v.id), chapterBookmarks.get(v.id));
+        applyIndicators(el, chapterNoteCounts.get(v.id) ?? 0, chapterBookmarks.get(v.id));
         textEl.appendChild(el);
 
         if (needsGloss) populateTitleGloss(el, textSpan, v.id);
@@ -332,11 +333,12 @@ export function refreshMarkupClasses() {
 export function refreshVerseIndicators() {
     for (const paneId of ['a', 'b']) {
         const { bookId, chapter } = panes[paneId];
-        const bookmarks = getBookmarksForChapter(bookId, chapter);
+        const bookmarks  = getBookmarksForChapter(bookId, chapter);
+        const noteCounts = getNoteCountsForChapter(bookId, chapter);
 
         for (const verseEl of getTextEl(paneId).querySelectorAll('.verse')) {
             const verseId = parseInt(verseEl.dataset.verseId);
-            applyIndicators(verseEl, getNotesForVerse(verseId), bookmarks.get(verseId));
+            applyIndicators(verseEl, noteCounts.get(verseId) ?? 0, bookmarks.get(verseId));
         }
     }
 }
@@ -345,21 +347,21 @@ export function refreshVerseIndicators() {
 // scratch — the single builder for both the initial chapter render and the
 // post-write refresh, so the two can't drift. A Psalm-title row has no
 // verse-number bubble; its indicators anchor to the row itself (also
-// position: relative). Passing an empty notes list and no bookmark clears
-// any indicators the row had.
-function applyIndicators(verseEl, notes, bookmark) {
+// position: relative). A zero note count and no bookmark clears any
+// indicators the row had.
+function applyIndicators(verseEl, noteCount, bookmark) {
     verseEl.querySelector('.verse-indicators')?.remove();
     verseEl.classList.remove('verse-bookmarked');
 
-    if (notes.length === 0 && !bookmark) return;
+    if (noteCount === 0 && !bookmark) return;
 
     const indicators = document.createElement('span');
     indicators.className = 'verse-indicators';
 
-    if (notes.length > 0) {
+    if (noteCount > 0) {
         const dot = document.createElement('span');
         dot.className = 'note-indicator';
-        dot.title = notes.length === 1 ? '1 note' : `${notes.length} notes`;
+        dot.title = noteCount === 1 ? '1 note' : `${noteCount} notes`;
         indicators.appendChild(dot);
     }
 
