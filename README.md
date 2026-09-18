@@ -74,9 +74,9 @@ ember/
 │   ├── language.db            # Original-language interlinear text + Greek lexicon (Language tab)
 │   ├── translations/          # Per-translation SQLite files (kjv.db, asv.db, web.db, ylt.db, darby.db, bsb.db)
 │   ├── templates/, plans/     # Bundled study templates and reading plans
-│   └── translations-prep/, stepbible-prep/  # Build-script staging dirs — the raw source downloads inside them
-│                               # are gitignored and re-downloadable, but each dir's own `output/` copy of the
-│                               # built .db is currently committed alongside the shipped copy under data/
+│   └── translations-prep/, stepbible-prep/  # Build-script staging dirs. Both the raw source downloads and each
+│                               # dir's own `output/` copy of the built .db are gitignored — the shipped copies
+│                               # under data/translations/ and data/language.db are the tracked ones
 ├── scripts/
 │   ├── build_translation.py   # Builds each translation's .db file
 │   ├── build_crossrefs.py     # Ingests OpenBible cross-references into core.db
