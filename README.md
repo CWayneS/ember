@@ -63,7 +63,7 @@ ember/
 │   ├── reader-settings.js, notes-settings.js, reference-settings.js
 │   ├── help.js                  # Contextual help popovers
 │   ├── popover-registry.js      # Shared popover open/close coordination
-│   ├── state.js                 # Reactive state manager (scaffolded, not yet wired in)
+│   ├── dialogs.js               # Shared confirm / prompt modal dialogs
 │   ├── storage-worker.js        # Web Worker for DB writes
 │   └── vendor/
 │       ├── sql-wasm.js          # sql.js library

@@ -8,7 +8,6 @@ import { initSelection } from './selection.js';
 
 import { initNotes } from './notes.js';
 
-import { initTags }          from './tags.js';
 import { initPanels, togglePanelLayout } from './panels.js';
 import { initSearch }        from './search.js';
 import { initReference }     from './reference.js';
@@ -36,7 +35,6 @@ async function init() {
         initReader();
         initSelection();
         initNotes();
-        initTags();
         initPanels();
         initSearch();
         initReference();

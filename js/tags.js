@@ -2,10 +2,6 @@
 
 import { getAllTags } from './db.js';
 
-// Called once on app init — currently a no-op but reserved for future work
-// (e.g., preloading tag cache, registering global keyboard shortcuts).
-export function initTags() {}
-
 // ============================================================
 // setupTagInput — wire autocomplete to a note block's tag input
 //

@@ -23,7 +23,8 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - js/tags.js — Tag autocomplete
 - js/sidepanel.js — Side panel tabs and management
 - js/search.js — Full-text search UI and queries
-- js/state.js — Simple reactive state
+- js/popover-registry.js — Shared popover open/close behavior
+- js/dialogs.js — Shared confirm / prompt modal dialogs
 - js/vendor/ — sql-wasm.js and sql-wasm.wasm (local, no CDN)
 - data/core.db — KJV Bible text + empty future tables
 - build/ — Database build script

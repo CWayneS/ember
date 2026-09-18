@@ -550,7 +550,7 @@ All five prefixes are functional:
 
 **PWA install prompt:** `#install-overlay` DOM element and styles are in place (Install / Not now buttons). JavaScript handling for `beforeinstallprompt` is coming in a future update.
 
-**`state.js` module**: in-memory reactive state manager scaffolded (`getAppState`, `setAppState`, `onStateChange`); still not imported or wired into the app by anything. Work in progress.
+*(The `state.js` entry that used to live here — a scaffolded reactive state manager nothing imported — is gone: the file was deleted. Cross-module state is module-level variables with exported getters, plus the three custom events in the "Custom Events" table of the current `BUILD_N_ACTUAL_STATE.md`.)*
 
 *(The `#template-bar` entry that used to live here — "DOM element present, no content yet" — is gone as of Build 3: the bar is now fully implemented. See the Template Bar section above.)*
 

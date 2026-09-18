@@ -3,12 +3,13 @@
 import {
     saveNote, updateNote, deleteNote,
     getNotesForStudy, getStudies, getNotesForTag, getVersesForTopic, getTopicVerseCount,
-    parseVerseId, formatReference, getBooks, createStudy, deleteStudy, renameStudy, getStudyName,
+    parseVerseId, formatReference, deleteStudy, renameStudy, getStudyName,
     addNoteTag, removeNoteTag, addAnchorToNote, removeAnchorsFromNote
 } from './db.js';
 import { refreshVerseIndicators, navigateTo, getActivePaneTranslationId } from './reader.js';
-import { openStudy, closeStudy, getActiveStudyId, openTagView, renameStudyTab } from './panels.js';
+import { openStudy, closeStudy, openTagView, renameStudyTab } from './panels.js';
 import { refreshReference }                         from './reference.js';
+import { setupTagInput }                            from './tags.js';
 
 let currentVerseIds = [];       // verses currently selected in the reader
 const saveTimers    = new Map(); // noteId → debounce timer
@@ -186,17 +187,14 @@ function buildTagsArea(note) {
         }
     });
 
-    // Suggestions container — wired by tags.js when it initialises
+    // Suggestions container — autocomplete wired by tags.js
     const suggestions     = document.createElement('div');
     suggestions.className = 'note-block-tag-suggestions hidden';
 
     container.appendChild(input);
     container.appendChild(suggestions);
 
-    // Let tags.js attach autocomplete when it is ready
-    import('./tags.js').then(({ setupTagInput }) => {
-        setupTagInput(input, note.id, container, suggestions);
-    }).catch(() => { /* tags.js not yet available — plain input works */ });
+    setupTagInput(input, note.id, container, suggestions);
 
     return container;
 }
@@ -493,46 +491,6 @@ function scheduleSave(noteId, bodyEl) {
         updateNote(noteId, raw);
         refreshAfterWrite();
     }, 800));
-}
-
-// ============================================================
-// showNoteEditor — navigation entry point (used by search.js)
-// Ensures a study is open; navigates to the verse; adds a note if none exists.
-// ============================================================
-
-export function showNoteEditor(verseIds, options = {}) {
-    currentVerseIds = verseIds;
-
-    let studyId = getActiveStudyId();
-
-    if (!studyId || studyId === 'all') {
-        studyId = autoCreateStudy(verseIds[0]);
-    }
-
-    renderStudyDocument(studyId);
-
-    if (options.focusTag) {
-        document.querySelector('.note-block-tag-input')?.focus();
-    }
-}
-
-// ============================================================
-// Auto-create a study named from the current passage + date
-// ============================================================
-
-function autoCreateStudy(verseId) {
-    let name = 'My Study';
-
-    if (verseId) {
-        const parsed = parseVerseId(verseId);
-        const book   = getBooks().find(b => b.id === parsed.book);
-        const date   = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-        name = `${book?.name || 'Study'} ${parsed.chapter} — ${date}`;
-    }
-
-    const studyId = createStudy(name);
-    openStudy(studyId, name);
-    return studyId;
 }
 
 // ============================================================

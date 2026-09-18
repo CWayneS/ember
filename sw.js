@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v7'; // bumped: js/dialogs.js added
+const CACHE_NAME = 'ember-v8'; // bumped: js/state.js removed
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:
@@ -41,7 +41,6 @@ const PRECACHE = [
     './js/reference-settings.js',
     './js/search.js',
     './js/selection.js',
-    './js/state.js',
     './js/storage-worker.js',
     './js/study-templates.js',
     './js/tags.js',
