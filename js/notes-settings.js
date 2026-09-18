@@ -1,7 +1,7 @@
 // notes-settings.js — Notes panel settings popover (font size control)
 
 import { getState, setState } from './db.js';
-import { registerPopover, closeAllPopovers } from './popover-registry.js';
+import { bindPopover } from './popover-registry.js';
 
 const DEFAULT_SIZE = 18;
 const MIN_SIZE     = 12;
@@ -22,18 +22,7 @@ export function initNotesSettings() {
     let currentSize = clamp(saved);
     applySize(notesPanel, currentSize, display, decBtn, incBtn);
 
-    registerPopover(() => closePopover(popover));
-
-    // Open / close toggle
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const alreadyOpen = !popover.classList.contains('hidden');
-        closeAllPopovers();
-        if (!alreadyOpen) openPopover(btn, popover);
-    });
-
-    // Prevent clicks inside from closing
-    popover.addEventListener('click', (e) => e.stopPropagation());
+    bindPopover(btn, popover);
 
     decBtn.addEventListener('click', () => {
         currentSize = clamp(currentSize - 1);
@@ -52,23 +41,6 @@ export function initNotesSettings() {
         applySize(notesPanel, currentSize, display, decBtn, incBtn);
         setState(STATE_KEY, String(DEFAULT_SIZE));
     });
-
-    // Close on outside click or Escape
-    document.addEventListener('click', () => closePopover(popover));
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closePopover(popover);
-    });
-}
-
-function openPopover(btn, popover) {
-    const rect = btn.getBoundingClientRect();
-    popover.style.top   = `${rect.bottom + 6}px`;
-    popover.style.right = `${window.innerWidth - rect.right}px`;
-    popover.classList.remove('hidden');
-}
-
-function closePopover(popover) {
-    popover.classList.add('hidden');
 }
 
 function applySize(notesPanel, size, display, decBtn, incBtn) {

@@ -2,7 +2,7 @@
 
 import { getState, setState } from './db.js';
 import { switchReferenceTab } from './panels.js';
-import { registerPopover, closeAllPopovers } from './popover-registry.js';
+import { bindPopover } from './popover-registry.js';
 
 const DEFAULT_TAB = 'info';
 const STATE_KEY   = 'default_reference_tab';
@@ -17,18 +17,7 @@ export function initReferenceSettings() {
     let currentTab = getState(STATE_KEY) || DEFAULT_TAB;
     updateToggle(toggleBtns, currentTab);
 
-    registerPopover(() => closePopover(popover));
-
-    // Open / close toggle
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const alreadyOpen = !popover.classList.contains('hidden');
-        closeAllPopovers();
-        if (!alreadyOpen) openPopover(btn, popover);
-    });
-
-    // Prevent clicks inside from closing
-    popover.addEventListener('click', (e) => e.stopPropagation());
+    bindPopover(btn, popover);
 
     // Tab selection
     toggleBtns.forEach(tb => {
@@ -47,28 +36,10 @@ export function initReferenceSettings() {
 
     // Switch to chosen default tab on verse selection (skip if set to keep)
     document.addEventListener('selection-changed', (e) => {
-        if (e.detail.verseIds.length > 0) {
-            const tab = getState(STATE_KEY) || DEFAULT_TAB;
-            if (tab !== 'keep') switchReferenceTab(tab);
+        if (e.detail.verseIds.length > 0 && currentTab !== 'keep') {
+            switchReferenceTab(currentTab);
         }
     });
-
-    // Close on outside click or Escape
-    document.addEventListener('click', () => closePopover(popover));
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closePopover(popover);
-    });
-}
-
-function openPopover(btn, popover) {
-    const rect = btn.getBoundingClientRect();
-    popover.style.top   = `${rect.bottom + 6}px`;
-    popover.style.right = `${window.innerWidth - rect.right}px`;
-    popover.classList.remove('hidden');
-}
-
-function closePopover(popover) {
-    popover.classList.add('hidden');
 }
 
 function updateToggle(btns, activeTab) {

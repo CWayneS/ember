@@ -1,15 +1,15 @@
 // global-settings.js — Global settings popover (Build 4 Item 4/5)
 //
-// Open/close + popover-registry wiring matches the pattern used by
-// reader-settings.js/notes-settings.js/reference-settings.js. Content is
-// built from SECTIONS below rather than hardcoded markup, so a future build
-// adds a section by extending that array — the title+divider treatment and
-// the ToC entry it gets are both generic, not one-offs.
+// Open/close comes from popover-registry.js's bindPopover, shared with the
+// per-panel settings and help popovers. Content is built from SECTIONS below
+// rather than hardcoded markup, so a future build adds a section by
+// extending that array — the title+divider treatment and the ToC entry it
+// gets are both generic, not one-offs.
 //
 // reader-settings.js/notes-settings.js/reference-settings.js content is
 // explicitly NOT migrated in here yet — out of scope for Build 4.
 
-import { registerPopover, closeAllPopovers } from './popover-registry.js';
+import { bindPopover } from './popover-registry.js';
 import { exportBackup } from './db.js';
 import { restoreFromBackup } from './backup.js';
 
@@ -96,24 +96,7 @@ export function initGlobalSettings() {
     const popover = document.getElementById('global-settings-popover');
 
     buildPopoverContent(popover);
-
-    registerPopover(() => closePopover(popover));
-
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const alreadyOpen = !popover.classList.contains('hidden');
-        closeAllPopovers();
-        if (!alreadyOpen) openPopover(btn, popover);
-    });
-
-    // Prevent clicks inside from closing
-    popover.addEventListener('click', (e) => e.stopPropagation());
-
-    // Close on outside click or Escape
-    document.addEventListener('click', () => closePopover(popover));
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closePopover(popover);
-    });
+    bindPopover(btn, popover);
 }
 
 function buildPopoverContent(popover) {
@@ -171,15 +154,4 @@ function divider() {
     const hr = document.createElement('div');
     hr.className = 'settings-divider';
     return hr;
-}
-
-function openPopover(btn, popover) {
-    const rect = btn.getBoundingClientRect();
-    popover.style.top   = `${rect.bottom + 6}px`;
-    popover.style.right = `${window.innerWidth - rect.right}px`;
-    popover.classList.remove('hidden');
-}
-
-function closePopover(popover) {
-    popover.classList.add('hidden');
 }
