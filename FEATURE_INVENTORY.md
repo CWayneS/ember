@@ -150,7 +150,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 75. Settings popover (⚙ button in notes panel header): opens a positioned popover using the shared `.help-popover` component — notes-settings.js
 76. Font size control: A− and A+ buttons adjust note text size in 1px steps, min 12px, max 28px — notes-settings.js
 77. A− and A+ disable at their respective limits — notes-settings.js
-78. Font size affects `.note-body` and `.note-block-body` (editable text) only via `--notes-font-size` CSS variable scoped to `#notes-panel`; fully independent from scripture font size — notes-settings.js, style.css
+78. Font size affects `.note-block-body` (editable text) only via `--notes-font-size` CSS variable scoped to `#notes-panel`; fully independent from scripture font size — notes-settings.js, style.css
 79. Reset button returns font size to 18px default — notes-settings.js
 80. Font size persists across reloads via `app_state` key `notes_font_size` — notes-settings.js
 

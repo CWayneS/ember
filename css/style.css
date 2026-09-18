@@ -435,22 +435,6 @@ body.theme-dark #theme-icon-moon { display: none;  }
     min-width: 80px;
 }
 
-#study-name-btn {
-    font-size: var(--size-small);
-    font-weight: 600;
-    color: var(--text-primary);
-    padding: 4px 8px;
-    border-radius: 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 180px;
-}
-
-#study-name-btn:hover {
-    background: var(--bg-hover);
-}
-
 #notes-active-view,
 #notes-all-studies-view {
     flex: 1;
@@ -802,18 +786,6 @@ body.theme-dark #theme-icon-moon { display: none;  }
 
 #reader-split-handle:hover {
     background: var(--accent);
-}
-
-/* ============================================================
-   Chapter Heading
-   ============================================================ */
-.chapter-heading {
-    font-family: var(--font-display);
-    font-size: var(--size-large);
-    font-weight: 700;
-    color: var(--text-secondary);
-    margin-bottom: 20px;
-    letter-spacing: 0.5px;
 }
 
 /* ============================================================
@@ -1456,100 +1428,8 @@ body.markup-mode-on .verse.markup-circle {
 }
 
 /* ============================================================
-   Notes List
+   Tag chips — shared by note blocks, tag view, Info tab, search
    ============================================================ */
-.notes-header {
-    font-family: var(--font-display);
-    font-size: var(--size-small);
-    font-weight: 700;
-    color: var(--text-secondary);
-    margin-bottom: 12px;
-}
-
-.note-card {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-light);
-    border-radius: 6px;
-    padding: 12px;
-    margin-bottom: 10px;
-}
-
-.note-body {
-    font-family: var(--font-reading);
-    font-size: var(--notes-font-size);
-    line-height: 1.5;
-    margin-bottom: 8px;
-    white-space: pre-wrap;
-}
-
-.note-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-    font-size: var(--size-xs);
-    color: var(--text-muted);
-}
-
-.note-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-}
-
-.note-actions button {
-    font-size: var(--size-xs);
-    color: var(--text-secondary);
-    padding: 2px 6px;
-    border-radius: 3px;
-}
-
-.note-actions button:hover {
-    background: var(--bg-hover);
-}
-
-.delete-note:hover {
-    color: var(--danger) !important;
-}
-
-/* ============================================================
-   Note Editor
-   ============================================================ */
-#note-editor {
-    border-top: 1px solid var(--border-light);
-    padding-top: 12px;
-    margin-top: 12px;
-}
-
-.editor-anchor {
-    font-family: var(--font-display);
-    font-size: var(--size-xs);
-    font-weight: 700;
-    color: var(--accent);
-    margin-bottom: 8px;
-}
-
-#note-body {
-    width: 100%;
-    min-height: 80px;
-}
-
-.editor-tags {
-    margin-top: 8px;
-    position: relative;
-}
-
-#tag-input {
-    width: 100%;
-}
-
-#tag-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 6px;
-}
-
 .tag-chip {
     font-family: var(--font-reading);
     font-size: var(--size-xs);
@@ -1595,61 +1475,6 @@ body.markup-mode-on .verse.markup-circle {
 .note-block-anchor-remove:hover {
     background: color-mix(in srgb, var(--danger) 12%, transparent);
     color: var(--danger);
-}
-
-#tag-suggestions {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-medium);
-    border-radius: 4px;
-    z-index: 50;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* alpha shadow — theme-neutral */
-}
-
-#tag-suggestions .suggestion {
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: 6px 10px;
-    font-size: var(--size-small);
-}
-
-#tag-suggestions .suggestion:hover {
-    background: var(--bg-hover);
-}
-
-.editor-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
-}
-
-.editor-actions button {
-    padding: 6px 16px;
-    border-radius: 4px;
-    font-size: var(--size-small);
-    font-weight: 600;
-}
-
-#save-note {
-    background: var(--accent);
-    color: white;
-}
-
-#save-note:hover {
-    background: var(--accent-hover);
-}
-
-.secondary {
-    background: var(--bg-hover);
-    color: var(--text-secondary);
-}
-
-.secondary:hover {
-    background: var(--border-light);
 }
 
 /* ============================================================
