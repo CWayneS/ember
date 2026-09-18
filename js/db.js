@@ -1371,6 +1371,14 @@ export function removeBookmark(bookmarkId) {
 
 // ============================================================
 
+// The translation files carry an FTS5 verses_fts table, but sql.js's WASM
+// build has no FTS5 module, so the MATCH query throws ("no such module:
+// fts5") and Scripture search falls back to LIKE. That is a property of the
+// runtime, not of the query, so the failure is remembered after the first
+// attempt: later searches go straight to LIKE instead of preparing a
+// doomed statement and logging an error on every keystroke.
+let _verseFtsUnavailable = false;
+
 export function search(query, translationId = 1) {
     const verseResults = [];
     const noteResults  = [];
@@ -1385,27 +1393,33 @@ export function search(query, translationId = 1) {
         book_name: getBook(row.book_id)?.name || `Book ${row.book_id}`
     });
     if (tdb) {
-        try {
-            const rows = queryAll(tdb,
-                `SELECT ${VERSE_COLUMNS}
-                 FROM verses
-                 WHERE rowid IN (SELECT rowid FROM verses_fts WHERE verses_fts MATCH ?)
-                 LIMIT 50`,
-                [query]
-            );
-            verseResults.push(...rows.map(toVerseResult));
-        } catch (e) {
-            console.error('FTS verse search failed, trying LIKE fallback:', e);
+        let rows = null;
+        if (!_verseFtsUnavailable) {
             try {
-                const rows = queryAll(tdb,
+                rows = queryAll(tdb,
+                    `SELECT ${VERSE_COLUMNS}
+                     FROM verses
+                     WHERE rowid IN (SELECT rowid FROM verses_fts WHERE verses_fts MATCH ?)
+                     LIMIT 50`,
+                    [query]
+                );
+            } catch (e) {
+                _verseFtsUnavailable = true;
+                console.warn('FTS verse search unavailable in this runtime; using LIKE for the rest of the session:', e.message);
+            }
+        }
+        if (rows === null) {
+            try {
+                rows = queryAll(tdb,
                     `SELECT ${VERSE_COLUMNS} FROM verses WHERE text LIKE ? LIMIT 50`,
                     [`%${query}%`]
                 );
-                verseResults.push(...rows.map(toVerseResult));
-            } catch (e2) {
-                console.error('LIKE verse search also failed:', e2);
+            } catch (e) {
+                console.error('LIKE verse search failed:', e);
+                rows = [];
             }
         }
+        verseResults.push(...rows.map(toVerseResult));
     }
 
     // Notes full-text search
