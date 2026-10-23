@@ -4,7 +4,7 @@
 
 **Prerequisite:** Build 6 shipped and stable (interlinear view, word detail view, `language.js`, `language.db`). This spec changes Build 6's word detail view; it does not touch the interlinear view's layout, grouping logic, or data model.
 
-**Status:** Reviewed and finalized. Ready to hand to Claude Code.
+**Status:** Implemented — shipped in commit 0471217 (2026-09-15), visual polish in 0c9172f (2026-09-17).
 
 ---
 
@@ -164,22 +164,22 @@ Hebrew words: no Lexicon link appears (matches Build 6's existing documented gap
 
 ## Definition of Done
 
-- [ ] Tapping a gloss row expands a word card **in place, directly below that row** — subsequent rows shift down; no tab/page swap; verse line and gloss list remain visible and unchanged
-- [ ] Fallback: if the tapped row is near the bottom of a short/collapsed panel, auto-scroll enough to bring the newly-opened card fully into view
-- [ ] Word card (tier 1) shows, per member word: original word, contextual gloss, Strong's number (small/secondary, own line), morphology code (own line) — nothing else
-- [ ] Each member word has its own **"Click for more"** trigger (not one shared link for the whole card); tapping it expands that member's tier 2 in place: lemma, transliteration, parsed morphology (with its own subheading, unfolded — no "What does this mean?" toggle), dictionary gloss
-- [ ] `decodeMorphCode()` is called for both languages on tier 2 expansion (no `isHebrew` gate); Hebrew rows show the raw morph code with no parsed lines beneath it, since `decodeMorphCode()` returns `[]` for Hebrew codes today — this is the existing documented TEHMC gap, not new behavior
-- [ ] Once expanded, that same trigger reads **"Click for less"** and collapses only that member's tier 2 block
-- [ ] A visual divider separates each member's tier 1 mini-row (and tier 2, if open) from the next member's, within a grouped card
-- [ ] "Lexicon" (Greek only, per member word) expands tier 3 in place: full TBESG entry via existing `sanitizeLexiconMeaning()` output
-- [ ] Grouped rows (e.g. "ἀπεκρίθησαν αὐτῷ ὅτι" or "ho logos") show **one card** with one stacked mini-row (tier 1) per member word, each independently expandable — a single tap on the gloss row opens all members' tier 1 together, but tier 2/3 expand per member, not per card
-- [ ] Tapping a different row collapses the current card and expands the newly-tapped row's card; only one card open at a time
-- [ ] Tapping the same row again, or clearing verse selection, collapses the card back to the plain interlinear view
-- [ ] When tier 2 is open, tier 1's contextual gloss is labeled **"This occurrence"** and tier 2's dictionary gloss is labeled **"General usage"** — the two must read as distinct, labeled fields
-- [ ] Hebrew words show tiers 1–2 only, no Lexicon link (unchanged documented gap)
-- [ ] All seven existing fields (Lemma, Transliteration, Strong's, Morphology, Contextual gloss, Dictionary gloss, Lexicon) remain reachable — none removed, only redistributed across tiers per the Field Mapping table above
-- [ ] No changes to interlinear view layout, grouping, or RTL/LTR handling
-- [ ] No changes to `language.db` schema or query functions
+- [x] Tapping a gloss row expands a word card **in place, directly below that row** — subsequent rows shift down; no tab/page swap; verse line and gloss list remain visible and unchanged
+- [x] Fallback: if the tapped row is near the bottom of a short/collapsed panel, auto-scroll enough to bring the newly-opened card fully into view
+- [x] Word card (tier 1) shows, per member word: original word, contextual gloss, Strong's number (small/secondary, own line), morphology code (own line) — nothing else
+- [x] Each member word has its own **"Click for more"** trigger (not one shared link for the whole card); tapping it expands that member's tier 2 in place: lemma, transliteration, parsed morphology (with its own subheading, unfolded — no "What does this mean?" toggle), dictionary gloss
+- [x] `decodeMorphCode()` is called for both languages on tier 2 expansion (no `isHebrew` gate); Hebrew rows show the raw morph code with no parsed lines beneath it, since `decodeMorphCode()` returns `[]` for Hebrew codes today — this is the existing documented TEHMC gap, not new behavior
+- [x] Once expanded, that same trigger reads **"Click for less"** and collapses only that member's tier 2 block
+- [x] A visual divider separates each member's tier 1 mini-row (and tier 2, if open) from the next member's, within a grouped card
+- [x] "Lexicon" (Greek only, per member word) expands tier 3 in place: full TBESG entry via existing `sanitizeLexiconMeaning()` output
+- [x] Grouped rows (e.g. "ἀπεκρίθησαν αὐτῷ ὅτι" or "ho logos") show **one card** with one stacked mini-row (tier 1) per member word, each independently expandable — a single tap on the gloss row opens all members' tier 1 together, but tier 2/3 expand per member, not per card
+- [x] Tapping a different row collapses the current card and expands the newly-tapped row's card; only one card open at a time
+- [x] Tapping the same row again, or clearing verse selection, collapses the card back to the plain interlinear view
+- [x] When tier 2 is open, tier 1's contextual gloss is labeled **"This occurrence"** and tier 2's dictionary gloss is labeled **"General usage"** — the two must read as distinct, labeled fields
+- [x] Hebrew words show tiers 1–2 only, no Lexicon link (unchanged documented gap)
+- [x] All seven existing fields (Lemma, Transliteration, Strong's, Morphology, Contextual gloss, Dictionary gloss, Lexicon) remain reachable — none removed, only redistributed across tiers per the Field Mapping table above
+- [x] No changes to interlinear view layout, grouping, or RTL/LTR handling
+- [x] No changes to `language.db` schema or query functions
 
 ---
 
