@@ -87,7 +87,7 @@ The exact plain-English phrasing per code (the editorial "translation layer" fro
 - [x] Plain-English mapping table is mood-aware for tense-like categories (does not assert a time reference for moods where the code doesn't carry one)
 - [x] TEGMC added to Ember's existing attribution list (Build 6, Item 5 location) — *covered by the STEPBible-Data entry in `js/global-settings.js`*
 - [x] `FEATURE_INVENTORY.md` updated
-- [ ] Verified live in browser (Playwright), zero console errors, consistent with prior build verification standard — *not recorded in commit 8169e14; unverified*
+- [x] Verified live in browser (Playwright), zero console errors, consistent with prior build verification standard — *verified 2026-10-23 against the current tier 2 UI: Greek (John 1:1, Matt 2:8 incl. compound `P-1NS + G2532=CONJ`), Hebrew (Gen 1:1), lexicon tier, zero console errors*
 
 ---
 
