@@ -194,17 +194,18 @@ The six bundled translations (KJV, ASV, WEB, YLT, Darby, BSB) and Nave's Topical
 | [STEPBible-Data](https://www.stepbible.org) | CC BY 4.0 | Language tab — original-language word data (Hebrew/Greek text, glosses, and lexicon entries), from Tyndale House, Cambridge |
 | [OpenBible.info](https://www.openbible.info) | CC BY 4.0 | Related tab — cross-reference data |
 
-STEPBible-Data's license permits inclusion in software without requesting permission; per their own stated interest, Ember will notify STEPBible once it's publicly available, rather than seeking permission upfront (see `Build_6_Spec.md`).
+STEPBible-Data's license permits inclusion in software without requesting permission; per their own stated interest, Ember will notify STEPBible once it's publicly available, rather than seeking permission upfront (see `docs/Build_6_Spec.md`).
 
 ## Documentation
 
 | Document | Description |
 |---|---|
-| `Technical_Spec_Build_1.md` | Build 1 technical specification — schema, module specs, code |
-| `Build_N_Spec.md` (per build, plus `Psalm_Title_Fix_Spec.md`) | Per-build specifications |
-| `BUILD_N_ACTUAL_STATE.md` (per build) | Ground-truth audit of each build's shipped code, derived from source, not planning docs. Latest: `BUILD_6.1_ACTUAL_STATE.md` (post-Build-6 Language tab rework + September 2026 architecture-review pass) |
 | `FEATURE_INVENTORY.md` | Full working-feature audit, traced to live code |
 | `USER_MANUAL.md` | End-user documentation |
+| `docs/Technical_Spec_Build_1.md` | Build 1 technical specification — schema, module specs, code |
+| `docs/Build_N_Spec.md` (per build) | Per-build specifications |
+| `docs/Psalm_Title_Fix_Spec.md`, `docs/Grammar_Decode_Spec_DRAFT.md`, `docs/Language_Panel_Word_Inspector_Spec.md` | Standalone feature specs between numbered builds |
+| `docs/BUILD_N_ACTUAL_STATE.md` (per build) | Ground-truth audit of each build's shipped code, derived from source, not planning docs. Latest: `docs/BUILD_6.1_ACTUAL_STATE.md` (post-Build-6 Language tab rework + September 2026 architecture-review pass) |
 | `docs/ANCHOR_QUERIES.md` | SQL query convention for range-aware verse-anchor lookups |
 
 ## License

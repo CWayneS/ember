@@ -2,7 +2,7 @@
 
 **Type:** Small, standalone data/schema patch. Not a numbered Build — narrower in scope, no reference panel or reader UI redesign involved. Should ship before or alongside Build 6, since Build 6's TAHOT integration surfaced this gap.
 
-**Status:** Scoped and decided, including the sourcing question (resolved: not pursued for now). Ready for implementation planning.
+**Status:** Implemented — shipped in commit d71cda4; the KJV/ASV/Darby title-text question was settled in Build 6 (see the last Definition of Done item).
 
 ---
 
