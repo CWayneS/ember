@@ -22,7 +22,7 @@ user rows, which differ between runs.
 
 Requires: python3, playwright (pip install playwright && playwright install chromium).
 """
-import json, os, subprocess, sys, time
+import json, os, sqlite3, subprocess, sys, time
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -237,6 +237,64 @@ def scenario_dbcompare(a, b):
     return FAILURES
 
 
+def check_grammar_decode(app):
+    """Greek decode across every code in language.db, a compound code in the
+    word card, and Hebrew's no-decode/no-lexicon gap. Leaves John 1:1 selected
+    with the Language tab open, as the smoke scenario had it."""
+    p = app.page
+    db = sqlite3.connect(f"file:{os.path.join(ROOT, 'data', 'language.db')}?mode=ro", uri=True)
+    codes = [r[0] for r in db.execute(
+        "SELECT DISTINCT morph_code FROM original_words WHERE language = 'greek' AND morph_code != ''")]
+    # A term with no authored phrase renders as the bare term (or bare
+    # category name, for an empty value) — see glossaryLine() in grammar-decode.js.
+    bare_terms = [r[0] for r in db.execute(
+        'SELECT raw_value FROM step_morphology_greek UNION SELECT category FROM step_morphology_greek')]
+    db.close()
+    res = p.evaluate("""async ([codes, bareTerms]) => {
+        const g = await import('./js/grammar-decode.js');
+        const bare = new Set([...bareTerms, '1st', '2nd', '3rd']);
+        const undecoded = [], unphrased = [];
+        for (const code of codes) {
+            const parts = await g.decodeMorphCode(code);
+            if (parts.length !== g.splitMorphCode(code).length) undecoded.push(code);
+            for (const part of parts) for (const line of part.lines)
+                if (line.split(' / ').some(term => bare.has(term))) unphrased.push(`${code}: ${line}`);
+        }
+        return { undecoded, unphrased };
+    }""", [codes, bare_terms])
+    check(not res['undecoded'], f"all {len(codes)} Greek morph codes decode every part {res['undecoded'][:5]}")
+    check(not res['unphrased'], f"every decoded term has authored wording {res['unphrased'][:5]}")
+
+    # compound code in the word card: Matthew 2:8 κἀγὼ = P-1NS + G2532=CONJ
+    app.navigate(40, 2)
+    app.select_verse(40002008)
+    p.click('#reference-tabs [data-tab="language"]')
+    p.wait_for_selector('.language-word-row', timeout=30_000)
+    p.locator('.language-word-row', has_text='κἀγὼ').click()
+    p.wait_for_selector('.language-word-card')
+    p.locator('.language-card-member', has_text='κἀγὼ').locator('.language-card-more-btn').click()
+    p.wait_for_selector('.language-card-tier2')
+    tier2 = p.locator('.language-card-member', has_text='κἀγὼ').locator('.language-card-tier2')
+    check(tier2.locator('.language-morph-decode-part-heading').count() == 2, 'compound code shows both parts')
+    check('G2532' in tier2.locator('.language-morph-decode-crossref').inner_text(), 'compound code shows cross-reference line')
+
+    # Hebrew: raw code only, no decode lines, no Lexicon link (TEHMC/TBESH gaps)
+    app.navigate(1, 1)
+    app.select_verse(1001001)
+    p.click('#reference-tabs [data-tab="language"]')
+    p.wait_for_selector('.language-word-row .language-hebrew', timeout=30_000)
+    p.locator('.language-word-row').first.click()
+    p.locator('.language-card-more-btn').first.click()
+    p.wait_for_selector('.language-card-tier2')
+    check(p.evaluate("document.querySelectorAll('.language-card-tier2 .language-morph-decode-line').length") == 0, 'Hebrew shows no decode lines')
+    check(p.evaluate("document.querySelectorAll('.language-card-lexicon-btn').length") == 0, 'Hebrew shows no Lexicon button')
+
+    app.navigate(43, 1)
+    app.select_verse(43001001)
+    p.click('#reference-tabs [data-tab="language"]')
+    p.wait_for_selector('.language-word-row .language-greek', timeout=30_000)
+
+
 # ---------------------------------------------------------------- smoke
 def scenario_smoke(app):
     p = app.page
@@ -286,6 +344,7 @@ def scenario_smoke(app):
     if lex_btn:
         lex_btn.click(); p.wait_for_selector('.language-card-lexicon')
         check(True, 'lexicon tier renders')
+    check_grammar_decode(app)
     # tag view
     p.click('#notes-active-view .tag-chip')
     p.wait_for_timeout(300)
