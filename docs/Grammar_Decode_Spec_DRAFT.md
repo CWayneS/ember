@@ -4,7 +4,7 @@
 
 **Prerequisite:** Build 6 complete and shipped. This spec covers Greek only; Hebrew (TEHMC) is a distinct follow-up, since Hebrew's morphology-code structure (prefix-carry compounds) differs meaningfully from Greek's.
 
-**Status:** Data verified via Claude Code investigation, 2026-09-01 (see Findings below). Ready for schema/implementation planning.
+**Status:** Implemented (Greek) — shipped in commit 8169e14 (2026-09-13). The accordion UI was later replaced by the Word Inspector's tier 2 block (0471217, 2026-09-15). Hebrew (TEHMC) remains deferred.
 
 ---
 
@@ -78,16 +78,16 @@ The exact plain-English phrasing per code (the editorial "translation layer" fro
 
 ## Definition of Done
 
-- [ ] TEGMC downloaded and verified against current `language.db` Greek `morph_code` coverage (100% confirmed; parser must handle the known malformed `V-PMO-1S`/`V-PMO-3P` record pair without crashing, even though neither appears in current data)
-- [ ] New lookup table populated from TEGMC, accommodating the full 15-key category domain
-- [ ] Source text normalized during ingestion (`‚` → `,`, stray literal quotes stripped) before any TEGMC text is reader-facing
-- [ ] Decode step implemented: single codes resolve to a plain-English breakdown; compound codes (`" + "`-joined, N-way) resolve all parts independently, with `G\d+=` Strong's-number prefixes stripped before lookup and retained separately as a cross-reference
-- [ ] Accordion UI added to Greek word detail view, collapsed by default, expand-in-place (no overlay, no text obscured)
-- [ ] Compound-code rows display all decoded parts, clearly distinguished
-- [ ] Plain-English mapping table is mood-aware for tense-like categories (does not assert a time reference for moods where the code doesn't carry one)
-- [ ] TEGMC added to Ember's existing attribution list (Build 6, Item 5 location)
-- [ ] `FEATURE_INVENTORY.md` updated
-- [ ] Verified live in browser (Playwright), zero console errors, consistent with prior build verification standard
+- [x] TEGMC downloaded and verified against current `language.db` Greek `morph_code` coverage (100% confirmed; parser must handle the known malformed `V-PMO-1S`/`V-PMO-3P` record pair without crashing, even though neither appears in current data)
+- [x] New lookup table populated from TEGMC, accommodating the full 15-key category domain
+- [x] Source text normalized during ingestion (`‚` → `,`, stray literal quotes stripped) before any TEGMC text is reader-facing
+- [x] Decode step implemented: single codes resolve to a plain-English breakdown; compound codes (`" + "`-joined, N-way) resolve all parts independently, with `G\d+=` Strong's-number prefixes stripped before lookup and retained separately as a cross-reference
+- [x] Accordion UI added to Greek word detail view, collapsed by default, expand-in-place (no overlay, no text obscured) — *superseded 2026-09-15: the accordion was replaced by the unfolded tier 2 block per `Language_Panel_Word_Inspector_Spec.md`*
+- [x] Compound-code rows display all decoded parts, clearly distinguished
+- [x] Plain-English mapping table is mood-aware for tense-like categories (does not assert a time reference for moods where the code doesn't carry one)
+- [x] TEGMC added to Ember's existing attribution list (Build 6, Item 5 location) — *covered by the STEPBible-Data entry in `js/global-settings.js`*
+- [x] `FEATURE_INVENTORY.md` updated
+- [ ] Verified live in browser (Playwright), zero console errors, consistent with prior build verification standard — *not recorded in commit 8169e14; unverified*
 
 ---
 
