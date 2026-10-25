@@ -101,7 +101,7 @@ Of 119 upstream commits, only TAHOT Job–Song changed (+21/−25 lines). In **P
 
 1. **Rebuild `language.db` from STEPBible-Data master**, recording the commit (`ed476a8` or later, re-verified at build time). Handle the new `V` text type.
 2. **Fix the `gloss_dictionary` bug** (7,752 rows, 69 Strong's numbers).
-3. **New table `original_word_pieces`**: per-piece Hebrew, Strong's number, morph code, and gloss for every Hebrew word.
+3. **Two small new tables for the anatomy view, storing only what isn't already stored**: `original_word_pieces` (per-piece Strong's numbers for multi-piece words) and `hebrew_affixes` (the fixed set of prefix/suffix glosses). Each piece's Hebrew, morph code, and contextual gloss are split at display time from the `/`-separated columns `original_words` already has.
 4. **New table `original_word_variants`**: text type and raw variant columns, with the Ketiv parsed out, for every Hebrew row that isn't plain `L` or has a variant.
 5. **New TEHMC parser + `step_morphology_hebrew` table.**
 6. **Hebrew decode path** in `grammar-decode.js`.
@@ -109,6 +109,7 @@ Of 119 upstream commits, only TAHOT Job–Song changed (+21/−25 lines). In **P
 8. **Tier 2 anatomy view** for Hebrew; **Aramaic label** in tier 1; **Ketiv line** in tier 2.
 9. **Attribution:** add TEHMC to the existing credits list.
 10. **Verification:** a new `hebrew` scenario in `tests/verify.py`; `FEATURE_INVENTORY.md` updated.
+11. **Size limit:** `language.db` may grow by no more than about 10% (see Item 10).
 
 ### Out of Scope (Explicit)
 
@@ -129,6 +130,7 @@ Of 119 upstream commits, only TAHOT Job–Song changed (+21/−25 lines). In **P
 - **`V` text type:** import like `L` (main text). Store the type in `original_word_variants` (Item 4) so it stays visible in the data.
 - **Expected counts** (re-verify against the actual run; don't hardcode): Hebrew rows = 305,638 − 4 = 305,634, before any change to ghost-row handling; Greek rows 142,096, unchanged.
 - **Dev-workflow note:** an existing dev install has the old `language.db` seeded in OPFS. Clear that OPFS entry and re-seed after the rebuild, per `OPFS_Reseed_Gap.md`. This is the expected dev step, not a product gap.
+- **Git history:** `language.db` is committed directly, not through Git LFS. That was decided when Build 6 shipped, on the basis that the file would be rebuilt only rarely. Each rebuild adds another full copy to repository history, so **every data change in this spec lands in this one rebuild.** Don't split it into several commits of `language.db`.
 
 ---
 
@@ -142,33 +144,47 @@ Of 119 upstream commits, only TAHOT Job–Song changed (+21/−25 lines). In **P
 
 ---
 
-## Item 3: `original_word_pieces`
+## Item 3: Piece Data — Store Only What's Missing
 
-A new table in `language.db`. It's wholly new, so `original_words` keeps its columns and meaning. This follows Ember's "new rows, not schema changes" principle.
+**Principle: don't store anything twice.** Each piece's Hebrew, morph code, and contextual gloss are already in `original_words`, separated by `/` in `surface_text`, `morph_code`, and `gloss_contextual`. The app splits them when it renders. Only two things are actually missing per piece: **its Strong's number** and **its dictionary gloss**. Prefixes and suffixes come from a small fixed set (H9001–H9049), so their glosses go in a lookup table instead of being repeated on every word.
+
+Both tables are new, so `original_words` keeps its columns and meaning, per Ember's "new rows, not schema changes" principle.
 
 ```sql
+-- One row per multi-piece Hebrew word only (~145,700 rows). One-piece words get no row.
 CREATE TABLE original_word_pieces (
-    word_id         INTEGER NOT NULL,   -- original_words.id
-    subword_index   INTEGER NOT NULL,   -- 0 normally; 0,1 when the row's morph_code contains '//' (two written words in one row)
-    piece_index     INTEGER NOT NULL,   -- order within the subword, 0-based, reading order
-    role            TEXT NOT NULL,      -- 'prefix' | 'root' | 'suffix'  (root = the {…} piece; before it = prefix; after = suffix)
-    surface_text    TEXT NOT NULL,      -- this piece's Hebrew, pointed, as printed
-    strongs_number  TEXT,               -- e.g. 'H9003', 'H7225G'
-    morph_code      TEXT NOT NULL,      -- with the language letter carried forward: 'HR', 'HNcfsa', 'HSp3ms'
-    gloss_contextual TEXT,              -- this piece's share of TAHOT col 4 (split on '/'), trimmed
-    gloss_dictionary TEXT,              -- from this piece's col-12 segment (same parse as Item 2)
-    PRIMARY KEY (word_id, subword_index, piece_index)
+    word_id        INTEGER PRIMARY KEY,  -- original_words.id (rowid alias: no separate index)
+    piece_strongs  TEXT NOT NULL,        -- per-piece Strong's in reading order, same '//' and '/' structure as the
+                                         --   split columns, punctuation stripped, braces dropped:
+                                         --   'H9003/H7225G', 'H9001/H0559', 'H4399/H9023'
+    root_glosses   TEXT                  -- NULL except the 37 two-root rows: '/'-joined dictionary glosses of the
+                                         --   roots in order (the first root's gloss also stays in original_words)
+);
+
+-- The fixed set of prefix/suffix Strong's numbers (~49 rows).
+CREATE TABLE hebrew_affixes (
+    strongs_number  TEXT PRIMARY KEY,    -- 'H9001' … 'H9049'
+    form            TEXT,                -- column 12's middle segment as written ('ו', 'ב', 'Ps3m', …)
+    gloss           TEXT                 -- column 12's gloss as written ('&', 'in', 'his', …)
 );
 ```
 
-- **Hebrew only.** Greek words have no rows here.
-- **Write rows for multi-piece Hebrew words.** For one-piece words (159,954) the table would just repeat `original_words`; whether to write those rows too is the implementer's choice, as long as the UI behaves as in Item 7. Report the choice and the table's row count and file-size cost.
-- **Punctuation segments (`\…`)** are not pieces. Strip them from every column before splitting on `/`, so they never shift the alignment. They stay in `original_words.surface_text`, unchanged.
-- **The two paseq rows** (1Ch 27:12, Neh 2:13) must align once `\׀` is stripped. Verify them explicitly.
-- **`//` rows:** split on `//` first (subwords), then on `/` (pieces). Check that every column splits into the same number of subwords and pieces. Report any row where they don't, and **don't write pieces for that row** rather than mis-align them. The UI then falls back to the raw code for that word.
-- **Two-root rows (37):** the pieces table keeps both roots, so each gets `role = 'root'`. `original_words` keeps its current first-root behavior, unchanged.
-- **Prefix/suffix glosses come from TAHOT as written** (e.g. `&` for H9001). Display changes, if any, go in Item 6's authored tables, not in the stored data.
-- **Report the alignment result in full:** rows written, rows skipped and why, and a sample of 5 rows (Gen 1:1 #01, Gen 1:3 #01, Gen 2:2 #05, 2Ki 19:37's `//` row, 1Ch 27:12's paseq row) as raw TAHOT vs stored pieces.
+### Import rules
+
+- **Hebrew only.** Greek words have no rows in either table.
+- **The piece's role comes from the data.** The root is the `{…}` piece in column 6/dStrongs; pieces before it are prefixes, pieces after it are suffixes. The importer uses the braces to identify the root, then drops them from `piece_strongs`. At runtime the role is identified the same way: a piece whose Strong's number is in `hebrew_affixes` is a prefix or suffix, depending on its position relative to the root; anything else is a root.
+- **Affix glosses must be constant.** Before writing `hebrew_affixes`, check that every H90xx number has exactly one `(form, gloss)` pair across all its occurrences. **If any affix varies, stop and report** the variants with counts. Don't pick the most common one.
+- **Punctuation segments (`\…`) are not pieces.** Strip them from every column before splitting, so they never shift the alignment. They stay in `original_words.surface_text`, unchanged. The 71,165 punctuation tags (H9016 etc.) are not stored.
+- **Split order:** `//` first (two written words in one row), then `/` (pieces).
+- **Write a row only when every column agrees.** For each multi-piece word, `surface_text`, `morph_code`, `gloss_contextual`, dStrongs, and column 12 must split into the same number of subwords and pieces, after punctuation is stripped. If they don't, **write no row for that word** and list it in the report. The UI then falls back to the raw code. This check at import is what makes it safe to split the columns at display time.
+- **The two paseq rows** (1Ch 27:12, Neh 2:13) must pass once `\׀` is stripped. Verify them explicitly.
+- **Check `gloss_contextual` splits cleanly.** CC confirmed the slashes match across surface text, English, and morph code on 145,684 rows. Also confirm the English column contains no `/` that isn't a piece break, and check how `//` rows look in the English column. Report the results.
+- **Glosses are stored as TAHOT wrote them** (e.g. `&` for H9001). Display changes go in Item 6's authored tables, not in the data.
+- **Report:** rows written, rows skipped and why, the full `hebrew_affixes` table, and 5 samples (Gen 1:1 #01, Gen 1:3 #01, Gen 2:2 #05, 2Ki 19:37's `//` row, 1Ch 27:12's paseq row) showing raw TAHOT, the stored row, and what the runtime split produces.
+
+### Runtime split — one implementation
+
+A pure function in `grammar-decode.js`, e.g. `splitHebrewWord(word, pieceRow)` → `[{ subwordIndex, pieces: [{ surface, morphCode, glossContextual, strongsNumber, role }] }]`. It applies exactly the import's rules: strip `\` punctuation segments, split on `//` then `/`, carry the language letter forward on morph codes. **Both the anatomy view and the Hebrew decode path (Item 6) call this one function.** Don't write a second copy of the splitting rules. If the split counts don't match at runtime (they shouldn't, given the import check), return `null` so the caller shows the raw-code fallback.
 
 ---
 
@@ -230,11 +246,10 @@ Read by one new query in `db.js`, `getHebrewMorphCategories(code)`, the counterp
 
 For a Hebrew or Aramaic code (first letter `H` or `A`):
 
-1. Strip `\…` punctuation segments.
-2. Split on `//` into subwords; split each subword on `/` into pieces.
-3. **Carry the language letter:** the first piece of each subword starts with `H`/`A`; prefix it onto every later piece that doesn't (`HR/Ncfsa` → `HR`, `HNcfsa`). Check against the data whether a subword after `//` restates its own letter, and handle both cases.
-4. Look up each piece via `getHebrewMorphCategories()`. Return one entry per piece, in reading order (`strongsNumber: null`; the anatomy view gets Strong's numbers from `original_word_pieces`). Add `subwordIndex` to each entry; Greek entries simply don't have it.
-5. A piece that doesn't resolve returns `lines: []`, the existing behavior, so the UI shows its raw code.
+1. Split the code with the **same splitting rules as Item 3's `splitHebrewWord()`**: strip `\…` punctuation, split on `//` then `/`. Factor the morph-code part into a shared helper that both call, so the rules exist in one place.
+2. **Carry the language letter:** the first piece of each subword starts with `H`/`A`; prefix it onto every later piece that doesn't (`HR/Ncfsa` → `HR`, `HNcfsa`). Check against the data whether a subword after `//` restates its own letter, and handle both cases.
+3. Look up each piece via `getHebrewMorphCategories()`. Return one entry per piece, in reading order (`strongsNumber: null`; the anatomy view gets Strong's numbers from `original_word_pieces`). Add `subwordIndex` to each entry; Greek entries simply don't have it.
+4. A piece that doesn't resolve returns `lines: []`, the existing behavior, so the UI shows its raw code.
 
 `decodeMorphCode` is synchronous or async exactly as it is today; don't change its call pattern.
 
@@ -294,7 +309,9 @@ No Lexicon link for Hebrew (unchanged until the lexicon spec).
 
 ### Data access
 
-- New `db.js` query: `getPiecesForWords(wordIds)` → `Map<wordId, pieces[]>`, one query for all words in the rendered verse(s), batched like `getOriginalWordsForVerses`. No per-word query in the render loop.
+- New `db.js` query: `getPiecesForWords(wordIds)` → `Map<wordId, { pieceStrongs, rootGlosses }>`, one query for all words in the rendered verse(s), batched like `getOriginalWordsForVerses`. No per-word query in the render loop. A word with no entry is either a one-piece word or an alignment skip; both use the single-code display.
+- New `db.js` query: `getHebrewAffixes()` → `Map<strongsNumber, { form, gloss }>`. About 49 rows; load once and cache for the session, like `getBooks()`.
+- **Each piece's dictionary gloss** at display time: from `hebrew_affixes` for prefixes and suffixes; for the root, from `original_words.gloss_dictionary` (or from `root_glosses` on the 37 two-root rows). Each piece's Hebrew, morph code, and contextual gloss come from `splitHebrewWord()` (Item 3).
 - New `db.js` query: `getVariantsForWords(wordIds)` → `Map<wordId, variant>`, batched the same way.
 - `getOriginalWordsForVerses()` keeps its signature. Whether pieces and variants are fetched eagerly with the verse or lazily on tier 2 expansion is the implementer's choice. Lazy is fine as long as `renderGeneration` guards against stale results.
 
@@ -334,6 +351,17 @@ Plus, at the data level (the build script's own report, not the browser):
 
 ---
 
+## Item 10: Size Limit
+
+`language.db` should only grow when there's real value to add. Most of this spec adds features without adding data, so it should be cheap.
+
+- **Measure the current `language.db` first** and record the baseline in the rebuild report. Project records disagree (56.5 MB at Build 6 ship, 51.3 MB later), so measure rather than assume.
+- **Limit: no more than ~10% growth (≈5 MB) over the baseline.** The expected cost is small: `original_word_pieces` (~145,700 short rows on a rowid key), `original_word_variants` (a few thousand rows), `step_morphology_hebrew` (~7,000 rows, comparable to Greek's 9,214), and `hebrew_affixes` (~49 rows). Before the final commit, report the size after, plus each new table's size (e.g. via `dbstat` or by comparing builds with and without each table).
+- **If the limit is exceeded, stop and report before committing `language.db`**, with the per-table breakdown and which table is responsible. Don't trim data to fit, and don't commit an oversized file. That's a decision for Wayne.
+- Run `VACUUM` before measuring, so free pages from the build don't inflate the number.
+
+---
+
 ## What Does Not Change
 
 - Greek: TAGNT import, `step_lexicon_greek`, `step_morphology_greek`, `parse_tegmc_file`, the Greek decode path, Greek tier 1–3 display.
@@ -351,10 +379,14 @@ Plus, at the data level (the build script's own report, not the browser):
 - [ ] `language.db` rebuilt from STEPBible-Data master; commit and per-file sha256 recorded; `V` text type imported as main text
 - [ ] Hebrew row count matches the expected count (305,634 unless the rebuild report explains a difference); Greek rows 142,096
 - [ ] `gloss_dictionary` fix applied; before/after table for all 69 affected Strong's numbers reported; H0776G reads "land"; underscore handling checked and reported
-- [ ] `original_word_pieces` populated; alignment report (rows written, rows skipped with reasons, 5 samples); both paseq rows align; `//` rows split into subwords
+- [ ] `original_word_pieces` populated for multi-piece Hebrew words only, storing per-piece Strong's numbers (plus `root_glosses` on two-root rows) and nothing that's already in `original_words`; rows written only where every column splits identically; alignment report (rows written, rows skipped with reasons, 5 samples showing raw, stored, and runtime split); both paseq rows pass; `//` rows split into subwords
+- [ ] `hebrew_affixes` populated; every affix confirmed to have one constant `(form, gloss)`, or the build stopped and reported the variants
+- [ ] `splitHebrewWord()` is the single implementation of the splitting rules, shared with the Hebrew decode path
 - [ ] `original_word_variants` populated; all raw text types and columns 7/8 kept; `ketiv_hebrew` parsed for Q(K)/Q(k) with a count reported (target 1,323); unparsed rows left NULL and listed
 - [ ] `parse_tehmc_file` written; `parse_tegmc_file` unchanged; 921 codes in `step_morphology_hebrew`, including `Hc`; `(hence …)` groups unwrapped as `derived` rows; `Definite article (Aramaic)` kept whole; `jussive` normalized
-- [ ] `getHebrewMorphCategories()`, `getPiecesForWords()`, `getVariantsForWords()` added to `db.js`; batched, no per-word queries in the render loop
+- [ ] `getHebrewMorphCategories()`, `getPiecesForWords()`, `getVariantsForWords()`, `getHebrewAffixes()` (cached) added to `db.js`; batched, no per-word queries in the render loop
+- [ ] Size limit met: baseline and final `language.db` sizes (after `VACUUM`) reported with a per-table breakdown; growth ≤ ~10%, or the build stopped and reported before committing
+- [ ] All data changes landed in one `language.db` commit
 - [ ] `decodeMorphCode()` Hebrew path: punctuation stripped, `//` and `/` split, language letter carried, one entry per piece; Greek output unchanged
 - [ ] Wording tables cover every used `(category, value)` pair, or fall back to TEHMC's text, with a list of the fallbacks; stem wording hedged; conjugation wording makes no certain time claims
 - [ ] Tier 1: Aramaic label on `A`-coded words only
@@ -377,7 +409,7 @@ Plus, at the data level (the build script's own report, not the browser):
 
 ## Deferred to Follow-Up Specs
 
-- **Hebrew lexicon (tier 3)** — candidate source: openscriptures/HebrewLexicon (`21c9add`, CC BY 4.0 per its readme; BDB and Strong's text public domain; about 3 MB for BDB + Strong's). Verified 2026-10-24: 93.0% of word occurrences reach a BDB entry with a `<def>`, but definitions are short (median 48 characters). STEP's sense letters and OSHB's are **different schemes**: 38 coinciding letters point to different senses, and 254 STEP codes don't map. The safe approach is to match on the **base Strong's number only** and show the complete Strong's Hebrew entry plus every BDB definition under that number, never guessing a sense letter. Decision pending: read a sample of real entries to judge whether the depth is worth it, the same approach as TFLSJ.
+- **Hebrew lexicon (tier 3)** — candidate source: openscriptures/HebrewLexicon (`21c9add`, CC BY 4.0 per its readme; BDB and Strong's text public domain; about 3 MB for BDB + Strong's). Verified 2026-10-24: 93.0% of word occurrences reach a BDB entry with a `<def>`, but definitions are short (median 48 characters). STEP's sense letters and OSHB's are **different schemes**: 38 coinciding letters point to different senses, and 254 STEP codes don't map. The safe approach is to match on the **base Strong's number only** and show the complete Strong's Hebrew entry plus every BDB definition under that number, never guessing a sense letter. Decision pending: read a sample of real entries to judge whether the depth is worth it, the same approach as TFLSJ. **If it goes ahead, consider a separate file** (e.g. `data/lexicon-hebrew.db`, loaded lazily like `language.db`) rather than adding to `language.db`. That keeps an optional lexicon from forcing another full `language.db` copy into git history, and would serve TFLSJ equally well if that ever goes ahead.
 - **Root families** — after the lexicon.
 - **Displaying non-Ketiv variants** (Aleppo, BHS, LXX) — data already captured in `original_word_variants`.
 - **Ghost rows** (14 Ketiv-only words) — need their own display design.
