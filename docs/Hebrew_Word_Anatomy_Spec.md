@@ -30,12 +30,19 @@ The word card's three tiers stay as they are (`Language_Panel_Word_Inspector_Spe
 
 ## Findings (Verified 2026-10-24)
 
-All findings come from real files: STEPBible-Data master `ed476a8` (2026-10-17), Ember's current build commit `faf6a35` (2026-03-27), and the shipped `data/language.db`. The shipped Hebrew rows match TAHOT at `faf6a35` exactly (305,638 rows, zero mismatches).
+All findings come from real files: STEPBible-Data master `ed476a8` (2026-10-17), the STEPBible-Data commit Ember's current `language.db` was built from (`faf6a35`, 2026-03-27), and the shipped `data/language.db`. The shipped Hebrew rows match TAHOT at `faf6a35` exactly (305,638 rows, zero mismatches).
+
+> **Which repository each commit hash belongs to:**
+> - `faf6a35`, `ed476a8` — **STEPBible-Data** (the upstream data repo), not Ember's.
+> - `21c9add` — **openscriptures/HebrewLexicon** (Deferred section only).
+> - `94ca0fa` — **Ember**, cited from `BUILD_6.1_ACTUAL_STATE.md` for the service-worker rule.
+>
+> No Ember commit is pinned as this spec's starting point; the code baseline is `BUILD_6.1_ACTUAL_STATE.md`.
 
 ### TEHMC
 
 - **Path (master):** `Morphology codes/TEHMC - Translators Expansion of Hebrew Morphology Codes - STEPBible.org CC BY.txt`. Unlike TEGMC, the filename spells "Morphology" correctly, but the file's own title line still says "Morphhology". If the path is ever hardcoded, an upstream rename would break it.
-- **Last commit** `faf6a35`, unchanged to master. **sha256** `78779bea824b31d4467dec0161d547481c86f266bc39def12cd11dc7dcbe6da7`. UTF-8 with BOM, LF line endings, 4,780 lines, 394,580 bytes.
+- **Last changed in STEPBible-Data commit** `faf6a35`, unchanged to master. **sha256** `78779bea824b31d4467dec0161d547481c86f266bc39def12cd11dc7dcbe6da7`. UTF-8 with BOM, LF line endings, 4,780 lines, 394,580 bytes.
 - **Format:** the same 4-line, `$`-delimited record as TEGMC, under a `FULL MORPHOLOGY CODES:` section that comes after a `BRIEF LEXICAL MORPHOLOGY CODES` section. 921 records, every record exactly 4 lines. The final record (`HVvw3ms`) has no closing `$`, like TEGMC's. There is no garbled block like TEGMC's `V-PMO-3P`.
 - **921 codes:** 617 Hebrew (`H…`) and 304 Aramaic (`A…`). 179 are never used in the data, mostly Aramaic.
 - **Category keys:** main keys `Function`, `Form`, `Gender`, `Number`, `Stem`, `Person`, `State`. Derived keys `Action`, `Voice`, `Tense`, `Mood` appear nested inside the main values in `(hence …)` groups, e.g.:
@@ -89,9 +96,9 @@ For some entries, column 12's gloss slot holds the sub-meaning (it begins with `
 - **Lost at import:** the text type on every row; all of columns 7 and 8 (1,035 Meaning-variant rows, 1,592 Spelling-variant rows), so every Ketiv form (1,323) and every Aleppo/BHS/LXX variant.
 - **14 "ghost" rows** (Q(K), empty Hebrew column, English `[ ]`) are skipped at import. Their only content is an `L=` form in column 8 (e.g. Rut 3:12 `L= אם`).
 
-### Upstream drift since `faf6a35`
+### Upstream drift since STEPBible-Data `faf6a35`
 
-Of 119 upstream commits, only TAHOT Job–Song changed (+21/−25 lines). In **Psa 44:14, 57:9, 108:3, 149:7**, the two `L` rows `בַּל\־ אֻמִּֽים` were replaced by one row with a **new text type `V`**: `בָּ/לְאֻמִּים\׃`, strongs `H3816`, morph `HRd/Ncfpa`. A rebuild from master removes 4 Hebrew rows net and shifts word positions in those four verses. Nothing in Ember depends on word positions today (`note_anchors.word_position` is schema-only, no runtime code; see `BUILD_6.1_ACTUAL_STATE.md` §7). TAGNT is unchanged.
+Of 119 STEPBible-Data commits between `faf6a35` and `ed476a8`, only TAHOT Job–Song changed (+21/−25 lines). In **Psa 44:14, 57:9, 108:3, 149:7**, the two `L` rows `בַּל\־ אֻמִּֽים` were replaced by one row with a **new text type `V`**: `בָּ/לְאֻמִּים\׃`, strongs `H3816`, morph `HRd/Ncfpa`. A rebuild from master removes 4 Hebrew rows net and shifts word positions in those four verses. Nothing in Ember depends on word positions today (`note_anchors.word_position` is schema-only, no runtime code; see `BUILD_6.1_ACTUAL_STATE.md` §7). TAGNT is unchanged.
 
 ---
 
@@ -99,7 +106,7 @@ Of 119 upstream commits, only TAHOT Job–Song changed (+21/−25 lines). In **P
 
 ### In Scope
 
-1. **Rebuild `language.db` from STEPBible-Data master**, recording the commit (`ed476a8` or later, re-verified at build time). Handle the new `V` text type.
+1. **Rebuild `language.db` from STEPBible-Data master**, recording the STEPBible-Data commit (`ed476a8` or later, re-verified at build time). Handle the new `V` text type.
 2. **Fix the `gloss_dictionary` bug** (7,752 rows, 69 Strong's numbers).
 3. **Two small new tables for the anatomy view, storing only what isn't already stored**: `original_word_pieces` (per-piece Strong's numbers for multi-piece words) and `hebrew_affixes` (the fixed set of prefix/suffix glosses). Each piece's Hebrew, morph code, and contextual gloss are split at display time from the `/`-separated columns `original_words` already has.
 4. **New table `original_word_variants`**: text type and raw variant columns, with the Ketiv parsed out, for every Hebrew row that isn't plain `L` or has a variant.
@@ -126,7 +133,8 @@ Of 119 upstream commits, only TAHOT Job–Song changed (+21/−25 lines). In **P
 
 ## Item 1: Rebuild from Master
 
-- Download TAHOT (4 files), TAGNT (2), TBESG, TEGMC, and TEHMC from the recorded master commit. Record the commit and per-file sha256 values in `build_language.py`'s header comment or output log, as was done for `faf6a35`.
+- Download TAHOT (4 files), TAGNT (2), TBESG, TEGMC, and TEHMC from the recorded STEPBible-Data master commit. Record that commit and per-file sha256 values in `build_language.py`'s header comment or output log, as was done for STEPBible-Data `faf6a35`.
+- **If STEPBible-Data master has moved past `ed476a8`** by build time, diff the source files between the two commits and report any changes before rebuilding. The counts in this spec are verified only against `ed476a8`.
 - **`V` text type:** import like `L` (main text). Store the type in `original_word_variants` (Item 4) so it stays visible in the data.
 - **Expected counts** (re-verify against the actual run; don't hardcode): Hebrew rows = 305,638 − 4 = 305,634, before any change to ghost-row handling; Greek rows 142,096, unchanged.
 - **Dev-workflow note:** an existing dev install has the old `language.db` seeded in OPFS. Clear that OPFS entry and re-seed after the rebuild, per `OPFS_Reseed_Gap.md`. This is the expected dev step, not a product gap.
@@ -376,7 +384,7 @@ Plus, at the data level (the build script's own report, not the browser):
 
 ## Definition of Done
 
-- [ ] `language.db` rebuilt from STEPBible-Data master; commit and per-file sha256 recorded; `V` text type imported as main text
+- [ ] `language.db` rebuilt from STEPBible-Data master; STEPBible-Data commit and per-file sha256 recorded (any changes since `ed476a8` diffed and reported); `V` text type imported as main text
 - [ ] Hebrew row count matches the expected count (305,634 unless the rebuild report explains a difference); Greek rows 142,096
 - [ ] `gloss_dictionary` fix applied; before/after table for all 69 affected Strong's numbers reported; H0776G reads "land"; underscore handling checked and reported
 - [ ] `original_word_pieces` populated for multi-piece Hebrew words only, storing per-piece Strong's numbers (plus `root_glosses` on two-root rows) and nothing that's already in `original_words`; rows written only where every column splits identically; alignment report (rows written, rows skipped with reasons, 5 samples showing raw, stored, and runtime split); both paseq rows pass; `//` rows split into subwords
