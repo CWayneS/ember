@@ -1,11 +1,15 @@
-// grammar-decode.js — Greek morphology-code decode (Grammar Decode spec)
+// grammar-decode.js — Morphology-code decode (Grammar Decode spec) and Hebrew
+// word splitting (Hebrew Word Anatomy spec)
 //
-// Pure functions, no DOM. Turns a raw original_words.morph_code value (e.g.
-// "V-PAP-NSM", or a compound like "CONJ + G5104=PRT + G1065=PRT") into a
-// plain-English grammatical breakdown, sourced from the TEGMC-derived
-// step_morphology_greek table (see scripts/build_language.py).
+// Pure functions, no DOM. Turns a raw original_words.morph_code value into a
+// plain-English grammatical breakdown: Greek ("V-PAP-NSM", or a compound like
+// "CONJ + G5104=PRT + G1065=PRT") from the TEGMC-derived step_morphology_greek
+// table; Hebrew/Aramaic ("HR/Ncfsa", "Hc/Vqw3ms") from the TEHMC-derived
+// step_morphology_hebrew table, one entry per piece of the word. Also splits a
+// Hebrew word into its pieces (splitHebrewWord) for the Language tab's anatomy
+// view. See scripts/build_language.py and docs/HEBREW_ANATOMY_DATA_REPORT.md.
 
-import { getGreekMorphCategories } from './db.js';
+import { getGreekMorphCategories, getHebrewMorphCategories } from './db.js';
 
 // Matches a compound piece shaped like "G2532=CONJ" — a Strong's number
 // fused onto the code via "=". Verified directly against language.db: this
@@ -38,9 +42,13 @@ const CATEGORY_DISPLAY_ORDER = [
     'Original language', 'Name in Original language', 'Extra',
 ];
 
-// Returns [] if nothing decodable at all — callers must not render an
+// Greek: returns [] if nothing decodable at all — callers must not render an
 // accordion in that case (e.g. a code TEGMC has no entry for).
+// Hebrew/Aramaic (first letter H or A): one entry per piece in reading order,
+// each with subwordIndex; a piece TEHMC doesn't resolve keeps its entry with
+// lines: [], so entries stay aligned with splitHebrewWord's pieces.
 export async function decodeMorphCode(morphCode) {
+    if (isHebrewMorphCode(morphCode)) return decodeHebrewMorphCode(morphCode);
     const pieces = splitMorphCode(morphCode);
     const parts = [];
     for (const piece of pieces) {
@@ -82,6 +90,210 @@ export async function decodeMorphCode(morphCode) {
     }
     return parts;
 }
+
+// ---- Hebrew ---------------------------------------------------------------
+
+// Hebrew and Aramaic codes begin with their language letter (H/A) and contain
+// a lowercase letter or a "/", or are two capitals ("HR", "AC"). No Greek code
+// has a lowercase letter or "/", and the only Greek codes starting A/H without
+// a hyphen are "ADV" and "ARAM". Checked against every distinct morph_code in
+// language.db by scripts/analysis/hebrew_anatomy/split_parity.mjs.
+export function isHebrewMorphCode(morphCode) {
+    return /^[HA]/.test(morphCode || '') && (/[a-z/]/.test(morphCode) || morphCode.length === 2);
+}
+
+async function decodeHebrewMorphCode(morphCode) {
+    const parts = [];
+    const subwords = splitHebrewMorphCode(morphCode);
+    for (let subwordIndex = 0; subwordIndex < subwords.length; subwordIndex++) {
+        for (const code of subwords[subwordIndex]) {
+            let rows = [];
+            try {
+                rows = await getHebrewMorphCategories(code);
+            } catch (e) {
+                console.error('decodeMorphCode: Hebrew category lookup failed:', e);
+            }
+            parts.push({ code, strongsNumber: null, subwordIndex, lines: hebrewMorphLines(rows) });
+        }
+    }
+    return parts;
+}
+
+// TEHMC rows (category, value, derived, position) for one piece -> glossary
+// lines in reading order: Function, Stem, Form, Mood, Person, Gender, Number,
+// State — TEHMC's own order. What is folded or left out, and why:
+//   - Derived Action/Voice (implied by the Stem) and Tense (implied by the
+//     Form) are never lines of their own: the Stem and Form wording is written
+//     from them (see HEBREW_STEM_PHRASES / HEBREW_VERB_FORM_PHRASES). TEHMC
+//     itself calls them likely, not definite.
+//   - Mood gets a line only when it says something the Form doesn't: never for
+//     plain "Indicative", nor "Imperative" (the Form already is "Imperative").
+//   - Form "Common" (an ordinary noun or adjective, not a name or number) is
+//     the default and is left out, as the spec's own example shows.
+//   - A Particle or Pronoun shows its Form ("Object indicator", "Personal")
+//     instead of a bare "Particle"/"Pronoun" line. A Suffix is one line: a
+//     pronoun suffix's person/gender/number combined ("third person masculine
+//     singular"), any other suffix its Form ("Directional").
+//   - A proper name's Gender says whose name it is ("Masculine - A man's name").
+// A value with no authored wording renders as TEHMC's own text alone.
+export function hebrewMorphLines(rows) {
+    const main = new Map();
+    for (const row of rows) {
+        if (!row.derived) main.set(row.category, row.value);
+        else if (row.category === 'Mood') main.set('Mood', row.value);
+    }
+    const fn = main.get('Function');
+    const form = main.get('Form');
+    const lines = [];
+
+    if (fn === 'Suffix') {
+        if (form === 'Personal') {
+            const parts = [`${(main.get('Person') || '').toLowerCase()} person`];
+            if (main.get('Gender') && main.get('Gender') !== 'Either gender') parts.push(main.get('Gender').toLowerCase());
+            if (main.get('Number')) parts.push(main.get('Number').toLowerCase());
+            return [glossaryLine('Suffix', `A pronoun ending: ${parts.join(' ')}`)];
+        }
+        return [glossaryLine(form || 'Suffix', HEBREW_FORM_PHRASES[form] || HEBREW_FUNCTION_PHRASES.Suffix)];
+    }
+
+    if (fn && !((fn === 'Particle' || fn === 'Pronoun') && form)) {
+        lines.push(glossaryLine(fn, HEBREW_FUNCTION_PHRASES[fn]));
+    }
+    if (main.has('Stem')) {
+        lines.push(glossaryLine(main.get('Stem'), HEBREW_STEM_PHRASES[main.get('Stem')]));
+    }
+    if (form && form !== 'Common') {
+        const phrase = fn === 'Verb' ? HEBREW_VERB_FORM_PHRASES[form] : HEBREW_FORM_PHRASES[form];
+        lines.push(glossaryLine(form, phrase));
+    }
+    const mood = main.get('Mood');
+    if (mood && mood !== 'Indicative' && mood !== form) {
+        lines.push(glossaryLine(mood, HEBREW_MOOD_PHRASES[mood]));
+    }
+    for (const category of ['Person', 'Gender', 'Number', 'State']) {
+        if (!main.has(category)) continue;
+        const value = main.get(category);
+        const phrase = category === 'Gender' && form === 'Proper'
+            ? HEBREW_PROPER_GENDER_PHRASES[value]
+            : HEBREW_VALUE_PHRASES[`${category}=${value}`];
+        lines.push(glossaryLine(value, phrase));
+    }
+    return lines;
+}
+
+// The splitting rules for a Hebrew word — the runtime twin of
+// scripts/build_language.py's strip_punctuation_segments / split_tahot_column /
+// split_hebrew_morph_code, which the import used to verify, row by row, that
+// every column of a stored word splits alike. The two must give identical
+// results (scripts/analysis/hebrew_anatomy/split_parity.mjs checks every
+// stored word):
+//   1. Strip punctuation segments: "\\" up to the next "/" or "\\" (sof
+//      pasuq, maqqef, paseq: "\\׃", "\\׀", "\\ \\פ").
+//   2. Split on "/". A word-break segment starts a new subword (two written
+//      words in one row): "//" (empty), "/ /" (a space), or a maqqef written
+//      as its own segment — "־" in the Hebrew, "-" in the English.
+//   3. Morph codes write the break "//" and carry the language letter (H/A)
+//      only at the start: it is prefixed onto every later piece. An "A" after
+//      "/" is an Adjective, not Aramaic ("HR/Ncbsa//Aamsa").
+const PUNCTUATION_SEGMENT_RE = /\\[^/\\]*/g;
+const WORD_BREAK_SEGMENTS = {
+    surface: new Set(['', '־']),
+    english: new Set(['', '-']),
+};
+
+export function splitTahotColumn(text, column) {
+    const breaks = WORD_BREAK_SEGMENTS[column];
+    const subwords = [[]];
+    for (const segment of (text || '').replace(PUNCTUATION_SEGMENT_RE, '').split('/')) {
+        if (breaks.has(segment.trim())) {
+            subwords.push([]);
+        } else {
+            subwords[subwords.length - 1].push(segment);
+        }
+    }
+    return subwords;
+}
+
+export function splitHebrewMorphCode(morphCode) {
+    const language = morphCode.charAt(0);
+    return morphCode.split('//').map((subword, s) =>
+        subword.split('/').map((piece, p) => (s === 0 && p === 0 ? piece : language + piece)));
+}
+
+function sameShape(a, b) {
+    return a.length === b.length && a.every((pieces, i) => pieces.length === b[i].length);
+}
+
+// One Hebrew word -> its pieces, for the anatomy view and nothing else.
+//   word      an original_words row (surface_text, gloss_contextual,
+//             gloss_dictionary, morph_code)
+//   pieceRow  its getPiecesForWords() entry, { pieceStrongs, rootGlosses,
+//             affixForms }; absent for one-piece words (and for a word whose
+//             columns didn't split alike at import, of which there are none)
+//   affixes   getHebrewAffixes()
+// Returns [{ subwordIndex, surface, pieces: [{ surface, morphCode,
+// glossContextual, strongsNumber, role, dictionaryGloss }] }] in reading
+// order, or null when there is nothing to split or the columns disagree —
+// callers then show the single-code display.
+//
+// role: 'root' for a braced piece in pieceStrongs; any other piece is a
+// 'prefix' if a root follows it in its written word, otherwise a 'suffix'. In a
+// written word with no root (2 rows: Isa 3:15, Jer 50:29), a piece whose code
+// is a Suffix (function letter S — TEHMC's Function=Suffix exactly) is a
+// suffix and any other a prefix. dictionaryGloss: a root's is the word's
+// gloss_dictionary, or the matching entry of rootGlosses when the word has
+// 2+ roots; an affix's is hebrew_affixes' gloss for its column-12 form — the
+// number's usual form unless affixForms names another (the suffixes of לְבַד).
+export function splitHebrewWord(word, pieceRow, affixes) {
+    if (!pieceRow || !word.morph_code) return null;
+    const strongs = pieceRow.pieceStrongs.split('//').map(subword => subword.split('/'));
+    const surface = splitTahotColumn(word.surface_text, 'surface');
+    const english = splitTahotColumn(word.gloss_contextual, 'english');
+    const morph = splitHebrewMorphCode(word.morph_code);
+    const forms = pieceRow.affixForms
+        ? pieceRow.affixForms.split('//').map(subword => subword.split('/'))
+        : null;
+    if (!sameShape(strongs, surface) || !sameShape(strongs, english) || !sameShape(strongs, morph)
+        || (forms && !sameShape(strongs, forms))) {
+        return null;
+    }
+    const rootGlosses = pieceRow.rootGlosses ? pieceRow.rootGlosses.split('/') : [word.gloss_dictionary];
+    let rootCount = 0;
+
+    return strongs.map((subword, s) => {
+        const isRoot = subword.map(token => token.startsWith('{'));
+        const lastRoot = isRoot.lastIndexOf(true);
+        const pieces = subword.map((token, p) => {
+            const strongsNumber = token.replace(/[{}]/g, '');
+            let role;
+            let dictionaryGloss = null;
+            if (isRoot[p]) {
+                role = 'root';
+                dictionaryGloss = rootGlosses[rootCount++] || null;
+            } else {
+                role = lastRoot >= 0
+                    ? (p < lastRoot ? 'prefix' : 'suffix')
+                    : (morph[s][p].charAt(1) === 'S' ? 'suffix' : 'prefix');
+                const affix = affixes && affixes.get(strongsNumber);
+                if (affix) {
+                    const form = forms && forms[s][p] !== '*' ? forms[s][p] : affix.form;
+                    dictionaryGloss = affix.glossByForm.get(form) ?? null;
+                }
+            }
+            return {
+                surface: surface[s][p],
+                morphCode: morph[s][p],
+                glossContextual: english[s][p].trim(),
+                strongsNumber,
+                role,
+                dictionaryGloss,
+            };
+        });
+        return { subwordIndex: s, surface: surface[s].join(''), pieces };
+    });
+}
+
+// ---- Shared ------------------------------------------------------------------
 
 // Every decoded line renders glossary-style: the raw TEGMC term, a plain
 // hyphen, then the authored plain-English phrase ("Singular - Just one").
@@ -324,4 +536,148 @@ const CATEGORY_EMPTY_VALUE_PHRASES = {
     // code letter is TEGMC's Title letter, but the source left it blank, so
     // this says only what the key's presence guarantees.
     'Name type': 'A proper name (type not specified in the source)',
+};
+
+// ---- Authored content: Hebrew and Aramaic (Hebrew Word Anatomy spec, Item 6).
+// Like the Greek tables, Ember's plain-English rendering of TEHMC's parsing —
+// git-tracked here, not stored in language.db. Keys are TEHMC's values
+// verbatim, including its own spellings ("transtive", "Hé"). Worklist — the
+// (category, value) pairs the data's pieces actually use:
+//
+//   scripts/analysis/hebrew_anatomy/hebrew_wording_check.mjs
+//
+// Two editorial rules from the spec, both following TEHMC's own caution that
+// Stem-implied Action/Voice and Form-implied Tense/Mood "are not definite and
+// depend on context":
+//   - Stems: don't overstate. "Piel = intensive" is a classroom simplification
+//     that is often wrong. Each stem's wording comes from TEHMC's derived
+//     Action/Voice for it, hedged with "often"/"usually" as TEHMC hedges.
+//   - Verb forms: the form alone doesn't fix the time. No form is phrased as
+//     a certain past or future; TEHMC's likely time is given as typical use.
+// Where the meaning really matches, the Greek wording is reused as is.
+const HEBREW_FUNCTION_PHRASES = {
+    'Verb': TEGMC_VALUE_PHRASES['Verb'],
+    'Noun': TEGMC_VALUE_PHRASES['Noun'],
+    'Adjective': TEGMC_VALUE_PHRASES['Adjective'],
+    'Adverb': TEGMC_VALUE_PHRASES['Adverb'],
+    'Conjunction': TEGMC_VALUE_PHRASES['Conjunction'],
+    'Preposition': TEGMC_VALUE_PHRASES['Preposition'],
+    'Pronoun': 'A word standing in for a noun (I, you, he, this, who)',
+    'Particle': 'Small function word that shapes the sentence',
+    'Suffix': 'An ending attached to the word',
+};
+
+// Stem (binyan). Derived Action/Voice per stem, from TEHMC:
+//   Simple+Active: Qal, Peal · Simple+Passive: Niphal, Peil
+//   Intensive/resultive/transtive+Active: Piel, Pael
+//   Intensive/resultive/transtive+Passive: Pual, Hothpaal, Nithpael, Hitpael (Aramaic)
+//   Intensive/resultive/transtive+Reflexive/iterative: Hithpael, Hitpaal
+//   Causative/declarative+Active: Hiphil, Haphel, Aphel, Shaphel, Tiphil
+//   Causative/declarative+Passive: Hophal · Causative/declarative+Reflexive: Hishtaphel, Ishtaphel
+//   Hitpeel: Intensive/…+Passive in 2 codes, Simple+Reflexive in 3 — phrased to cover both.
+// Active stems don't say "done by the subject": Qal also has a passive
+// participle (TEHMC marks those 8 codes Passive; the Form wording says so).
+// TEHMC also marks one Pual participle (HVPrmpa) Active; Pual's "often"
+// covers it.
+const HEBREW_STEM_PHRASES = {
+    'Qal': 'The basic stem: the plain meaning of the verb',
+    'Niphal': 'Often passive: the subject receives the plain meaning ("was sent")',
+    'Piel': 'Often brings about a result, strengthens the plain meaning, or makes it act on someone',
+    'Pual': 'Often the passive of Piel: the result or action is done to the subject',
+    'Hiphil': 'Often causes the plain meaning ("make reign", "bring up") or declares it ("declare righteous")',
+    'Hophal': 'Often the passive of Hiphil: the subject is caused to do or be the plain meaning',
+    'Hithpael': 'Often the subject acts on or for itself, or repeatedly ("walk about", "consecrate oneself"); sometimes causative instead',
+    'Hishtaphel': 'A rare stem, used almost only for "bow down, worship": the subject brings itself low',
+    'Hothpaal': 'A rare stem: often the passive of Hithpael',
+    'Nithpael': 'A rare stem: often the passive of Hithpael',
+    'Tiphil': 'A rare stem: often causes the plain meaning, like Hiphil',
+    // Aramaic
+    'Peal': 'The basic Aramaic stem: the plain meaning of the verb (like Hebrew Qal)',
+    'Peil': 'Often passive of the basic Aramaic stem: the subject receives the plain meaning',
+    'Pael': 'Often brings about a result, strengthens the plain meaning, or makes it act on someone (like Hebrew Piel)',
+    'Haphel': 'Often causes the plain meaning or declares it (like Hebrew Hiphil)',
+    'Aphel': 'Often causes the plain meaning or declares it (like Hebrew Hiphil)',
+    'Shaphel': 'Often causes the plain meaning (like Hebrew Hiphil)',
+    'Hitpaal': 'Often the subject acts on or for itself, or repeatedly (like Hebrew Hithpael)',
+    'Hitpael': 'Often passive: a result or action done to the subject',
+    'Hitpeel': 'Often passive or reflexive of the basic Aramaic stem: done to the subject, or by it to itself',
+    'Ishtaphel': 'A rare stem: often the subject causes itself to do the plain meaning',
+};
+
+// Verb Form (conjugation). Derived Tense per form, from TEHMC: Perfect and
+// Consecutive Imperfect Past/present; Imperfect, Conjunction+Imperfect and
+// Consecutive Perfect Future/present; Imperative Present/future; participles
+// and infinitives none. TEHMC: imperfective is "incomplete", perfective
+// "complete", and a sequential (consecutive) verb follows the completeness of
+// the one before; the first-listed time is only the most likely.
+const HEBREW_VERB_FORM_PHRASES = {
+    'Perfect': 'A complete action: usually past ("he said"), sometimes a present state ("he knows"); context decides',
+    'Imperfect': 'An action not seen as complete: often future or present ("he will say", "he says"), sometimes repeated in the past; context decides',
+    'Consecutive Imperfect': 'Usually tells the next event in a story (past): "and he said"',
+    'Consecutive Perfect': 'Usually continues a series of actions still to come, or of instructions: "and you shall say"',
+    'Conjunction+Imperfect': 'Joined to "and" without moving the story on: an action not seen as complete; context decides the time',
+    'Imperative': TEGMC_VALUE_PHRASES['Imperative'],
+    'Infinitive': 'The verb used as a noun or "to ..." form ("to say", "saying"); no person or time of its own',
+    'Participle': 'A verb form used like a describing word or noun ("the one going"), often for an ongoing action ("is going")',
+    'Participle passive': 'A verb form used like a describing word, for something the action is done to ("written", "blessed")',
+};
+
+// Mood — a line only for jussive/cohortative readings (see hebrewMorphLines).
+// TEHMC: "should" for cohortative, "may" for jussive; an Imperfect often can't
+// show whether it is a statement or a wish, hence the "/" values.
+const HEBREW_MOOD_PHRASES = {
+    'Jussive': 'A wish or mild command, usually about someone else ("may he ...", "let it ...")',
+    'Cohortative': 'The speaker\u2019s resolve or wish ("let me ...", "let us ...", "I should ...")',
+    'Indicative/jussive': 'Either a statement or a wish ("he will ..." or "may he ..."): the form is the same, so context decides',
+    'Indicative/cohortative': 'Either a statement or a resolve ("I will ..." or "let me ..."): the form is the same, so context decides',
+};
+
+// Form of a non-verb (Particle and Pronoun show this line in place of their
+// Function line; "Common" is never shown).
+const HEBREW_FORM_PHRASES = {
+    'Consecutive': 'The "and" that ties this verb to the one before it as the next step',
+    'Definite': 'With "the" included (as בַּ, "in the")',
+    'Definite article (Hebrew)': TEGMC_VALUE_PHRASES['Definite article'],
+    'Definite article (Aramaic)': 'The word "the" (in Aramaic, written as an ending)',
+    'Object indicator': 'Marks the next word as the definite object of the verb; not translated in English',
+    'Conditional': 'Introduces a condition or its result ("if", "for")',
+    'Negative': TEGMC_VALUE_PHRASES['Negative'],
+    'Interrogative': 'A question word (who? what? is it ...?)',
+    'Interjection': TEGMC_VALUE_PHRASES['Interjection'],
+    'Demonstrative': TEGMC_VALUE_PHRASES['Demonstrative pronoun'],
+    'Relative': TEGMC_VALUE_PHRASES['Relative pronoun'],
+    'Personal': TEGMC_VALUE_PHRASES['Personal pronoun'],
+    'Proper': 'A proper name',
+    'Gentilic': TEGMC_VALUE_PHRASES['Gentilic'],
+    'Title': 'The name of a deity, rank, or month, used as a title',
+    'Numerical': 'A number (one, two, three ...)',
+    'Numerical position': 'A position in order (first, second, third ...)',
+    'Directional': 'An ending meaning "toward" (as in "homeward")',
+    'Paragogic Hé': 'An extra ending that adds emphasis or feeling; usually not translated',
+    'Paragogic Nun': 'An extra ending that adds emphasis or feeling; usually not translated',
+};
+
+// Person / Gender / Number / State, keyed "Category=Value".
+const HEBREW_VALUE_PHRASES = {
+    'Person=First': TEGMC_VALUE_PHRASES['1st'],
+    'Person=Second': TEGMC_VALUE_PHRASES['2nd'],
+    'Person=Third': TEGMC_VALUE_PHRASES['3rd'],
+    'Gender=Masculine': TEGMC_VALUE_PHRASES['Masculine'],
+    'Gender=Feminine': TEGMC_VALUE_PHRASES['Feminine'],
+    'Gender=Either gender': 'The same form serves for male or female',
+    'Number=Singular': TEGMC_VALUE_PHRASES['Singular'],
+    'Number=Plural': TEGMC_VALUE_PHRASES['Plural'],
+    'Number=Dual': 'Two of something, or a natural pair (eyes, hands)',
+    'State=Absolute': 'Standing on its own',
+    'State=Construct': 'Read with the next word: "X of ..."',
+    'State=Definite': 'Has the Aramaic ending that means "the"',
+};
+
+// A proper name's Gender (TEHMC: masculine/feminine individual, location,
+// or "other title" — deities, ranks, months).
+const HEBREW_PROPER_GENDER_PHRASES = {
+    'Masculine': 'A man\u2019s name',
+    'Feminine': 'A woman\u2019s name',
+    'Location': TEGMC_VALUE_PHRASES['Location'],
+    'Title': 'The name of a deity, rank, or month',
 };

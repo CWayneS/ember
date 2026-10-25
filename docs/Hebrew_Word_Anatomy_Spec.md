@@ -4,7 +4,7 @@
 
 **Prerequisite:** `Language_Panel_Word_Inspector_Spec.md` shipped (inline tiered word card; `decodeMorphCode()` already called for both languages). State per `BUILD_6.1_ACTUAL_STATE.md`.
 
-**Status:** Data verified by Claude Code investigation, 2026-10-24 (see Findings). Ready to hand to Claude Code.
+**Status:** Implemented 2026-10-25, in the commit that adds `docs/HEBREW_ANATOMY_DATA_REPORT.md`. That report records every decision that changed this spec during the build: the gloss rule (Item 2), braces kept in `piece_strongs` and the two-form affixes (Items 3 and 7), the role rules, and the commit timing. Where a checklist item below differs from what was built, its note says how.
 
 **Separate, not in this spec:** Hebrew lexicon (tier 3). See "Deferred to Follow-Up Specs".
 
@@ -384,25 +384,25 @@ Plus, at the data level (the build script's own report, not the browser):
 
 ## Definition of Done
 
-- [ ] `language.db` rebuilt from STEPBible-Data master; STEPBible-Data commit and per-file sha256 recorded (any changes since `ed476a8` diffed and reported); `V` text type imported as main text
-- [ ] Hebrew row count matches the expected count (305,634 unless the rebuild report explains a difference); Greek rows 142,096
-- [ ] `gloss_dictionary` fix applied; before/after table for all 69 affected Strong's numbers reported; H0776G reads "land"; underscore handling checked and reported
-- [ ] `original_word_pieces` populated for multi-piece Hebrew words only, storing per-piece Strong's numbers (plus `root_glosses` on two-root rows) and nothing that's already in `original_words`; rows written only where every column splits identically; alignment report (rows written, rows skipped with reasons, 5 samples showing raw, stored, and runtime split); both paseq rows pass; `//` rows split into subwords
-- [ ] `hebrew_affixes` populated; every affix confirmed to have one constant `(form, gloss)`, or the build stopped and reported the variants
-- [ ] `splitHebrewWord()` is the single implementation of the splitting rules, shared with the Hebrew decode path
-- [ ] `original_word_variants` populated; all raw text types and columns 7/8 kept; `ketiv_hebrew` parsed for Q(K)/Q(k) with a count reported (target 1,323); unparsed rows left NULL and listed
-- [ ] `parse_tehmc_file` written; `parse_tegmc_file` unchanged; 921 codes in `step_morphology_hebrew`, including `Hc`; `(hence …)` groups unwrapped as `derived` rows; `Definite article (Aramaic)` kept whole; `jussive` normalized
-- [ ] `getHebrewMorphCategories()`, `getPiecesForWords()`, `getVariantsForWords()`, `getHebrewAffixes()` (cached) added to `db.js`; batched, no per-word queries in the render loop
-- [ ] Size limit met: baseline and final `language.db` sizes (after `VACUUM`) reported with a per-table breakdown; growth ≤ ~10%, or the build stopped and reported before committing
-- [ ] All data changes landed in one `language.db` commit
-- [ ] `decodeMorphCode()` Hebrew path: punctuation stripped, `//` and `/` split, language letter carried, one entry per piece; Greek output unchanged
-- [ ] Wording tables cover every used `(category, value)` pair, or fall back to TEHMC's text, with a list of the fallbacks; stem wording hedged; conjugation wording makes no certain time claims
-- [ ] Tier 1: Aramaic label on `A`-coded words only
-- [ ] Tier 2: one-piece Hebrew words decode like Greek; multi-piece words show the anatomy view (piece Hebrew, role, piece gloss, decoded lines); Ketiv line with distinct meaning/spelling notes; "General usage" fixed
-- [ ] TEHMC credited in the existing attribution list
-- [ ] `tests/verify.py hebrew` scenario added and passing; all existing scenarios still pass; Greek data identical before and after
-- [ ] `FEATURE_INVENTORY.md` updated; `USER_MANUAL.md` Language-tab section updated for the anatomy view, the Aramaic label, and the Ketiv line
-- [ ] Verified live in the browser, zero console errors apart from the documented FTS5 warning
+- [x] `language.db` rebuilt from STEPBible-Data master; STEPBible-Data commit and per-file sha256 recorded (any changes since `ed476a8` diffed and reported); `V` text type imported as main text
+- [x] Hebrew row count matches the expected count (305,634 unless the rebuild report explains a difference); Greek rows 142,096
+- [x] `gloss_dictionary` fix applied; before/after table for all 69 affected Strong's numbers reported; H0776G reads "land"; underscore handling checked and reported. *The 69/7,752 turned out to count glosses with `;` or `_`; the rule as written would have dropped the sense on 56,676 rows. Built instead: `<base>: <sense>` (STEPBible's own TBESH form), so H0776G reads "land: country; planet". Report D2.*
+- [x] `original_word_pieces` populated for multi-piece Hebrew words only, storing per-piece Strong's numbers (plus `root_glosses` on two-root rows) and nothing that's already in `original_words`; rows written only where every column splits identically; alignment report (rows written, rows skipped with reasons, 5 samples showing raw, stored, and runtime split); both paseq rows pass; `//` rows split into subwords. *Built with braces kept on the root (H90xx numbers are the root in 6,081 words) and an `affix_forms` column for the 87 לְבַד suffixes. 145,688 rows, 0 skipped. Report D4.*
+- [x] `hebrew_affixes` populated; every affix confirmed to have one constant `(form, gloss)`, or the build stopped and reported the variants. *It stopped: 7 numbers take a second form, all in לְבַד. Built: keyed `(strongs_number, form)` with a `usual` flag. Report D4.*
+- [x] `splitHebrewWord()` is the single implementation of the splitting rules, shared with the Hebrew decode path
+- [x] `original_word_variants` populated; all raw text types and columns 7/8 kept; `ketiv_hebrew` parsed for Q(K)/Q(k) with a count reported (target 1,323); unparsed rows left NULL and listed. *All 1,309 parse. The target counted the 14 ghost rows, which aren't imported. Report D5.*
+- [x] `parse_tehmc_file` written; `parse_tegmc_file` unchanged; 921 codes in `step_morphology_hebrew`, including `Hc`; `(hence …)` groups unwrapped as `derived` rows; `Definite article (Aramaic)` kept whole; `jussive` normalized
+- [x] `getHebrewMorphCategories()`, `getPiecesForWords()`, `getVariantsForWords()`, `getHebrewAffixes()` (cached) added to `db.js`; batched, no per-word queries in the render loop
+- [x] Size limit met: baseline and final `language.db` sizes (after `VACUUM`) reported with a per-table breakdown; growth ≤ ~10%, or the build stopped and reported before committing. *+7.82% (59,740,160 → 64,413,696 bytes). Report D6.*
+- [x] All data changes landed in one `language.db` commit
+- [x] `decodeMorphCode()` Hebrew path: punctuation stripped, `//` and `/` split, language letter carried, one entry per piece; Greek output unchanged
+- [x] Wording tables cover every used `(category, value)` pair, or fall back to TEHMC's text, with a list of the fallbacks; stem wording hedged; conjugation wording makes no certain time claims
+- [x] Tier 1: Aramaic label on `A`-coded words only
+- [x] Tier 2: one-piece Hebrew words decode like Greek; multi-piece words show the anatomy view (piece Hebrew, role, piece gloss, decoded lines); Ketiv line with distinct meaning/spelling notes; "General usage" fixed
+- [x] TEHMC credited in the existing attribution list
+- [x] `tests/verify.py hebrew` scenario added and passing; all existing scenarios still pass; Greek data identical before and after
+- [x] `FEATURE_INVENTORY.md` updated; `USER_MANUAL.md` Language-tab section updated for the anatomy view, the Aramaic label, and the Ketiv line
+- [x] Verified live in the browser, zero console errors apart from the documented FTS5 warning
 
 ---
 

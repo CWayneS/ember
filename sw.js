@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v9'; // bumped: data/ responses no longer copied into Cache Storage
+const CACHE_NAME = 'ember-v10'; // bumped: Hebrew word anatomy (db.js, grammar-decode.js, language.js, global-settings.js, style.css changed)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:

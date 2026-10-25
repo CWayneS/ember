@@ -2143,6 +2143,86 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     margin: 6px 0;
 }
 
+/* Hebrew word anatomy (Hebrew_Word_Anatomy_Spec) — one block per piece of a
+   multi-piece word. Pieces are separated by a dotted rule, lighter than the
+   solid divider between member words of a grouped row, so the two levels read
+   differently. The piece's Hebrew sits left, like every other Hebrew span in
+   the card (each span is dir="rtl" on its own). */
+.language-anatomy {
+    padding: 6px 0 0 4px;
+}
+
+.language-anatomy-subword + .language-anatomy-subword {
+    margin-top: 10px;
+}
+
+.language-anatomy-subword-heading {
+    font-family: var(--font-hebrew);
+    font-size: var(--size-large);
+    text-align: left;
+    margin-bottom: 2px;
+}
+
+.language-piece {
+    padding: 5px 0;
+}
+
+.language-piece + .language-piece {
+    border-top: 1px dotted var(--border-light);
+}
+
+.language-piece-header {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+}
+
+.language-piece-hebrew {
+    font-family: var(--font-hebrew);
+    font-size: var(--size-large);
+}
+
+.language-piece-role {
+    font-family: var(--font-display);
+    font-size: var(--size-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.language-piece-gloss {
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+}
+
+.language-piece-general {
+    font-family: var(--font-reading);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    padding: 1px 0 1px 10px;
+}
+
+/* Ketiv line — the written form where the text follows the Qere. */
+.language-ketiv {
+    margin-top: 8px;
+}
+
+.language-ketiv-hebrew {
+    font-family: var(--font-hebrew);
+    font-size: var(--size-base);
+}
+
+.language-ketiv-note {
+    font-family: var(--font-reading);
+    font-size: var(--size-xs);
+    font-style: italic;
+    color: var(--text-muted);
+    padding: 1px 0 3px 138px;
+}
+
 /* Word card — inline tiered detail, expands beneath the tapped gloss row
    (Language_Panel_Word_Inspector_Spec). */
 .language-word-card {
@@ -2181,6 +2261,13 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
 }
 
 .language-card-strongs {
+    font-family: var(--font-reading);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.language-card-language {
     font-family: var(--font-reading);
     font-size: var(--size-xs);
     color: var(--text-muted);

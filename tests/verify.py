@@ -13,6 +13,7 @@ Usage (from the repo root):
    python3 tests/verify.py indicators    # note/bookmark dots on a titled Psalm (verse=0 row)
    python3 tests/verify.py notes         # removing tags and verse anchors from a note
    python3 tests/verify.py sw            # service worker installs and precaches every js/ file
+   python3 tests/verify.py hebrew        # Hebrew word anatomy: TEHMC decode, pieces, affixes, Ketiv
    python3 tests/verify.py dbsnapshot out.json          # results of ~36 db.js calls as JSON
    python3 tests/verify.py dbcompare before.json after.json
 
@@ -239,7 +240,7 @@ def scenario_dbcompare(a, b):
 
 def check_grammar_decode(app):
     """Greek decode across every code in language.db, a compound code in the
-    word card, and Hebrew's no-decode/no-lexicon gap. Leaves John 1:1 selected
+    word card, and Hebrew's TEHMC decode lines and no-lexicon gap. Leaves John 1:1 selected
     with the Language tab open, as the smoke scenario had it."""
     p = app.page
     db = sqlite3.connect(f"file:{os.path.join(ROOT, 'data', 'language.db')}?mode=ro", uri=True)
@@ -278,7 +279,7 @@ def check_grammar_decode(app):
     check(tier2.locator('.language-morph-decode-part-heading').count() == 2, 'compound code shows both parts')
     check('G2532' in tier2.locator('.language-morph-decode-crossref').inner_text(), 'compound code shows cross-reference line')
 
-    # Hebrew: raw code only, no decode lines, no Lexicon link (TEHMC/TBESH gaps)
+    # Hebrew: TEHMC decode lines (Hebrew Word Anatomy spec), no Lexicon link (TBESH gap)
     app.navigate(1, 1)
     app.select_verse(1001001)
     p.click('#reference-tabs [data-tab="language"]')
@@ -286,7 +287,7 @@ def check_grammar_decode(app):
     p.locator('.language-word-row').first.click()
     p.locator('.language-card-more-btn').first.click()
     p.wait_for_selector('.language-card-tier2')
-    check(p.evaluate("document.querySelectorAll('.language-card-tier2 .language-morph-decode-line').length") == 0, 'Hebrew shows no decode lines')
+    check(p.evaluate("document.querySelectorAll('.language-card-tier2 .language-morph-decode-line').length") > 0, 'Hebrew shows decode lines')
     check(p.evaluate("document.querySelectorAll('.language-card-lexicon-btn').length") == 0, 'Hebrew shows no Lexicon button')
 
     app.navigate(43, 1)
@@ -570,6 +571,224 @@ def scenario_indicators(app):
     return FAILURES
 
 
+# ---------------------------------------------------------------- hebrew
+def hebrew_word_id(db, verse_id, word_position):
+    return db.execute("SELECT id FROM original_words WHERE language = 'hebrew' AND verse_id = ? AND word_position = ?",
+                      (verse_id, word_position)).fetchone()[0]
+
+
+def hebrew_surface_pieces(db, verse_id, word_position):
+    """A word's pieces as stored — expected Hebrew comes from the data, not
+    typed literals, whose combining marks may be ordered differently (the data
+    has shin dot before hiriq in רֵאשִׁית)."""
+    surface = db.execute("SELECT surface_text FROM original_words WHERE language = 'hebrew' AND verse_id = ? "
+                         "AND word_position = ?", (verse_id, word_position)).fetchone()[0]
+    return surface.split('\\')[0].split('/')
+
+
+# Reads one word card member's tier 1 + tier 2 into plain data (Hebrew word
+# anatomy): pieces with Hebrew/role/gloss/general/lines, subword headings,
+# Ketiv, the Aramaic label, and the plain decode lines of a one-piece word.
+READ_MEMBER_JS = """(member) => {
+    const text = (el) => el ? el.textContent.trim() : null;
+    const t2 = member.querySelector('.language-card-tier2');
+    const pieces = [...member.querySelectorAll('.language-piece')].map(p => ({
+        hebrew: text(p.querySelector('.language-piece-hebrew')),
+        role: text(p.querySelector('.language-piece-role')),
+        gloss: text(p.querySelector('.language-piece-gloss')),
+        general: text(p.querySelector('.language-piece-general')),
+        lines: [...p.querySelectorAll('.language-morph-decode-line')].map(text),
+    }));
+    const field = (label) => {
+        const f = [...member.querySelectorAll('.language-detail-field')]
+            .find(f => text(f.querySelector('.language-detail-label')) === label);
+        return f ? text(f.querySelector('.language-detail-value')) : null;
+    };
+    return {
+        aramaic: !!member.querySelector('.language-card-language'),
+        pieces,
+        subwords: [...member.querySelectorAll('.language-anatomy-subword-heading')].map(text),
+        plainLines: t2 ? [...t2.querySelectorAll('.language-morph-decode-body .language-morph-decode-line')].map(text) : [],
+        ketiv: field('Written (Ketiv)'),
+        ketivNote: text(member.querySelector('.language-ketiv-note')),
+        general: field('General usage'),
+        lexiconButton: !!member.querySelector('.language-card-lexicon-btn'),
+    };
+}"""
+
+
+def word_surface(db, verse_id, word_position):
+    return db.execute("SELECT surface_text FROM original_words WHERE verse_id = ? AND word_position = ?",
+                      (verse_id, word_position)).fetchone()[0]
+
+
+def read_word_card(app, db, verse_id, word_position, tier2=True):
+    """Open the card for one word (its row may be a group) and read that member."""
+    p = app.page
+    book, chapter = verse_id // 1_000_000, verse_id // 1000 % 1000
+    app.navigate(book, chapter)
+    app.select_verse(verse_id)
+    p.click('#reference-tabs [data-tab="language"]')
+    p.wait_for_selector('.language-word-row', timeout=60_000)
+    surface = word_surface(db, verse_id, word_position)
+    p.locator('.language-word-row', has_text=surface).first.click()
+    p.wait_for_selector('.language-word-card')
+    member = p.locator('.language-card-member').filter(
+        has=p.locator('.language-card-original', has_text=surface)).first
+    if tier2:
+        member.locator('.language-card-more-btn').click()
+        p.wait_for_timeout(200)
+        member = p.locator('.language-card-member').filter(
+            has=p.locator('.language-card-original', has_text=surface)).first
+    return member.evaluate(READ_MEMBER_JS)
+
+
+def scenario_hebrew(app):
+    """Hebrew Word Anatomy spec: the db.js queries and the Hebrew decode path
+    against the live database (U1), then the word card checks of Item 9."""
+    p = app.page
+    db = sqlite3.connect(f"file:{os.path.join(ROOT, 'data', 'language.db')}?mode=ro", uri=True)
+    codes = [r[0] for r in db.execute(
+        "SELECT DISTINCT morph_code FROM original_words WHERE language = 'hebrew' AND morph_code != ''")]
+    gen_1_1 = [hebrew_word_id(db, 1001001, i) for i in range(7)]
+    ketiv_ids = {'Gen 9:21 #07': hebrew_word_id(db, 1009021, 6), 'Gen 8:17 #14': hebrew_word_id(db, 1008017, 13)}
+    psalm_119 = [r[0] for r in db.execute(
+        "SELECT id FROM original_words WHERE verse_id BETWEEN 19119001 AND 19119176")]
+    expected_ketiv = {k: [db.execute('SELECT ketiv_hebrew FROM original_word_variants WHERE word_id = ?', (i,)).fetchone()[0], kind]
+                      for (k, i), kind in zip(ketiv_ids.items(), ('meaning', 'spelling'))}
+    gen_1_1_first, gen_1_1_seventh = hebrew_surface_pieces(db, 1001001, 0), hebrew_surface_pieces(db, 1001001, 6)
+    psalm_119_pieces = db.execute(
+        "SELECT COUNT(*) FROM original_word_pieces WHERE word_id IN (SELECT id FROM original_words "
+        "WHERE verse_id BETWEEN 19119001 AND 19119176)").fetchone()[0]
+    db.close()
+
+    res = p.evaluate("""async ([codes, gen11, ketivIds, psalm119]) => {
+        const g = await import('./js/grammar-decode.js');
+        const db = await import('./js/db.js');
+        const undecoded = [], bare = [];
+        for (const code of codes) {
+            const parts = await g.decodeMorphCode(code);
+            for (const part of parts) for (const line of part.lines) if (!line.includes(' - ')) bare.push(`${part.code}: ${line}`);
+            const pieces = g.splitHebrewMorphCode(code);
+            const expected = pieces.flatMap((subword, s) => subword.map(c => [c, s]));
+            if (parts.length !== expected.length
+                || parts.some((part, i) => part.code !== expected[i][0] || part.subwordIndex !== expected[i][1]
+                                           || part.lines.length === 0)) undecoded.push(code);
+        }
+        const affixes = await db.getHebrewAffixes();
+        const again = await db.getHebrewAffixes();
+        const words = await db.getOriginalWordsForVerses([1001001]);
+        const pieces = await db.getPiecesForWords(gen11);
+        const split = splitWord => splitWord && splitWord.flatMap(s => s.pieces.map(p =>
+            [p.surface, p.morphCode, p.role, p.dictionaryGloss]));
+        const variants = await db.getVariantsForWords(Object.values(ketivIds));
+        const manyPieces = await db.getPiecesForWords(psalm119);
+        return {
+            undecoded, bare,
+            affixCount: affixes.size, cached: affixes === again,
+            h9001: [affixes.get('H9001').form, affixes.get('H9001').gloss],
+            h9033: [affixes.get('H9033').form, affixes.get('H9033').glossByForm.get('Ss3m')],
+            gen11Pieces: gen11.map(id => pieces.get(id)?.pieceStrongs ?? null),
+            first: split(g.splitHebrewWord(words[0], pieces.get(words[0].id), affixes)),
+            seventh: split(g.splitHebrewWord(words[6], pieces.get(words[6].id), affixes)),
+            oneWord: g.splitHebrewWord(words[1], pieces.get(words[1].id), affixes),
+            ketiv: Object.fromEntries(Object.entries(ketivIds).map(([k, id]) =>
+                [k, [variants.get(id)?.ketivHebrew, variants.get(id)?.ketivKind]])),
+            manyPieces: manyPieces.size,
+        };
+    }""", [codes, gen_1_1, ketiv_ids, psalm_119])
+
+    check(not res['undecoded'], f"all {len(codes)} Hebrew morph codes decode: one entry per piece, "
+          f"in order, each with lines {res['undecoded'][:5]}")
+    check(not res['bare'], f"every Hebrew decode line has authored wording {res['bare'][:5]}")
+    check(res['affixCount'] == 43 and res['cached'], f"getHebrewAffixes: 43 numbers, cached ({res['affixCount']})")
+    check(res['h9001'] == ['ו', '&'], f"H9001 usual form/gloss ({res['h9001']})")
+    check(res['h9033'] == ['Os3m', 'he'], f"H9033 usual form Os3m, other form Ss3m 'he' ({res['h9033']})")
+    check(res['gen11Pieces'] == ['H9003/{H7225G}', None, None, None, 'H9009/{H8064}', 'H9002/{H0853}', 'H9009/{H0776G}'],
+          f"getPiecesForWords Gen 1:1 ({res['gen11Pieces']})")
+    check(res['first'] == [[gen_1_1_first[0], 'HR', 'prefix', 'in'], [gen_1_1_first[1], 'HNcfsa', 'root', 'first: beginning']],
+          f"splitHebrewWord Gen 1:1 #01 ({res['first']})")
+    check(res['seventh'] == [[gen_1_1_seventh[0], 'HTd', 'prefix', 'the'], [gen_1_1_seventh[1], 'HNcfsa', 'root', 'land: country; planet']],
+          f"splitHebrewWord Gen 1:1 #07: sof pasuq stripped, gloss fixed ({res['seventh']})")
+    check(res['oneWord'] is None, 'splitHebrewWord: one-piece word returns null')
+    check(res['ketiv'] == expected_ketiv and all(v[0] for v in expected_ketiv.values()),
+          f"getVariantsForWords Ketiv ({res['ketiv']})")
+    check(res['manyPieces'] == psalm_119_pieces,
+          f"getPiecesForWords over {len(psalm_119)} words (chunked) finds all {psalm_119_pieces} ({res['manyPieces']})")
+
+    # ---- Item 9: the word card
+    db = sqlite3.connect(f"file:{os.path.join(ROOT, 'data', 'language.db')}?mode=ro", uri=True)
+    has_lines = lambda card: all(piece['lines'] for piece in card['pieces'])
+
+    card = read_word_card(app, db, 1001001, 0)
+    check([(x['role'], x['gloss']) for x in card['pieces']] == [('Prefix', '“in”'), ('Word', '“beginning”')] and has_lines(card),
+          f"Gen 1:1 #01: Prefix \"in\" + Word \"beginning\", each with decoded lines ({card['pieces']})")
+
+    card = read_word_card(app, db, 1001001, 6)
+    check(card['general'] == 'land: country; planet', f"Gen 1:1 #07: General usage reads 'land: country; planet' ({card['general']})")
+    check(len(card['pieces']) == 2 and '׃' not in ''.join(x['hebrew'] for x in card['pieces']),
+          f"Gen 1:1 #07: 2 pieces, sof pasuq not a piece ({[x['hebrew'] for x in card['pieces']]})")
+
+    card = read_word_card(app, db, 1001003, 0)
+    prefix_lines = card['pieces'][0]['lines'] if card['pieces'] else []
+    verb_form = [l for l in (card['pieces'][1]['lines'] if len(card['pieces']) > 1 else []) if l.startswith('Consecutive Imperfect')]
+    check(card['pieces'] and card['pieces'][0]['role'] == 'Prefix' and any(l.startswith('Consecutive - ') for l in prefix_lines),
+          f"Gen 1:3 #01: the Hc prefix decodes ({prefix_lines})")
+    check(len(verb_form) == 1 and ' - Usually ' in verb_form[0] and 'will' not in verb_form[0],
+          f"Gen 1:3 #01: verb form wording is hedged, no certain time ({verb_form})")
+
+    card = read_word_card(app, db, 1002002, 4)
+    check(card['pieces'] and (card['pieces'][-1]['role'], card['pieces'][-1]['gloss']) == ('Suffix', '“his”'),
+          f"Gen 2:2 #05: Suffix piece \"his\" ({card['pieces']})")
+
+    for verse, position, kind, note in ((1008017, 13, 'spelling', 'Spelling difference only.'),
+                                        (1009021, 6, 'meaning', 'The text is read as shown above (Qere)')):
+        expected = db.execute('SELECT ketiv_hebrew FROM original_word_variants v JOIN original_words w ON w.id = v.word_id '
+                              'WHERE w.verse_id = ? AND w.word_position = ?', (verse, position)).fetchone()[0]
+        card = read_word_card(app, db, verse, position)
+        check(card['ketiv'] == expected and (card['ketivNote'] or '').startswith(note),
+              f"{'Gen 8:17' if verse == 1008017 else 'Gen 9:21'}: Ketiv line, {kind} note ({card['ketiv']}, {card['ketivNote']})")
+
+    card = read_word_card(app, db, 12019037, 7)
+    check(len(card['subwords']) == 2 and len(card['pieces']) == 4,
+          f"2Ki 19:37 #08: two written words, each a group of pieces ({card['subwords']}, {len(card['pieces'])} pieces)")
+
+    card = read_word_card(app, db, 13027012, 5)
+    surface = word_surface(db, 13027012, 5)
+    expected = [piece for subword in surface.replace('\\׀', '').split('/ /') for piece in subword.split('/')]
+    check([x['hebrew'] for x in card['pieces']] == expected and [x['role'] for x in card['pieces']] == ['Prefix', 'Word', 'Word']
+          and len(card['subwords']) == 2,
+          f"1Ch 27:12 #06: paseq row aligns, pieces correct ({[(x['hebrew'], x['role']) for x in card['pieces']]})")
+
+    words_2_4 = db.execute("SELECT word_position FROM original_words WHERE verse_id = 27002004 ORDER BY 1").fetchall()
+    labels = [read_word_card(app, db, 27002004, w, tier2=False)['aramaic'] for (w,) in words_2_4]
+    check(labels[:4] == [False] * 4 and all(labels[4:]), f"Dan 2:4: no Aramaic label on words 1-4, label on the rest ({labels})")
+
+    verb = db.execute("SELECT word_position FROM original_words WHERE verse_id = 27003001 AND morph_code GLOB 'AV[qh]*' "
+                      "ORDER BY 1").fetchone()[0]
+    card = read_word_card(app, db, 27003001, verb)
+    lines = card['plainLines'] + [l for x in card['pieces'] for l in x['lines']]
+    check(card['aramaic'] and any(l.startswith(('Peal - ', 'Haphel - ')) for l in lines),
+          f"Dan 3:1: Aramaic label, Aramaic stem wording ({card['aramaic']}, {lines[:3]})")
+
+    card = read_word_card(app, db, 19044014, 5)
+    check([(x['role'], x['gloss']) for x in card['pieces']] == [('Prefix', '“among the”'), ('Word', '“peoples”')] and has_lines(card),
+          f"Psa 44:14 #06: the upstream V row renders ({card['pieces']})")
+
+    card = read_word_card(app, db, 1001001, 1)
+    check(not card['pieces'] and card['plainLines'], f"one-piece word (Gen 1:1 #02): Greek-style lines, no piece blocks ({card['plainLines'][:2]})")
+
+    card = read_word_card(app, db, 43001001, 0)
+    check(not card['pieces'] and card['plainLines'] and card['lexiconButton'] and not card['aramaic'],
+          f"John 1:1: Greek tier 2 unchanged ({card['plainLines'][:2]})")
+    db.close()
+
+    p.click('#global-settings-btn')
+    credits = p.evaluate("document.querySelector('#global-settings-popover .settings-credits-list')?.textContent || ''")
+    check('TEHMC' in credits and 'TEGMC' in credits, 'TEHMC credited next to TEGMC in Data & Attribution')
+    return FAILURES
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -591,6 +810,7 @@ def main():
             elif args[0] == 'smoke':    failures = scenario_smoke(app)
             elif args[0] == 'indicators': failures = scenario_indicators(app)
             elif args[0] == 'notes':      failures = scenario_notes(app)
+            elif args[0] == 'hebrew':     failures = scenario_hebrew(app)
             elif args[0] == 'dbsnapshot': failures = scenario_dbsnapshot(app, args[1])
             else: print('unknown scenario'); sys.exit(2)
             for e in app.errors:

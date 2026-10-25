@@ -1700,3 +1700,107 @@ export async function getGreekMorphCategories(code) {
         [code]
     );
 }
+
+// ============================================================
+// Language — Hebrew word anatomy (Hebrew Word Anatomy spec):
+// TEHMC morphology, per-piece Strong's numbers, affixes, Ketiv/variants.
+// Tables and the decisions behind them: scripts/build_language.py,
+// docs/HEBREW_ANATOMY_DATA_REPORT.md.
+// ============================================================
+
+// TEHMC categories for one Hebrew/Aramaic morph-code piece ("HR", "HNcfsa" —
+// grammar-decode.js splits the full morph_code first), in source order.
+// derived = 1 for values TEHMC gives as implied by the Stem or Form ("hence
+// Action=…; Tense=…"), which it calls likely, not definite. [] when the piece
+// has no TEHMC entry (none in current data).
+export async function getHebrewMorphCategories(code) {
+    if (!code) return [];
+    const langDb = await getLanguageDb();
+    return queryAll(langDb,
+        `SELECT category, value, derived, position FROM step_morphology_hebrew
+         WHERE code = ? ORDER BY position ASC`,
+        [code]
+    );
+}
+
+// Word ids per IN (...) — well under sql.js's bound-parameter limit, and a
+// rendered selection can span hundreds of verses.
+const WORD_ID_CHUNK = 500;
+
+async function queryByWordIds(sql, wordIds) {
+    const langDb = await getLanguageDb();
+    const rows = [];
+    for (let i = 0; i < wordIds.length; i += WORD_ID_CHUNK) {
+        const chunk = wordIds.slice(i, i + WORD_ID_CHUNK);
+        rows.push(...queryAll(langDb, sql.replace('?ids', chunk.map(() => '?').join(',')), chunk));
+    }
+    return rows;
+}
+
+// Multi-piece Hebrew words among wordIds -> Map<wordId, { pieceStrongs,
+// rootGlosses, affixForms }>, for grammar-decode.js's splitHebrewWord(). A word
+// with no entry is a one-piece word. One query per 500 words, never per word.
+export async function getPiecesForWords(wordIds) {
+    const pieces = new Map();
+    if (wordIds.length === 0) return pieces;
+    const rows = await queryByWordIds(
+        `SELECT word_id, piece_strongs, root_glosses, affix_forms
+         FROM original_word_pieces WHERE word_id IN (?ids)`, wordIds);
+    for (const row of rows) {
+        pieces.set(row.word_id, {
+            pieceStrongs: row.piece_strongs,
+            rootGlosses:  row.root_glosses,
+            affixForms:   row.affix_forms,
+        });
+    }
+    return pieces;
+}
+
+// Hebrew words among wordIds whose text type isn't plain Leningrad or that have
+// a recorded variant -> Map<wordId, { textType, meaningVariants,
+// spellingVariants, ketivHebrew, ketivKind }>. ketivKind is 'meaning' (Q(K)),
+// 'spelling' (Q(k)) or null. No entry means plain Leningrad text.
+export async function getVariantsForWords(wordIds) {
+    const variants = new Map();
+    if (wordIds.length === 0) return variants;
+    const rows = await queryByWordIds(
+        `SELECT word_id, text_type, meaning_variants, spelling_variants, ketiv_hebrew, ketiv_kind
+         FROM original_word_variants WHERE word_id IN (?ids)`, wordIds);
+    for (const row of rows) {
+        variants.set(row.word_id, {
+            textType:         row.text_type,
+            meaningVariants:  row.meaning_variants,
+            spellingVariants: row.spelling_variants,
+            ketivHebrew:      row.ketiv_hebrew,
+            ketivKind:        row.ketiv_kind,
+        });
+    }
+    return variants;
+}
+
+// Prefix/suffix Strong's numbers (H9001-H9013, H9020-H9049), loaded once per
+// session: Map<strongsNumber, { form, gloss, glossByForm }>. form/gloss are the
+// number's usual column-12 pair; glossByForm also holds the other forms a few
+// numbers take (the subject-form suffixes of לְבַד "alone"), which
+// original_word_pieces.affix_forms names per word.
+let _hebrewAffixesCache = null;
+
+export async function getHebrewAffixes() {
+    if (_hebrewAffixesCache) return _hebrewAffixesCache;
+    const langDb = await getLanguageDb();
+    const affixes = new Map();
+    for (const row of queryAll(langDb,
+        `SELECT strongs_number, form, gloss, usual FROM hebrew_affixes ORDER BY strongs_number`)) {
+        if (!affixes.has(row.strongs_number)) {
+            affixes.set(row.strongs_number, { form: null, gloss: null, glossByForm: new Map() });
+        }
+        const affix = affixes.get(row.strongs_number);
+        affix.glossByForm.set(row.form, row.gloss);
+        if (row.usual) {
+            affix.form = row.form;
+            affix.gloss = row.gloss;
+        }
+    }
+    _hebrewAffixesCache = affixes;
+    return affixes;
+}

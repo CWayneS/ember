@@ -18,7 +18,7 @@ If you'd rather not install it, it works just as well in a browser tab.
 
 ### First launch
 
-The first time Ember loads, it downloads the core database and all six bundled translations (roughly 65–70 MB total) and saves them to your device. After that, everything runs locally. Original-language data for the Language tab (about 55 MB) downloads separately, the first time you actually open that tab or read a Psalm with a title — not at first launch — so it doesn't slow down your very first load.
+The first time Ember loads, it downloads the core database and all six bundled translations (roughly 65–70 MB total) and saves them to your device. After that, everything runs locally. Original-language data for the Language tab (about 64 MB) downloads separately, the first time you actually open that tab or read a Psalm with a title — not at first launch — so it doesn't slow down your very first load.
 
 You'll land on Genesis 1 with empty study panels on the left. The loading screen disappears when the app is ready.
 
@@ -200,6 +200,14 @@ Shows the original Hebrew or Greek text for the selected verse (or verses, for a
 Tap any row to open a card beneath it with that word's original-language spelling, its English meaning in this verse, its Strong's number, and its grammar code — without leaving your place in the verse. Only one card is open at a time; tapping a different row (or the same one again) closes it.
 
 Tap **Click for more** on a word for its dictionary form (lemma), transliteration, and a plain-English breakdown of its grammar. Greek words also get a **Show Lexicon** button revealing the full dictionary entry. Hebrew words don't have this button yet — that source is still pending a rights clearance.
+
+**Hebrew words are often built from pieces.** A single printed Hebrew word can carry a little word on the front ("and", "in", "the") and a pronoun on the end ("his", "them"): בְּרֵאשִׁית is "in" + "beginning", and וַיֹּאמֶר is "and" + "he said". For a word like this, **Click for more** shows its *anatomy*: one block per piece, in reading order, each with the piece's Hebrew, whether it's a **Prefix**, the **Word** itself, or a **Suffix**, what that piece means in this verse, and a plain-English breakdown of its grammar. If a piece's usual meaning differs from how it's used here, a small "General usage" line says so (בַּ is usually "in", but here "with the"). A few rows hold two written words at once; those show one group of pieces under each word.
+
+The grammar descriptions for Hebrew verbs are deliberately careful. A Hebrew verb form doesn't fix its time on its own, so you'll read "usually past" or "often future or present … context decides" rather than a flat "past tense" or "future tense". Stems such as Piel or Hiphil are described by what they *often* do, not by a single label.
+
+**Aramaic.** Parts of Daniel and Ezra (and one verse of Jeremiah) are written in Aramaic, not Hebrew. Those words show a small **Aramaic** label under their grammar code.
+
+**Written vs. read (Ketiv and Qere).** In about 1,300 places the Hebrew text is read aloud one way (the *Qere*) while the consonants on the page spell something else (the *Ketiv*). Ember shows the reading, and for these words **Click for more** adds a **Written (Ketiv)** line with the written form and a note saying whether the difference changes the meaning or is only a matter of spelling.
 
 ### Plans
 

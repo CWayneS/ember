@@ -15,8 +15,11 @@
 // exactly one source of truth for what's open, with "rows shift down" falling
 // out for free as normal document flow.
 
-import { formatReference, getOriginalWordsForVerses, getGreekLexiconEntry } from './db.js';
-import { decodeMorphCode } from './grammar-decode.js';
+import {
+    formatReference, getOriginalWordsForVerses, getGreekLexiconEntry,
+    getPiecesForWords, getVariantsForWords, getHebrewAffixes,
+} from './db.js';
+import { decodeMorphCode, splitHebrewWord } from './grammar-decode.js';
 
 const EMPTY_MSG        = 'Select a verse to see its original-language text.';
 const NO_DATA_MSG      = 'No original-language data for this verse yet.';
@@ -24,6 +27,14 @@ const UNAVAILABLE_MSG  = 'Original-language data is unavailable.';
 
 let currentVerseIds      = [];   // last selection this tab was asked to show
 let lastInterlinearWords = null; // cached render input, for re-renders on tap
+
+// Hebrew word anatomy (Hebrew_Word_Anatomy_Spec), fetched with the verse words —
+// one batched query each for the whole selection, never one per word.
+// Empty maps (one-piece words, Greek, or a failed lookup) mean the plain
+// single-code display.
+let lastPieces   = new Map();   // wordId -> getPiecesForWords() entry
+let lastVariants = new Map();   // wordId -> getVariantsForWords() entry
+let hebrewAffixes = null;       // getHebrewAffixes(), loaded once
 
 // Which row's card is open, and which of its member words have tier 2/tier 3
 // expanded. Invariant: the two sets only ever hold ids belonging to the
@@ -56,11 +67,26 @@ export async function renderLanguageTab(verseIds) {
         return;
     }
 
+    const hebrewIds = words.filter(w => w.language === 'hebrew').map(w => w.id);
+    let pieces = new Map(), variants = new Map();
+    if (hebrewIds.length > 0) {
+        try {
+            [pieces, variants, hebrewAffixes] = await Promise.all([
+                getPiecesForWords(hebrewIds), getVariantsForWords(hebrewIds), hebrewAffixes || getHebrewAffixes(),
+            ]);
+        } catch (e) {
+            console.error('renderLanguageTab: failed to load Hebrew word pieces/variants:', e);
+            pieces = new Map(); variants = new Map();
+        }
+    }
+
     // Selection may have changed while the (lazy-loaded) query was in flight —
     // discard a stale result rather than render over a newer selection.
     if (requestIds !== currentVerseIds) return;
 
     lastInterlinearWords = words;
+    lastPieces = pieces;
+    lastVariants = variants;
     await renderInterlinear(container, words);
 }
 
@@ -285,6 +311,16 @@ async function renderCardMember(word, isHebrew) {
         member.appendChild(morph);
     }
 
+    // Aramaic words (Daniel 2:4b-7:28, Ezra 4:8-6:18 and 7:12-26, Jer 10:11)
+    // are labelled; Hebrew is the default for the OT and gets none. Derived
+    // from the tagging as it stands: TAHOT's Aramaic codes begin with "A".
+    if (word.language === 'hebrew' && (word.morph_code || '').startsWith('A')) {
+        const language = document.createElement('div');
+        language.className = 'language-card-language';
+        language.textContent = 'Aramaic';
+        member.appendChild(language);
+    }
+
     const moreBtn = document.createElement('button');
     moreBtn.type = 'button';
     moreBtn.className = 'language-card-more-btn';
@@ -327,20 +363,26 @@ async function renderTier2(word, isHebrew, tier3Open) {
         tier2.appendChild(morphCode);
     }
 
-    // Called unconditionally for both languages — decodeMorphCode is
-    // Greek-only by data source (TEGMC) and returns [] for anything it can't
-    // decode, so Hebrew rows fall back to showing just the raw code above
-    // with no parsed lines. Hebrew's own decode (TEHMC) is a documented,
-    // separate follow-up (Grammar_Decode_Spec_DRAFT.md) — not implemented
-    // here, and not blocked on anything in this file.
+    // Called for both languages: Greek decodes from TEGMC, Hebrew/Aramaic from
+    // TEHMC (one entry per piece of the word). A multi-piece Hebrew word gets
+    // the anatomy view; a one-piece word, or one splitHebrewWord can't split,
+    // gets the plain decoded lines exactly like Greek.
     let parts = [];
     try {
         parts = await decodeMorphCode(word.morph_code);
     } catch (e) {
         console.error('renderTier2: morphology decode failed:', e);
     }
-    if (parts.length > 0) {
+    const anatomy = isHebrew ? splitHebrewWord(word, lastPieces.get(word.id), hebrewAffixes) : null;
+    if (anatomy && parts.length === anatomy.reduce((n, subword) => n + subword.pieces.length, 0)) {
+        tier2.appendChild(renderAnatomy(anatomy, parts));
+    } else if (parts.length > 0) {
         tier2.appendChild(await renderMorphDecodeBody(parts));
+    }
+
+    const variant = isHebrew ? lastVariants.get(word.id) : null;
+    if (variant && variant.ketivHebrew && !ketivMatchesPrinted(variant.ketivHebrew, word.surface_text)) {
+        tier2.appendChild(renderKetiv(variant));
     }
 
     appendDetailField(tier2, 'General usage', word.gloss_dictionary);
@@ -371,6 +413,137 @@ async function renderTier2(word, isHebrew, tier3Open) {
     }
 
     return tier2;
+}
+
+// ---- Hebrew word anatomy (Hebrew_Word_Anatomy_Spec, Item 7) ----------------
+
+const ROLE_LABELS = { prefix: 'Prefix', root: 'Word', suffix: 'Suffix' };
+
+// Column 12 writes a few affix glosses as symbols or abbreviations; these are
+// display forms only — hebrew_affixes keeps TAHOT's text (H9001 "&", H9008
+// "¿", H9012/H9013 "emph.").
+const AFFIX_GLOSS_DISPLAY = { '&': 'and', '¿': '(question)', 'emph.': '(emphasis)' };
+
+// One block per piece in reading order: the piece's Hebrew, its role, this
+// occurrence's gloss for it, and its decoded lines. A word written as two
+// words in one row ("//", mostly Qere readings) shows one group per written
+// word, each under its own Hebrew. `parts` is decodeMorphCode's output for the
+// same word — one entry per piece, in the same order.
+function renderAnatomy(anatomy, parts) {
+    const body = document.createElement('div');
+    body.className = 'language-anatomy';
+    const singleRoot = anatomy.flatMap(s => s.pieces).filter(p => p.role === 'root').length === 1;
+    let partIndex = 0;
+
+    for (const subword of anatomy) {
+        const group = document.createElement('div');
+        group.className = 'language-anatomy-subword';
+        if (anatomy.length > 1) {
+            const heading = document.createElement('div');
+            heading.className = 'language-anatomy-subword-heading language-hebrew';
+            heading.dir = 'rtl';
+            heading.textContent = subword.surface;
+            group.appendChild(heading);
+        }
+        for (const piece of subword.pieces) {
+            group.appendChild(renderPiece(piece, parts[partIndex++], singleRoot));
+        }
+        body.appendChild(group);
+    }
+    return body;
+}
+
+function renderPiece(piece, part, singleRoot) {
+    const block = document.createElement('div');
+    block.className = `language-piece language-piece-${piece.role}`;
+
+    const header = document.createElement('div');
+    header.className = 'language-piece-header';
+
+    const hebrew = document.createElement('span');
+    hebrew.className = 'language-piece-hebrew language-hebrew';
+    hebrew.dir = 'rtl';
+    hebrew.textContent = piece.surface;
+    header.appendChild(hebrew);
+
+    const role = document.createElement('span');
+    role.className = 'language-piece-role';
+    role.textContent = ROLE_LABELS[piece.role];
+    header.appendChild(role);
+
+    if (piece.glossContextual) {
+        const gloss = document.createElement('span');
+        gloss.className = 'language-piece-gloss';
+        gloss.textContent = `“${piece.glossContextual}”`;
+        header.appendChild(gloss);
+    }
+    block.appendChild(header);
+
+    // A piece's general gloss, when it says something this occurrence's
+    // doesn't (בַּ used here as "with the", generally "in"). A one-root word's
+    // root gloss is already the word's own "General usage" field below.
+    const general = piece.role === 'root' ? piece.dictionaryGloss
+        : (AFFIX_GLOSS_DISPLAY[piece.dictionaryGloss] ?? piece.dictionaryGloss);
+    if (general && !(piece.role === 'root' && singleRoot)
+        && general.toLowerCase() !== (piece.glossContextual || '').toLowerCase()) {
+        const generalEl = document.createElement('div');
+        generalEl.className = 'language-piece-general';
+        generalEl.textContent = `General usage: ${general}`;
+        block.appendChild(generalEl);
+    }
+
+    if (part.lines.length === 0) {
+        const code = document.createElement('div');
+        code.className = 'language-morph-decode-line';
+        code.textContent = part.code;
+        block.appendChild(code);
+    }
+    for (const line of part.lines) {
+        const lineEl = document.createElement('div');
+        lineEl.className = 'language-morph-decode-line';
+        lineEl.textContent = line;
+        block.appendChild(lineEl);
+    }
+    return block;
+}
+
+// The Ketiv: the consonants as written, where the text follows the Qere (the
+// reading aloud). Q(K) — the written form reads differently; Q(k) — spelling
+// only.
+const KETIV_NOTES = {
+    meaning: 'The text is read as shown above (Qere); the written consonants differ and give a different reading.',
+    spelling: 'Spelling difference only.',
+};
+
+function renderKetiv(variant) {
+    const wrap = document.createElement('div');
+    wrap.className = 'language-ketiv';
+
+    const field = document.createElement('div');
+    field.className = 'language-detail-field';
+    const label = document.createElement('span');
+    label.className = 'language-detail-label';
+    label.textContent = 'Written (Ketiv)';
+    const value = document.createElement('span');
+    value.className = 'language-detail-value language-ketiv-hebrew language-hebrew';
+    value.dir = 'rtl';
+    value.textContent = variant.ketivHebrew;
+    field.appendChild(label);
+    field.appendChild(value);
+    wrap.appendChild(field);
+
+    const note = document.createElement('div');
+    note.className = 'language-ketiv-note';
+    note.textContent = KETIV_NOTES[variant.ketivKind];
+    wrap.appendChild(note);
+    return wrap;
+}
+
+// One row (Dan 4:32 #22) gives a Ketiv identical to the printed word; a Ketiv
+// line there would show the same word twice under "differ", so it is skipped.
+function ketivMatchesPrinted(ketiv, surface) {
+    const bare = text => text.replace(/\\[^/\\]*/g, '').replace(/[/\s]/g, '');
+    return bare(ketiv) === bare(surface);
 }
 
 // Parsed-morphology lines — same content the old collapsed "What does this
