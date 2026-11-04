@@ -79,7 +79,19 @@ Chunked rendering would have left most of that in place and put editing, scroll-
 
 **The query timers are fixed.** `query_*_ms` and `refresh_queries_ms` now run in a task of their own. Those figures elsewhere in this report, including the "Refresh queries" columns above and the query columns below, were measured the old way and understate the real cost, by up to about 5× where the time is mostly statement overhead. Timed the new way, 40y 1× refresh queries take 3.5 ms, not 2. This also explains the earlier gap between the 90 ms refresh and the two isolated lookups: those lookups weren't timed in a task. Render and block figures were never affected, because they time the app itself.
 
-**A lead on all queries, not acted on:** the extra cost per statement seems to come from SQLite's check for a leftover journal file. With `PRAGMA locking_mode=EXCLUSIVE`, which skips that check, a statement fell from 0.25 ms to 0.02 ms in every context. See `TODO.md`.
+**`PRAGMA locking_mode=EXCLUSIVE`: tested, not adopted.** The extra cost per statement seems to come from SQLite's check for a leftover journal file. This pragma skips that check, and a single statement fell from 0.25 ms to 0.02 ms, which looked like a gain for every query. On real operations it barely shows, because batching has already removed most of the statements and what's left is mostly layout, paint and `export()`. Measured in Chromium, alternating with and without the pragma on the same page, with it reapplied after every export and to every open database. Figures are medians in ms:
+
+| Operation | 40y at 1× | 40y at 4× | 10y at 4× |
+|---|---|---|---|
+| `search()` query | 29.5 → 15.5 | 143 → 75 | 148 → 69 |
+| Refresh queries | 2.0 → 1.0 | 8.5 → 3.4 | 8.2 → 2.2 |
+| `updateNote()`, including export | 108 → 96 | 402 → 386 | 184 → 176 |
+| John 3:16 render | 152 → 149 | 687 → 673 | 207 → 187 |
+| Hot-study render | 244 → 244 | 1,138 → 1,139 | 292 → 289 |
+| All Studies render | 82 → 79 | 380 → 365 | 106 → 104 |
+| Cold boot to live | 616 → 606 | 2,026 → 2,044 | 1,439 → 1,410 |
+
+Only the search and refresh rows are clearly separated. The other differences are within the spread between rounds, except the John 3:16 render at 10y 4×. Search gains the most, but about 70 ms at 4× wouldn't change how it feels. Against that, `export()` closes and reopens the connection (see `sql-wasm.js`), so the pragma is lost on every save and would have to be reapplied after each one, on the path that protects user data. Worth revisiting only if a statement-heavy feature appears.
 
 ### Thresholds after the fixes
 

@@ -18,10 +18,9 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 
 | To-do | Why it matters | Size | Source |
 |---|---|---|---|
-| **Try `PRAGMA locking_mode=EXCLUSIVE`** | It took a SQL statement from 0.25 ms to 0.02 ms, which would speed up every query in the app. Not tested across a save: `export()` may close and reopen the connection, which would reset the pragma, so it may need reapplying. | Small, but touches every database open | `docs/STRESS_TEST_RESULTS.md`, "Long lists, fixed" |
 | **Speed up markup lookups** | `getMarkupsForChapter()` still uses the old one-sided overlap test. Psalm 119 renders in 93 ms at 40 years of data, so this can wait. | Small | `docs/BUILD_6.1_ACTUAL_STATE.md` §12 |
 
-**Not recommended on current numbers:** splitting user data into its own database (remedy 5) or replacing sql.js (remedy 6). The reasoning is in "My read now that 1 to 3 are done", under "Candidate remedies" in `docs/STRESS_TEST_RESULTS.md`.
+**Not recommended on current numbers:** splitting user data into its own database (remedy 5) or replacing sql.js (remedy 6). The reasoning is in "My read now that 1 to 3 are done", under "Candidate remedies" in `docs/STRESS_TEST_RESULTS.md`. `PRAGMA locking_mode=EXCLUSIVE` was tested and not adopted; see "Long lists, fixed" in the same file.
 
 ## Documentation
 
