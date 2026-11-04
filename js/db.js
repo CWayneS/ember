@@ -5,6 +5,13 @@ import { resolveUsfmRef } from './usfm.js';
 const CROSSREF_VOTE_FLOOR_DEFAULT = 5;
 const CROSSREF_TOP_N_DEFAULT      = 25;
 
+const NOTES_FTS_REPAIRED_KEY = 'notes_fts_repaired';
+
+// Anchors spanning more than this many verse-id units (about five chapters) are
+// the rare "long" ones, kept in their own partial index — see anchorsOverlapping().
+const LONG_ANCHOR_SPAN = 5000;
+const IS_LONG_ANCHOR   = `COALESCE(verse_end, verse_start) - verse_start > ${LONG_ANCHOR_SPAN}`;
+
 const BUNDLED_PLAN_FILES = [
     'mcheyne-1year.json',
     'bible-in-a-year-canonical.json',
@@ -140,10 +147,11 @@ async function seedTranslations() {
     let seeded = 0;
 
     for (const { filename } of rows) {
-        // Skip if already in OPFS.
+        // Skip if already in OPFS and whole. A tab closed mid-seed leaves an empty
+        // file behind (see getCompleteOpfsFile), which seeds again here.
         try {
-            await transDir.getFileHandle(filename);
-            continue;
+            const existing = await transDir.getFileHandle(filename);
+            if (await isCompleteSqliteFile(await existing.getFile())) continue;
         } catch (_) {}
 
         // Not yet seeded — fetch and write.
@@ -201,7 +209,7 @@ async function loadTranslationBuffer(filename) {
             const transDir = await root.getDirectoryHandle('translations');
             const handle   = await transDir.getFileHandle(filename);
             const file     = await handle.getFile();
-            return await file.arrayBuffer();
+            if (await isCompleteSqliteFile(file)) return await file.arrayBuffer();
         } catch (_) {
             // Not in OPFS — fall through to network.
         }
@@ -470,6 +478,7 @@ function createUserTables() {
     db.run(`
         CREATE INDEX IF NOT EXISTS idx_anchors_note  ON note_anchors(note_id);
         CREATE INDEX IF NOT EXISTS idx_anchors_verse ON note_anchors(verse_start);
+        CREATE INDEX IF NOT EXISTS idx_anchors_long  ON note_anchors(verse_start) WHERE ${IS_LONG_ANCHOR};
     `);
 
     db.run(`
@@ -562,6 +571,20 @@ function createUserTables() {
 
     migratePlanTables();
     ensureMetaTable();
+    repairNotesSearchIndexOnce();
+}
+
+// updateNote() used to update `notes` before deleting from `notes_fts`, which
+// left every edited note's old words in the index and made PRAGMA
+// integrity_check report it as malformed (see updateNote). Rebuilding from
+// `notes` repairs that. The marker lives in core.db itself, so restoring a
+// backup made before the fix repairs that file too.
+function repairNotesSearchIndexOnce() {
+    if (getState(NOTES_FTS_REPAIRED_KEY)) return;
+    if (queryValue(db, 'SELECT COUNT(*) FROM notes') > 0) {
+        db.run("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')");
+    }
+    setState(NOTES_FTS_REPAIRED_KEY, '1');
 }
 
 // Build 4: single-row descriptive table. Created idempotently; the row is
@@ -1023,8 +1046,35 @@ export async function restoreCoreDb(bytes) {
 // blocks on OPFS/IndexedDB. db.export() (WASM serialization) still runs
 // synchronously here, but the actual disk write is off-thread.
 function saveToStorage(data) {
-    // Transfer the underlying ArrayBuffer — zero-copy, no clone needed.
+    // Transfer the underlying ArrayBuffer — zero-copy, no clone needed. The worker
+    // transfers it back when the write is done (see storage-worker.js); nothing
+    // here needs to listen, since all that's left to do is let it be collected.
     getStorageWorker().postMessage(data, [data.buffer]);
+}
+
+// Browsers can clear a site's data under storage pressure unless it has been
+// granted persistence, and core.db is the only copy of someone's notes. Asked
+// once there is something to protect: Chromium decides silently, but Firefox
+// shows a prompt, so the first ask waits for a first note and repeats are spaced
+// out. Chromium's answer can change later (installing the app, for one).
+const PERSIST_REQUESTED_AT_KEY = 'ember.persist_requested_at';
+const PERSIST_RETRY_MS = 30 * 24 * 60 * 60 * 1000;
+
+export async function isStoragePersisted() {
+    return await navigator.storage?.persisted?.() ?? false;
+}
+
+export async function requestPersistentStorageIfDue() {
+    if (!navigator.storage?.persist) return;
+    if (queryValue(db, 'SELECT COUNT(*) FROM notes') === 0) return;
+    if (Date.now() - Number(localStorage.getItem(PERSIST_REQUESTED_AT_KEY)) < PERSIST_RETRY_MS) return;
+    try {
+        if (await navigator.storage.persisted()) return;
+        localStorage.setItem(PERSIST_REQUESTED_AT_KEY, String(Date.now()));
+        await navigator.storage.persist();
+    } catch (e) {
+        console.warn('requestPersistentStorageIfDue: could not request persistent storage:', e);
+    }
 }
 
 async function loadFromStorage() {
@@ -1033,7 +1083,12 @@ async function loadFromStorage() {
             const root = await navigator.storage.getDirectory();
             const handle = await root.getFileHandle('core.db');
             const file = await handle.getFile();
-            return await file.arrayBuffer();
+            // Empty means a tab closed during the very first save (see
+            // getCompleteOpfsFile), so nothing was ever stored: carry on as a first
+            // run. Deliberately no stricter than that. initDatabase() replaces
+            // whatever isn't returned here, and this file is someone's notes, so
+            // anything else, even if damaged, is left in place to fail visibly.
+            if (file.size > 0) return await file.arrayBuffer();
         } catch (e) {
             // Fall through to IndexedDB
         }
@@ -1198,15 +1253,35 @@ export function getTopicVerseCount(topicName) {
     );
 }
 
+// SQL and params for "anchor row `a` overlaps [rangeStart, rangeEnd]", the one
+// form every note_anchors lookup should use (docs/ANCHOR_QUERIES.md). The plain
+// test, verse_start <= end AND COALESCE(verse_end, verse_start) >= start, can only
+// narrow by one side, so it walks most of the table. Instead: an anchor no longer
+// than LONG_ANCHOR_SPAN that overlaps must start within that distance of the
+// range, and the few longer ones (a whole book, a whole Testament) are searched
+// separately. Callers put note_anchors first with a CROSS JOIN, since left to
+// itself the planner starts from `n.parent_note_id IS NULL`, which every note matches.
+function anchorsOverlapping(rangeStart, rangeEnd) {
+    return {
+        sql: `a.id IN (
+                  SELECT id FROM note_anchors WHERE verse_start BETWEEN ? AND ?
+                  UNION ALL
+                  SELECT id FROM note_anchors WHERE ${IS_LONG_ANCHOR} AND verse_start <= ?
+              ) AND COALESCE(a.verse_end, a.verse_start) >= ?`,
+        params: [rangeStart - LONG_ANCHOR_SPAN, rangeEnd, rangeEnd, rangeStart],
+    };
+}
+
 export function getUserTagsForVerse(verseId) {
+    const overlap = anchorsOverlapping(verseId, verseId);
     return queryAll(db,
-        `SELECT DISTINCT tg.name FROM tags tg
-         JOIN tag_assignments ta ON ta.tag_id = tg.id
-         JOIN notes n ON n.id = ta.note_id
-         JOIN note_anchors a ON a.note_id = n.id
-         WHERE a.verse_start <= ? AND COALESCE(a.verse_end, a.verse_start) >= ?
+        `SELECT DISTINCT tg.name
+         FROM note_anchors a
+         CROSS JOIN tag_assignments ta ON ta.note_id = a.note_id
+         CROSS JOIN tags tg ON tg.id = ta.tag_id
+         WHERE ${overlap.sql}
          ORDER BY tg.name`,
-        [verseId, verseId]
+        overlap.params
     ).map(r => r.name);
 }
 
@@ -1248,15 +1323,19 @@ export function saveNote(body, anchors, tagNames, studyId = null) {
     }
 
     saveToStorage(db.export());
+    requestPersistentStorageIfDue();
     return noteId;
 }
 
 export function updateNote(noteId, body) {
+    // notes_fts is an external-content table: its DELETE finds the words to remove
+    // by reading the row's current text from `notes`, so it has to run while that
+    // is still the old text.
+    db.run('DELETE FROM notes_fts WHERE rowid = ?', [noteId]);
     db.run(
         "UPDATE notes SET body = ?, modified_at = datetime('now') WHERE id = ?",
         [body, noteId]
     );
-    db.run('DELETE FROM notes_fts WHERE rowid = ?', [noteId]);
     db.run('INSERT INTO notes_fts(rowid, body) VALUES (?, ?)', [noteId, body]);
 
     // Propagate modified_at to the parent study if one exists
@@ -1288,16 +1367,17 @@ export function deleteNote(noteId) {
 }
 
 export function getNotesForVerse(verseId) {
+    const overlap = anchorsOverlapping(verseId, verseId);
     const results = queryAll(db,
         `SELECT DISTINCT n.id, n.body, n.created_at, n.modified_at,
                 n.study_id, s.name AS study_name
-         FROM notes n
-         JOIN note_anchors a ON a.note_id = n.id
+         FROM note_anchors a
+         CROSS JOIN notes n ON n.id = a.note_id
          LEFT JOIN studies s ON s.id = n.study_id
-         WHERE a.verse_start <= ? AND COALESCE(a.verse_end, a.verse_start) >= ?
+         WHERE ${overlap.sql}
          AND n.parent_note_id IS NULL
-         ORDER BY n.created_at DESC`,
-        [verseId, verseId]
+         ORDER BY n.created_at DESC, n.id DESC`,
+        overlap.params
     );
     return attachTagsAndAnchors(results);
 }
@@ -1314,13 +1394,14 @@ export function getNotesForVerse(verseId) {
 export function getNoteCountsForChapter(bookId, chapter) {
     const chapterStart = makeVerseId(bookId, chapter, 0);
     const chapterEnd   = makeVerseId(bookId, chapter, 999);
+    const overlap = anchorsOverlapping(chapterStart, chapterEnd);
     const anchors = queryAll(db,
         `SELECT a.note_id, a.verse_start, COALESCE(a.verse_end, a.verse_start) AS verse_end
          FROM note_anchors a
-         JOIN notes n ON n.id = a.note_id
-         WHERE a.verse_start <= ? AND COALESCE(a.verse_end, a.verse_start) >= ?
+         CROSS JOIN notes n ON n.id = a.note_id
+         WHERE ${overlap.sql}
            AND n.parent_note_id IS NULL`,
-        [chapterEnd, chapterStart]
+        overlap.params
     );
 
     const noteIdsByVerse = new Map();

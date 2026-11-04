@@ -2,7 +2,7 @@
 
 Spec: `Offline_Language_And_Stress_Test_Spec.md`, Item 2. **Question:** if one person uses Ember seriously for 40 years, does it stay fast and stable? Where does it start to hurt, and why?
 
-Measurement only. No app code was changed for this item, and nothing here has been fixed. The thresholds are the spec's proposed starting points, for you to adjust.
+The measurement itself changed no app code. The fixes you chose afterward are recorded under "After the fixes". The thresholds are the spec's proposed starting points, for you to adjust.
 
 ---
 
@@ -10,7 +10,7 @@ Measurement only. No app code was changed for this item, and nothing here has be
 
 **Ember stays stable, and most of it stays fast, through 40 years of heavy use.** Nothing crashed, lost data, or logged a console error at any profile. Boot and search are in the spec's "Good" band even at 40 years on a throttled CPU.
 
-Three things degrade, all gradually:
+As first measured, three things degraded, all gradually. The second and third are now much improved, and the first is still open:
 
 1. **Very long lists.** A 500-note study takes 628 ms to open and a 2,000-note study 2.6 s. Cost follows the size of the list, about 1.3 ms per note, not the age of the data. A study passes the 200 ms threshold at roughly 150 notes (my extrapolation from that rate).
 2. **Autosave stutter.** Each save blocks the main thread for 60 ms at 10 years and 168 ms at 40. That crosses the "typing feels sticky" line (150 ms) only near year 40 on this machine, but already at year 10 on a CPU 4× slower.
@@ -18,11 +18,129 @@ Three things degrade, all gradually:
 
 **The spec's leading suspect is only part of the story.** Today, 98% of what every write re-exports is reference data. At 40 years it's 19%, because by then your own notes are the bulk of the file. Splitting the databases helps most in the years when it's needed least.
 
-**A separate bug turned up, and it affects every install today, not just old ones:** any note edit leaves the search index inconsistent with the notes. Your note text is safe, and the bug is cheap to fix. See "Found along the way".
+**A separate bug turned up and is now fixed:** any note edit left the search index inconsistent with the notes. See "Found along the way".
 
 ---
 
-## Results
+## After the fixes
+
+Two of the remedies below (1 and 2) and the search-index bug are now fixed. Everything from "Results" down to "Candidate remedies" describes Ember **before** those fixes, because that's what the diagnosis was based on. These are the same measurements re-run on the fixed code, with the data regenerated from a fresh base. `python3 tests/stress.py all` now reproduces this section's numbers.
+
+| Profile | Block per autosave, before (ms) | After | Refresh queries, before (ms) | After | Highest RSS during autosaves, before (MB) | After |
+|---|---|---|---|---|---|---|
+| 0y 1× | 0 (Good) | 0 (Good) | 2 | 1 | 731 | 358 |
+| 0y 4× | 104 (Watch) | 111 (Watch) | 4 | 4 | 803 | 242 |
+| 1y 1× | 0 (Good) | 0 (Good) | 3 | 1 | 804 | 280 |
+| 1y 4× | 128 (Watch) | 128 (Watch) | 16 | 8 | 804 | 279 |
+| 10y 1× | 60 (Watch) | 0 (Good) | 25 | 2 | 1,142 | 421 |
+| 10y 4× | 324 (Problem) | 212 (Problem) | 95 | 24 | 1,144 | 421 |
+| 25y 1× | 108 (Watch) | 72 (Watch) | 56 | 2 | 1,276 | 392 |
+| 25y 4× | 619 (Problem) | 304 (Problem) | 227 | 12 | 897 | 479 |
+| 40y 1× | 168 (Problem) | 84 (Watch) | 90 | 2 | 1,187 | 586 |
+| 40y 4× | 903 (Problem) | 361 (Problem) | 325 | 5 | 1,189 | 585 |
+
+Block is the median per save. RSS is the highest of the samples taken every 5 saves, leaving out the first, which is taken before any autosave.
+
+- **Typing is better at every age from 10 years up.** The "typing feels sticky" line is no longer crossed at 1× at any age: 40 years is now Watch, not Problem, and 10 years is back to Good. On a 4× slower CPU, 10 years and up stay in Problem, but with far lower numbers (40y: 903 → 361 ms). What's left is mostly `export()`, which these fixes don't touch. These are medians, and an occasional save still blocks longer (slowest at 40y: 206 ms; at 10y: 326 ms).
+- **The anchor fix did better than I predicted.** I estimated it would save about half of the refresh cost. It took the 40-year refresh from 90 ms to 2 ms. The old 90 ms was already more than the two isolated lookups accounted for, and I didn't separate why, but all of it went.
+- **Memory no longer climbs by a file's worth per save.** At 40 years the sampled RSS now stays around 465–586 MB, where it used to reach 1,189 MB before settling. A buffer is still in memory while its write is in flight, so writes in quick succession can still stack up briefly, and the "Peak" column below reflects that: the harness fires 2 setup writes and 3 rapid timing writes on purpose, in both the before and after runs, so that column overstates ordinary typing.
+- **Unchanged, as expected:** long-list rendering (the 2,000-note study still takes about 2.5 s), `export()` time, and boot. Single-sample figures like Restore vary between runs (40y 1×: 1,515 → 2,230 ms, but 4×: 3,086 → 2,899 ms), so I wouldn't read anything into that difference.
+- **Stability:** no console errors at any profile, every autosave's text intact, and 0 of 30 write bursts lost their last write.
+
+### Thresholds after the fixes
+
+| Measurement | At 1× | At 4× |
+|---|---|---|
+| Block per autosave | 25y Watch, never Problem | 0y Watch, 10y Problem |
+| Hot-study render | 10y Problem | 1y Watch, 10y Problem |
+| John 3:16 render | 25y Watch | 10y Watch, 25y Problem |
+| RSS after boot | 40y Watch | 40y Watch |
+| Boot, notes search | Never | Never |
+
+Psalm 119 and All Studies stay Good at every age at 1×. At 4×, Psalm 119 moves between Good and Watch from 10y, and All Studies reaches Watch at 10y and Problem at 40y.
+
+### Full tables, fixed code
+
+**Boot, writes, restore, backup**
+
+| Profile | core.db MB | Boot to live ms | export() ms | Block per autosave ms (median / max) | Worker write ms | Restore ms | Backup ms | Backup MB | Storage MB |
+|---|---|---|---|---|---|---|---|---|---|
+| 0y 1× | 24.4 | 366 (Good) | 14 | 0 (Good) / 0 | 103 | 441 | 61 | 24.4 | 135.9 |
+| 0y 4× | 24.4 | 1,087 (Good) | 59 | 111 (Watch) / 121 | 113 | 1,374 | 165 | 24.4 | 135.9 |
+| 1y 1× | 27.0 | 386 (Good) | 16 | 0 (Good) / 68 | 126 | 467 | 73 | 27.7 | 138.5 |
+| 1y 4× | 27.0 | 1,416 (Good) | 69 | 128 (Watch) / 276 | 175 | 1,566 | 175 | 27.7 | 138.5 |
+| 10y 1× | 49.9 | 586 (Good) | 34 | 0 (Good) / 326 | 261 | 806 | 137 | 56.3 | 161.4 |
+| 10y 4× | 49.9 | 1,621 (Good) | 140 | 212 (Problem) / 1,223 | 336 | 1,915 | 464 | 56.3 | 161.4 |
+| 25y 1× | 88.2 | 617 (Good) | 54 | 72 (Watch) / 223 | 407 | 1,389 | 250 | 92.8 | 199.7 |
+| 25y 4× | 88.2 | 2,026 (Good) | 232 | 304 (Problem) / 1,099 | 556 | 2,683 | 659 | 92.8 | 199.7 |
+| 40y 1× | 126.5 | 604 (Good) | 70 | 84 (Watch) / 206 | 486 | 2,230 | 278 | 127.8 | 238.0 |
+| 40y 4× | 126.5 | 1,977 (Good) | 296 | 361 (Problem) / 946 | 550 | 2,899 | 723 | 127.8 | 238.0 |
+
+**Memory (MB)**
+
+| Profile | RSS after boot | JS heap after boot | RSS after autosaves | Peak RSS during autosaves | RSS after forced GC | Fresh tab, verse selected: RSS | After language.db opens: RSS | Language tab adds | Open tab ms |
+|---|---|---|---|---|---|---|---|---|---|
+| 0y 1× | 271 (Good) | 148 | 409 | 409 | 261 | 280 | 341 | 61 | 169 |
+| 0y 4× | 270 (Good) | 148 | 360 | 383 | 238 | 280 | 341 | 61 | 450 |
+| 1y 1× | 284 (Good) | 153 | 388 | 388 | 277 | 290 | 347 | 57 | 217 |
+| 1y 4× | 284 (Good) | 153 | 390 | 416 | 250 | 291 | 347 | 56 | 498 |
+| 10y 1× | 243 (Good) | 197 | 648 | 648 | 363 | 252 | 379 | 127 | 217 |
+| 10y 4× | 242 (Good) | 197 | 640 | 655 | 362 | 251 | 379 | 128 | 582 |
+| 25y 1× | 288 (Good) | 274 | 742 | 810 | 648 | 296 | 422 | 126 | 224 |
+| 25y 4× | 287 (Good) | 274 | 869 | 956 | 467 | 295 | 422 | 127 | 580 |
+| 40y 1× | 332 (Watch) | 351 | 974 | 1199 | 571 | 336 | 465 | 129 | 176 |
+| 40y 4× | 332 (Watch) | 351 | 953 | 1023 | 449 | 337 | 403 | 66 | 591 |
+
+**RSS during the autosave run (MB, every 5 saves)**
+
+| Profile | Series |
+|---|---|
+| 0y 1× | 236 → 358 → 241 → 264 → 288 |
+| 0y 4× | 236 → 240 → 240 → 241 → 242 |
+| 1y 1× | 248 → 251 → 253 → 280 → 254 |
+| 1y 4× | 273 → 251 → 252 → 279 → 253 |
+| 10y 1× | 445 → 370 → 313 → 421 → 368 |
+| 10y 4× | 444 → 369 → 312 → 421 → 367 |
+| 25y 1× | 635 → 392 → 390 → 390 → 390 |
+| 25y 4× | 635 → 390 → 479 → 389 → 478 |
+| 40y 1× | 827 → 583 → 586 → 465 → 586 |
+| 40y 4× | 827 → 584 → 464 → 585 → 463 |
+
+**Where the time goes (ms)**
+
+| Profile | updateNote() | of which export() | Refresh queries | John 3:16 query / total | Hot study query / total | All Studies query / total |
+|---|---|---|---|---|---|---|
+| 0y 1× | 17 | 14 | 1 | 0 / 32 |  /  | 0 / 32 |
+| 0y 4× | 74 | 59 | 4 | 1 / 32 |  /  | 1 / 27 |
+| 1y 1× | 20 | 16 | 1 | 2 / 32 | 7 / 89 | 1 / 27 |
+| 1y 4× | 91 | 69 | 8 | 9 / 90 | 49 / 374 | 4 / 41 |
+| 10y 1× | 51 | 34 | 2 | 11 / 114 | 83 / 723 | 4 / 50 |
+| 10y 4× | 229 | 140 | 24 | 80 / 538 | 403 / 3,798 | 17 / 232 |
+| 25y 1× | 55 | 54 | 2 | 24 / 247 | 156 / 1,631 | 8 / 104 |
+| 25y 4× | 286 | 232 | 12 | 161 / 1,442 | 791 / 9,633 | 34 / 540 |
+| 40y 1× | 81 | 70 | 2 | 40 / 342 | 216 / 2,476 | 12 / 153 |
+| 40y 4× | 365 | 296 | 5 | 154 / 1,668 | 1,106 / 12,298 | 67 / 723 |
+
+**Hot-spot rendering (ms to painted; [count rendered])**
+
+| Profile | John 3:16 (cards) | Psalm 119 (marked verses) | Hot study (notes) | All Studies |
+|---|---|---|---|---|
+| 0y 1× | 32 (Good) [0] | 32 (Good) [0] |  [] | 32 (Good) |
+| 0y 4× | 32 (Good) [0] | 68 (Good) [0] |  [] | 27 (Good) |
+| 1y 1× | 32 (Good) [8] | 31 (Good) [158] | 89 (Good) [50] | 27 (Good) |
+| 1y 4× | 90 (Good) [8] | 102 (Good) [158] | 374 (Watch) [50] | 41 (Good) |
+| 10y 1× | 114 (Good) [77] | 32 (Good) [162] | 723 (Problem) [500] | 50 (Good) |
+| 10y 4× | 538 (Watch) [77] | 204 (Watch) [162] | 3,798 (Problem) [500] | 232 (Watch) |
+| 25y 1× | 247 (Watch) [192] | 41 (Good) [165] | 1,631 (Problem) [1250] | 104 (Good) |
+| 25y 4× | 1,442 (Problem) [192] | 186 (Good) [165] | 9,633 (Problem) [1250] | 540 (Watch) |
+| 40y 1× | 342 (Watch) [303] | 93 (Good) [171] | 2,476 (Problem) [2000] | 153 (Good) |
+| 40y 4× | 1,668 (Problem) [303] | 250 (Watch) [171] | 12,298 (Problem) [2000] | 723 (Problem) |
+
+The search figures and the size breakdown didn't change meaningfully. The new `idx_anchors_long` index holds only long anchors, and the generator makes none, so its cost here is close to nothing.
+
+---
+
+## Results (before the fixes)
 
 **Test machine:** Intel i5-7200U (2 cores, 4 threads, 2.5 GHz), 15 GB RAM, Fedora Linux with kernel 7.2.11, encrypted `/home` volume; headless Chromium 151, sql.js with SQLite 3.49.1. A modest baseline, so a current laptop should do better on the 1× rows.
 
@@ -194,7 +312,7 @@ The 0y and 1y runs were still climbing when their 20 saves ended, so their "afte
 
 ## Found along the way
 
-**Bug: every note edit leaves the search index inconsistent (not fixed; the spec keeps Item 2 to measurement).** `updateNote()` runs `UPDATE notes` first, then `DELETE FROM notes_fts`. `notes_fts` is an FTS4 external-content table, so that delete works out which words to remove by reading the row's *current* text, which by then is the new text. The old words are never removed.
+**Bug, now fixed: every note edit left the search index inconsistent.** `updateNote()` ran `UPDATE notes` first, then `DELETE FROM notes_fts`. `notes_fts` is an FTS4 external-content table, so that delete works out which words to remove by reading the row's *current* text, which by then was the new text. The old words were never removed.
 
 Tested through `db.js` in the running app, on a fresh profile with sql.js:
 
@@ -205,26 +323,28 @@ Tested through `db.js` in the running app, on a fresh profile with sql.js:
 | After `INSERT INTO notes_fts(notes_fts) VALUES('rebuild')` | no match | finds it | `ok` | intact |
 | Then an edit with the delete moved before the update | no match | finds it | `ok` | intact |
 
-- **What it means for you:** no note text is lost or damaged, because `notes` is the source of truth and only the index is wrong. Search for current words kept working, including after 20 further edits. But search can find a note for a word it no longer contains, autosave leaves every intermediate word behind, and SQLite's own integrity check now reports a problem on any install where a note has ever been edited. That includes yours, and it will carry through backups.
-- **Likely fix, tested above:** delete from `notes_fts` before updating `notes`, the order `deleteNoteRows()` already uses, plus one `rebuild` to repair existing installs. The rebuild's cost at 31,200 notes wasn't measured, so it should run once rather than on every boot.
-- **Effect on these results:** the generator inserts each note once, so its index is consistent, and this test doesn't capture index growth from edits. Real FTS sizes may run larger.
+- **What it meant:** no note text was lost or damaged, because `notes` is the source of truth and only the index was wrong. Search for current words kept working. But search could find a note for a word it no longer contained, autosave left every intermediate word behind, and SQLite's own integrity check reported a problem on any install where a note had ever been edited.
+- **The fix:** `updateNote()` now deletes from `notes_fts` first, the order `deleteNoteRows()` already used. Existing data is repaired by one `rebuild` at the next boot, which took about 2.2 s at 31,200 notes. The "done" marker lives inside `core.db`, so restoring a backup made before the fix repairs that file too. `tests/verify.py storage` covers all of this.
+- **Effect on these results:** the generator inserts each note once, so its index was consistent throughout, and this test doesn't capture index growth from the old behaviour. Real pre-fix indexes may have run larger.
+
+**Fixed: `core.db` had the same empty-file hole on a first boot.** An empty `core.db` in OPFS stopped the app at "Failed to load: no such table: translations", on every boot from then on. `createWritable` only leaves that empty file if the tab closes during the very first save, when there are no notes to lose, so a 0-byte file now simply starts over as a first run. This deliberately doesn't use `isCompleteSqliteFile()`, the check `language.db` and the translations use: `initDatabase()` replaces whatever `loadFromStorage()` doesn't return, so a wrong answer there would overwrite someone's notes. A damaged file with anything in it is left on disk and fails visibly (`tests/verify.py storage` checks both).
 
 ---
 
 ## Candidate remedies, ranked by expected benefit against disruption
 
-None implemented. The benefit estimates come from the numbers above, not from trying the remedies, except where noted.
+**Remedies 1 and 2 are done** (see "After the fixes"); 3 to 6 aren't. The table keeps the estimates as written before any of this was tried.
 
 | # | Remedy | Expected benefit | Disruption |
 |---|---|---|---|
-| 1 | **Bound anchor lookups on both sides**, with a query or index change to replace the scan. Needs some design, because anchor ranges can span chapters and books, and a planner hint alone isn't enough (tested above). | About half of the ~90 ms refresh at 40y (the ~50 ms the isolated lookups account for), so autosave likely falls from Problem to Watch. Helps every selection, for every user. | Small. `db.js` queries, verified with `dbsnapshot`/`dbcompare` against `docs/ANCHOR_QUERIES.md`. |
-| 2 | **Release export buffers sooner**, for example by recycling the storage worker periodically. | In the `gc()` probe, 40y autosaves added no peak at all: 771 MB before the first save, then a flat 462 MB, against a climb to 1,186 MB as shipped. A production mechanism is untested, since `gc()` needs a test flag. | Small. `storage-worker.js` and `saveToStorage()`. |
+| 1 ✓ | **Bound anchor lookups on both sides**, with a query or index change to replace the scan. Needs some design, because anchor ranges can span chapters and books, and a planner hint alone isn't enough (tested above). | About half of the ~90 ms refresh at 40y (the ~50 ms the isolated lookups account for), so autosave likely falls from Problem to Watch. Helps every selection, for every user. | Small. `db.js` queries, verified with `dbsnapshot`/`dbcompare` against `docs/ANCHOR_QUERIES.md`. |
+| 2 ✓ | **Release export buffers sooner**, for example by recycling the storage worker periodically. (Done differently: the worker transfers each buffer back to the main thread, which removes the climb and, unlike recycling, never reloads the worker script, so it can't lose a write that way.) | In the `gc()` probe, 40y autosaves added no peak at all: 771 MB before the first save, then a flat 462 MB, against a climb to 1,186 MB as shipped. A production mechanism is untested, since `gc()` needs a test flag. | Small. `storage-worker.js` and `saveToStorage()`. |
 | 3 | **Render long lists incrementally** (study documents, All Studies, Info cards). | The largest visible gain: a 2.6 s study open becomes roughly constant. Only matters past about 150 notes in one list. | Moderate. `notes.js` has to keep editing, scrolling to a note, and in-page find working. |
 | 4 | **Save less often while typing**: a longer debounce, or saving on idle or blur. | Fewer saves, so less disk writing and less memory churn. Doesn't shrink each save's block, so typing still stutters, just less often. | Small, with a trade-off: a little more unsaved text is at risk in a crash. |
 | 5 | **Split user data into its own database file**, so writes stop re-exporting reference data. | Large early, small late: each export shrinks 87% at 1y, 43% at 10y, 19% at 40y. That saves only about 13 ms of the 168 ms block at 40y, though on a slow CPU it could bring the early years' block near Good. | Moderate to high. Backup and restore format with compatibility for old backups, a migration of every install, and queries that join across the two (`bookmarks` to `books`, tag search to `topics`). |
 | 6 | **Page-level storage**, such as wa-sqlite's OPFS mode. | The only remedy that removes whole-file export: autosave blocking, disk volume and peak memory all drop, and boot may too. | Highest. Replaces sql.js, a vendored-dependency change against the zero-dependency rule. Such storage typically runs in a worker, which would make the queries async and touch every caller of `db.js`. |
 
-**My read:** none of these remedies is urgent, and the search-index bug above should come before all of them. On capable hardware the first threshold crossings come around year 10, at a heavy 15 notes a week. Remedies 1 and 2 are cheap and worth doing whenever convenient. Remedy 3 is worth doing if you expect studies past a couple of hundred notes. I wouldn't take on 5 or 6 on these numbers alone. If whole-file export ever becomes the real limit, 6 addresses it, whereas 5 mostly doesn't by the time it would matter.
+**My read now that 1 and 2 are done:** nothing left is urgent. Remedy 3 is the largest remaining gain and worth doing if you expect studies past a couple of hundred notes. I wouldn't take on 5 or 6 on these numbers alone. If whole-file export ever becomes the real limit, 6 addresses it, whereas 5 mostly doesn't by the time it would matter.
 
 ---
 
@@ -246,9 +366,11 @@ None implemented. The benefit estimates come from the numbers above, not from tr
 - **Note bodies** are sampled KJV phrases averaging about 1,560 chars. The target was about 1,500.
 - **The FTS index is bulk-built** in one pass rather than through years of incremental edits, so its segment layout differs from a real one and it misses the edit growth described under "Found along the way".
 - **Memory thresholds are judged against renderer RSS, not `performance.memory`.** The two don't track each other: the JS heap read 131 MB when RSS was 507 MB early on, and 351 MB against 331 MB RSS at 40 years. Both are reported. The spec's threshold applies only "after boot", so the much higher write-time peaks don't appear in the "Good" table above; they're flagged here instead.
-- **No app instrumentation.** `storage-worker.js` reports nothing back, so the harness serves a patched copy that posts when a write closes. An init script wraps `initSqlJs` and `Worker` from outside. No debug flag was needed. It boots via `localhost` so no service worker can serve the unpatched worker.
+- **No app instrumentation.** An init script wraps `initSqlJs` and `Worker` from outside, and no debug flag was needed. For the "before" runs `storage-worker.js` reported nothing back, so the harness served a patched copy that posted when a write closed. Since the buffer fix, the worker's own returned buffer is the signal and the patch is gone. The harness boots via `localhost`, so no service worker is involved.
+- **"RSS after autosaves" and "Peak" include 3 rapid timing writes** made right after the 20 saves, and the first RSS sample follows 2 setup writes, in both the before and after runs. The every-5-saves series is the cleaner view of ordinary typing.
 - **Autosave** means 20 single keystrokes, each followed by waiting for the debounced write to finish.
-- **Separate one-off probes** (not in `tests/stress.py`) produced the unhooked and worker-`gc()` memory figures, the `EXPLAIN QUERY PLAN` results, and the FTS bug table.
+- **Separate one-off probes** (not in `tests/stress.py`) produced the unhooked and worker-`gc()` memory figures, the `EXPLAIN QUERY PLAN` results, the FTS bug table, and the comparison below.
+- **The new anchor query was compared row for row with the old one** on the 40-year file with sql.js, after adding whole-Bible, whole-book and cross-book anchors: identical results across 782 verses and 691 chapters.
 
 **To reproduce:**
 

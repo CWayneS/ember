@@ -61,7 +61,8 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - db.export() + saveToStorage() after every write operation to core.db
 - sql.js does not enforce ON DELETE CASCADE — delete child rows explicitly
 - sql.js has no FTS5 module: Scripture search falls back to LIKE; notes_fts is FTS4
-- Note anchors use range-aware queries — see docs/ANCHOR_QUERIES.md
+- Note anchors use range-aware queries through anchorsOverlapping() in db.js — see docs/ANCHOR_QUERIES.md
+- notes_fts is external-content: delete from it before changing a note's body in `notes`, never after
 
 ## Reference Documents
 - README.md — overview, data sources and attribution, documentation index

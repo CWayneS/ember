@@ -16,6 +16,8 @@ Usage (from the repo root):
    python3 tests/verify.py hebrew        # Hebrew word anatomy: TEHMC decode, pieces, affixes, Ketiv
    python3 tests/verify.py offline       # language.db background download, offline use, failure and
                                          #   recovery states, single request, interrupted downloads
+   python3 tests/verify.py storage       # search index after edits and its one-time repair, empty and
+                                         #   damaged core.db, persistent storage request and settings line
    python3 tests/verify.py dbsnapshot out.json          # results of ~36 db.js calls as JSON
    python3 tests/verify.py dbcompare before.json after.json
 
@@ -467,8 +469,37 @@ def scenario_notes(app):
     p.click('.note-block-anchor-remove'); p.wait_for_timeout(300)
     rows = p.evaluate("import('./js/db.js').then(db => db.getNotesForVerse(1001003).length + db.getNotesForVerse(1001004).length)")
     check(rows == 0 and p.evaluate("document.querySelectorAll('#notes-active-view .note-block-anchor').length") == 0, f'coalesced chip removal deletes both rows ({rows})')
+    check_long_anchors(p)
     return FAILURES
 
+
+def check_long_anchors(p):
+    """anchorsOverlapping() searches short anchors in a window and long ones through
+    their own index: both sides of that line must find every overlap, and no more."""
+    res = p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        const finds = (noteId, verseId) => db.getNotesForVerse(verseId).some(n => n.id === noteId);
+        const whole = db.saveNote('whole Bible', [{ verseStart: 1001001, verseEnd: 66022021 }], ['spanning'], null);
+        const atLimit = db.saveNote('span exactly at the limit', [{ verseStart: 5001001, verseEnd: 5006001 }], [], null);
+        const pastLimit = db.saveNote('span one past the limit', [{ verseStart: 6001001, verseEnd: 6006002 }], [], null);
+        const crossBook = db.saveNote('across a book boundary', [{ verseStart: 1050026, verseEnd: 2001001 }], [], null);
+        return {
+            whole: [finds(whole, 1001001), finds(whole, 43003016), finds(whole, 66022021)],
+            wholeTag: db.getUserTagsForVerse(43003016),
+            wholeCount: db.getNoteCountsForChapter(43, 3).get(43003016),
+            atLimit: [finds(atLimit, 5001001), finds(atLimit, 5003010), finds(atLimit, 5006001), finds(atLimit, 5006002), finds(atLimit, 5001000)],
+            pastLimit: [finds(pastLimit, 6001001), finds(pastLimit, 6003010), finds(pastLimit, 6006002), finds(pastLimit, 6006003), finds(pastLimit, 6001000)],
+            crossBook: [finds(crossBook, 1050026), finds(crossBook, 2001001), finds(crossBook, 1050025), finds(crossBook, 2001002)],
+            atLimitChapter: db.getNoteCountsForChapter(5, 6).get(5006001),
+        };
+    }""")
+    check(res['whole'] == [True, True, True], f"whole-Bible anchor found from first, middle and last verse ({res['whole']})")
+    check('spanning' in res['wholeTag'], f"its tag shows on a verse it spans ({res['wholeTag']})")
+    check(res['wholeCount'] == 1, f"its dot counts in a chapter it spans ({res['wholeCount']})")
+    check(res['atLimit'] == [True, True, True, False, False], f"anchor exactly at the long-anchor limit ({res['atLimit']})")
+    check(res['pastLimit'] == [True, True, True, False, False], f"anchor one past the long-anchor limit ({res['pastLimit']})")
+    check(res['crossBook'] == [True, True, False, False], f"anchor across a book boundary ({res['crossBook']})")
+    check(res['atLimitChapter'] == 2, f"chapter count reaches an anchor's last verse, plus the whole-Bible note ({res['atLimitChapter']})")
 
 
 # ---------------------------------------------------------------- service worker
@@ -802,11 +833,11 @@ LANGUAGE_DB_SIZE = os.path.getsize(LANGUAGE_DB_PATH)
 UNAVAILABLE_TEXT = 'downloads the first time Ember is online'
 DOWNLOADING_TEXT = 'Downloading original-language data'
 
-# Records the byte length of every sql.js Database the app opens, without any
+# Records every sql.js Database the app opens and its byte length, without any
 # hook in the app: sql-wasm.js assigns the initSqlJs global, so an accessor on
 # window can wrap what it returns. language.db is the only 64 MB one.
 SQL_HOOK_JS = """
-window.__emberTest = { databaseSizes: [] };
+window.__emberTest = { databaseSizes: [], databases: [] };
 (() => {
     let realInit;
     Object.defineProperty(window, 'initSqlJs', {
@@ -817,8 +848,10 @@ window.__emberTest = { databaseSizes: [] };
                 const SQL = await realInit(config);
                 const Original = SQL.Database;
                 SQL.Database = function (data) {
+                    const database = new Original(data);
                     window.__emberTest.databaseSizes.push(data ? data.length : 0);
-                    return new Original(data);
+                    window.__emberTest.databases.push(database);
+                    return database;
                 };
                 SQL.Database.prototype = Original.prototype;
                 return SQL;
@@ -1058,6 +1091,40 @@ def offline_interrupted(browser):
     run.check_no_errors('tab closed')
     run.close()
 
+    # The same empty-file hole in a translation, and an offline boot that can't repair it yet
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    run.worker_ready()
+    empty_asv = """async () => {
+        const root = await navigator.storage.getDirectory();
+        const translations = await root.getDirectoryHandle('translations');
+        const writable = await (await translations.getFileHandle('asv.db')).createWritable();
+        await writable.close();
+    }"""
+    asv_size = """async () => {
+        const root = await navigator.storage.getDirectory();
+        const translations = await root.getDirectoryHandle('translations');
+        return (await (await translations.getFileHandle('asv.db')).getFile()).size;
+    }"""
+    asv_size_on_disk = os.path.getsize(os.path.join(ROOT, 'data', 'translations', 'asv.db'))
+    p.evaluate(empty_asv)
+    check(p.evaluate(asv_size) == 0, 'translation file emptied, as a tab closed mid-seed would leave it')
+    # Offline, it can't be repaired yet: seeding logs its failure, and the app must still come up
+    run.ctx.set_offline(True)
+    run.ctx.new_cdp_session(p).send('Network.clearBrowserCache')
+    run.reload()
+    verses = p.evaluate("import('./js/db.js').then(db => db.getChapter(2, 43, 3).length)")
+    check(verses == 36, f'empty translation file, offline: the app boots and falls back to KJV ({verses} verses in John 3)')
+    run.app.errors.clear()  # the failed re-seed and open are real errors, reported on purpose
+    run.ctx.set_offline(False)
+    run.reload()
+    check(p.evaluate(asv_size) == asv_size_on_disk, 'empty translation file: seeded again on the next boot')
+    verses = p.evaluate("import('./js/db.js').then(db => db.getChapter(2, 43, 3).length)")
+    check(verses == 36, f'empty translation file: ASV works after the repair ({verses} verses in John 3)')
+    run.check_no_errors('empty translation')
+    run.close()
+
     # An empty file already there, as older builds could leave behind
     run = OfflineRun(browser)
     p = run.page
@@ -1139,6 +1206,180 @@ def scenario_offline(browser):
     return FAILURES
 
 
+# ---------------------------------------------------------------- storage
+INTEGRITY_JS = "window.__emberTest.databases[0].exec('PRAGMA integrity_check')[0].values[0][0]"
+SEARCH_NOTES_JS = "async (word) => (await import('./js/db.js')).search(word, 1).notes.map(n => n.id)"
+
+
+def storage_search_index(browser):
+    """updateNote() must take a note's old words out of the index, and a database
+    from before that was true gets repaired once."""
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    note_id = p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        const noteId = db.saveNote('zzoldword kept', [{ verseStart: 1001001 }], [], null);
+        db.updateNote(noteId, 'zznewword kept');
+        return noteId;
+    }""")
+    check(p.evaluate(SEARCH_NOTES_JS, 'zzoldword') == [], 'edited note: its old word no longer finds it')
+    check(p.evaluate(SEARCH_NOTES_JS, 'zznewword') == [note_id], 'edited note: its new word finds it')
+    check(p.evaluate(SEARCH_NOTES_JS, 'kept') == [note_id], 'edited note: a word in both versions finds it')
+    check(p.evaluate(INTEGRITY_JS) == 'ok', 'integrity_check is ok after an edit')
+    p.evaluate("""async (noteId) => {
+        const db = await import('./js/db.js');
+        for (let i = 0; i < 20; i++) db.updateNote(noteId, `zznewword kept zzautosave${i}`);
+        db.deleteNote(noteId);
+    }""", note_id)
+    check(p.evaluate(INTEGRITY_JS) == 'ok', 'integrity_check is ok after 20 more edits and a delete')
+
+    # Recreate what the old statement order left behind, as an older install or backup has it
+    note_id = p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        const core = window.__emberTest.databases[0];
+        const noteId = db.saveNote('zzlegacyold kept', [{ verseStart: 1001001 }], [], null);
+        core.run("UPDATE notes SET body = 'zzlegacynew kept' WHERE id = ?", [noteId]);
+        core.run('DELETE FROM notes_fts WHERE rowid = ?', [noteId]);
+        core.run("INSERT INTO notes_fts(rowid, body) VALUES (?, 'zzlegacynew kept')", [noteId]);
+        core.run("DELETE FROM app_state WHERE key = 'notes_fts_repaired'");
+        db.setState('force_a_save', '1');
+        return noteId;
+    }""")
+    check('malformed' in p.evaluate(INTEGRITY_JS), 'old-order edit reproduces the malformed index')
+    p.wait_for_timeout(500)
+    run.reload()
+    check(p.evaluate(INTEGRITY_JS) == 'ok', 'repair: integrity_check is ok after the next boot')
+    check(p.evaluate(SEARCH_NOTES_JS, 'zzlegacyold') == [], 'repair: the old word no longer finds the note')
+    check(p.evaluate(SEARCH_NOTES_JS, 'zzlegacynew') == [note_id], 'repair: the current word still finds it')
+    check(p.evaluate("import('./js/db.js').then(db => db.getState('notes_fts_repaired'))") == '1', 'repair: marked done, so it only runs once')
+    p.wait_for_timeout(500)
+    run.reload()
+    body = p.evaluate("window.__emberTest.databases[0].exec('SELECT body FROM notes')[0].values[0][0]")
+    check(body == 'zzlegacynew kept', f'repair: the note text is untouched, and it persisted ({body})')
+    run.check_no_errors('search index')
+    run.close()
+
+
+# Counts persist() calls, and lets a run pretend the browser has granted persistence.
+PERSIST_HOOK_JS = """
+window.__persistCalls = 0;
+StorageManager.prototype.persist = async function () { window.__persistCalls++; return false; };
+if (localStorage.getItem('test.persisted') === 'yes') StorageManager.prototype.persisted = async () => true;
+"""
+
+
+def storage_persist(browser):
+    run = OfflineRun(browser)
+    run.ctx.add_init_script(PERSIST_HOOK_JS)
+    p = run.new_page()
+    calls = lambda: p.evaluate('window.__persistCalls')
+    add_note = "import('./js/db.js').then(db => { db.saveNote('a note', [{ verseStart: 1001001 }], [], null); })"
+    run.boot()
+    p.wait_for_timeout(300)
+    check(calls() == 0, 'persist: not requested at first boot, with no notes yet')
+    p.evaluate(add_note)
+    p.wait_for_timeout(200)
+    check(calls() == 1, 'persist: requested when the first note is saved')
+    p.evaluate(add_note)
+    p.wait_for_timeout(200)
+    check(calls() == 1, 'persist: a second note does not ask again')
+    run.reload()
+    p.wait_for_timeout(300)
+    check(calls() == 0, 'persist: a reload inside 30 days does not ask again')
+    p.evaluate("localStorage.setItem('ember.persist_requested_at', String(Date.now() - 31 * 24 * 60 * 60 * 1000))")
+    run.reload()
+    p.wait_for_timeout(300)
+    check(calls() == 1, 'persist: asks again at boot after 30 days')
+
+    p.click('#global-settings-btn')
+    note = '#global-settings-popover .settings-storage-note'
+    p.wait_for_timeout(100)
+    check('may clear' in p.locator(note).inner_text(), f'Backup & Restore line when not persisted ({p.locator(note).inner_text()})')
+    p.keyboard.press('Escape')
+
+    p.evaluate("localStorage.setItem('test.persisted', 'yes'); localStorage.removeItem('ember.persist_requested_at')")
+    run.reload()
+    p.wait_for_timeout(300)
+    check(calls() == 0, 'persist: never asks once already persisted')
+    p.click('#global-settings-btn')
+    p.wait_for_timeout(100)
+    check('has agreed' in p.locator(note).inner_text(), f'Backup & Restore line when persisted ({p.locator(note).inner_text()})')
+    run.check_no_errors('persist')
+    run.close()
+
+
+def storage_worker_hands_back(browser):
+    """The worker returns each finished write's buffer: left in its heap, these piled up
+    to 1.2 GB at 40 years of data. Peak memory itself is measured by tests/stress.py."""
+    run = OfflineRun(browser)
+    run.ctx.add_init_script("""
+        window.__returned = [];
+        const RealWorker = window.Worker;
+        window.Worker = function (url, options) {
+            const worker = new RealWorker(url, options);
+            worker.addEventListener('message', (e) => window.__returned.push(e.data.length));
+            return worker;
+        };
+    """)
+    p = run.new_page()
+    run.boot()
+    p.wait_for_timeout(1000)
+    p.evaluate("window.__returned.length = 0; import('./js/db.js').then(db => { for (let i = 0; i < 3; i++) db.setState('worker_probe', String(i)); })")
+    p.wait_for_function('window.__returned.length >= 3', timeout=30_000)
+    sizes = p.evaluate('window.__returned')
+    check(len(sizes) == 3 and all(size > 20_000_000 for size in sizes), f'worker hands back each written buffer, whole ({sizes})')
+    run.reload()
+    check(p.evaluate("import('./js/db.js').then(db => db.getState('worker_probe'))") == '2', 'the last of those writes persisted')
+    run.check_no_errors('worker')
+    run.close()
+
+
+def storage_core_db_files(browser):
+    """An empty core.db is a first run that never finished saving, and starts over. A
+    damaged one with anything in it must fail visibly and stay on disk: it may hold
+    notes that could still be recovered."""
+    core_size = """async () => {
+        const root = await navigator.storage.getDirectory();
+        return (await (await root.getFileHandle('core.db')).getFile()).size;
+    }"""
+    write_core = """async (length) => {
+        const root = await navigator.storage.getDirectory();
+        const handle = await root.getFileHandle('core.db');
+        const kept = (await (await handle.getFile()).arrayBuffer()).slice(0, length);
+        const writable = await handle.createWritable();
+        await writable.write(kept);
+        await writable.close();
+    }"""
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    p.wait_for_timeout(1000)
+    p.evaluate(write_core, 0)
+    check(p.evaluate(core_size) == 0, 'core.db emptied, as a tab closed during the first save would leave it')
+    run.reload()
+    p.wait_for_timeout(1000)
+    books = p.evaluate("import('./js/db.js').then(db => db.getBooks().length)")
+    check(books == 66, f'empty core.db: the app starts as a first run ({books} books)')
+    check(p.evaluate(core_size) > 20_000_000, f'empty core.db: replaced by a whole one ({p.evaluate(core_size)} bytes)')
+    run.check_no_errors('empty core.db')
+
+    p.evaluate(write_core, 1_000_000)
+    p.reload()
+    p.wait_for_function("document.getElementById('loading').textContent.startsWith('Failed to load')", timeout=30_000)
+    p.wait_for_timeout(500)
+    check(p.evaluate(core_size) == 1_000_000, f'damaged core.db: not replaced, left on disk ({p.evaluate(core_size)} bytes)')
+    run.close()
+
+
+def scenario_storage(browser):
+    storage_search_index(browser)
+    storage_worker_hands_back(browser)
+    storage_core_db_files(browser)
+    storage_persist(browser)
+    return FAILURES
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -1151,9 +1392,9 @@ def main():
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
-            if args[0] == 'offline':
-                print('== offline')
-                failures = scenario_offline(browser)
+            if args[0] in ('offline', 'storage'):
+                print(f'== {args[0]}')
+                failures = (scenario_offline if args[0] == 'offline' else scenario_storage)(browser)
                 browser.close()
                 print(f'\n{len(failures)} failure(s)')
                 sys.exit(1 if failures else 0)

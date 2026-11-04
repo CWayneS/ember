@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Longevity stress test: how Ember behaves as a user's data grows for decades.
 
-Measurement only. Everything here hooks the app from outside (an init script
-and a patched copy of storage-worker.js served by Playwright), so no app code
-carries instrumentation. Results: docs/STRESS_TEST_RESULTS.md.
+Measurement only. Everything here hooks the app from outside with an init
+script, so no app code carries instrumentation. Results: docs/STRESS_TEST_RESULTS.md.
 
 Usage (from the repo root):
    python3 tests/stress.py base                 # capture the app-created base.db
@@ -76,7 +75,7 @@ window.__stress = { handles: [], exports: [], longTasks: [], posted: [], done: [
         const worker = new RealWorker(url, options);
         const realPost = worker.postMessage.bind(worker);
         worker.postMessage = (data, transfer) => { stress.posted.push(performance.now()); realPost(data, transfer); };
-        worker.addEventListener('message', (e) => { if (e.data && e.data.writeDone) stress.done.push(performance.now()); });
+        worker.addEventListener('message', () => stress.done.push(performance.now())); // it hands back each finished write's buffer
         return worker;
     };
 
@@ -106,22 +105,12 @@ window.__stress = { handles: [], exports: [], longTasks: [], posted: [], done: [
 """
 
 
-def patched_storage_worker():
-    """storage-worker.js as it ships, plus one line that reports the finished write."""
-    with open(os.path.join(ROOT, 'js', 'storage-worker.js')) as fh:
-        source = fh.read()
-    marker = 'await writable.close();'
-    assert source.count(marker) == 1, 'storage-worker.js changed: update the patch in tests/stress.py'
-    return source.replace(marker, marker + ' self.postMessage({ writeDone: true });')
-
-
 def median(samples):
     return round(statistics.median(samples), 1) if samples else None
 
 
 class Run:
-    """One fresh profile. Boots via localhost, where app.js skips the service
-    worker, so nothing can serve an unpatched storage-worker.js."""
+    """One fresh profile. Boots via localhost, where app.js skips the service worker."""
 
     def __init__(self, browser, throttled):
         self.browser = browser
@@ -129,8 +118,6 @@ class Run:
         self.browser_cdp = browser.new_browser_cdp_session()
         self.ctx = browser.new_context(viewport={'width': 1600, 'height': 1000}, accept_downloads=True)
         self.ctx.add_init_script(HOOK_JS)
-        worker_source = patched_storage_worker()
-        self.ctx.route('**/js/storage-worker.js', lambda route: route.fulfill(body=worker_source, content_type='text/javascript'))
         self.page = None
         self.app = None
         self.errors = []  # across every page of the run

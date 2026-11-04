@@ -268,7 +268,7 @@ Click the **☀/🌙** icon next to the search bar to toggle dark mode.
 
 Most panels have a **⚙** button in their header for panel-specific display options (like font size). The **⚙** next to the search bar opens global settings, covering:
 
-- **Backup & Restore** — export your entire notes/tags/studies/bookmarks database as a single file, or restore from a previously exported one. Restoring asks you to confirm first, since it replaces everything currently on your device.
+- **Backup & Restore** — export your entire notes/tags/studies/bookmarks database as a single file, or restore from a previously exported one. Restoring asks you to confirm first, since it replaces everything currently on your device. A line here also tells you whether your browser has agreed to keep Ember's data.
 - **Data & Attribution** — credits for the two externally-sourced, CC BY 4.0–licensed datasets Ember bundles (original-language word data and cross-reference data), each linked to its source.
 
 ---
@@ -280,6 +280,8 @@ All your notes, tags, studies, bookmarks, and markups are stored locally on your
 No account is required. There is no cloud sync — if you use Ember on more than one device, use Export/Restore under **Settings** to carry your data between them.
 
 **One important caveat:** if you clear your browser's site data for Ember without exporting a backup first, your notes and studies will be permanently deleted. The app will reset as if it's the first run.
+
+**Your browser can also clear this data by itself** if your device runs low on storage, unless it has agreed to keep it. Once you've written a note, Ember asks the browser to keep your data permanently. Chrome and Edge decide quietly, and tend to say yes for sites you use often or have installed; Firefox may ask you. Either way, export a backup regularly: it's the only thing that protects your notes if your device is lost or fails. Settings → Backup & Restore shows where you stand.
 
 Your last reading position is also saved locally and restored each time you open the app.
 

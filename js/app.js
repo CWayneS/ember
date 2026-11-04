@@ -1,6 +1,6 @@
 // app.js — Entry point
 
-import { initDatabase, startLanguageBackgroundDownload } from './db.js';
+import { initDatabase, requestPersistentStorageIfDue, startLanguageBackgroundDownload } from './db.js';
 
 import { initReader } from './reader.js';
 
@@ -67,6 +67,7 @@ async function init() {
         document.getElementById('loading').classList.add('hidden');
 
         startLanguageBackgroundDownload();
+        requestPersistentStorageIfDue();
 
         // Register service worker for production only.
         // Skip on localhost so development refreshes always load fresh files.

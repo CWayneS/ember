@@ -10,8 +10,17 @@
 // explicitly NOT migrated in here yet — out of scope for Build 4.
 
 import { bindPopover } from './popover-registry.js';
-import { exportBackup } from './db.js';
+import { exportBackup, isStoragePersisted } from './db.js';
 import { restoreFromBackup } from './backup.js';
+
+const STORAGE_AT_RISK_NOTE = 'Your browser may clear Ember’s data if this device runs low on storage. Export a backup regularly to keep your notes safe.';
+const STORAGE_KEPT_NOTE    = 'Your browser has agreed to keep Ember’s data, but a backup still protects your notes if this device is lost or fails. Export one regularly.';
+
+let storageNote = null;
+
+async function refreshStorageNote() {
+    storageNote.textContent = await isStoragePersisted() ? STORAGE_KEPT_NOTE : STORAGE_AT_RISK_NOTE;
+}
 
 const SECTIONS = [
     {
@@ -22,6 +31,11 @@ const SECTIONS = [
             desc.className = 'settings-section-desc';
             desc.textContent = 'Export your data as a backup file, or restore from a previous backup.';
             container.appendChild(desc);
+
+            storageNote = document.createElement('p');
+            storageNote.className = 'settings-section-desc settings-storage-note';
+            storageNote.textContent = STORAGE_AT_RISK_NOTE;
+            container.appendChild(storageNote);
 
             const actions = document.createElement('div');
             actions.className = 'settings-section-actions';
@@ -97,6 +111,10 @@ export function initGlobalSettings() {
 
     buildPopoverContent(popover);
     bindPopover(btn, popover);
+
+    // Read fresh on each open: the browser's answer can change during a session.
+    refreshStorageNote();
+    btn.addEventListener('click', refreshStorageNote);
 }
 
 function buildPopoverContent(popover) {

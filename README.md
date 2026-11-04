@@ -163,6 +163,8 @@ python3 tests/verify.py smoke        # notes, tags, bookmarks, markups, referenc
 python3 tests/verify.py indicators   # note/bookmark dots on a titled Psalm (verse=0 row)
 python3 tests/verify.py offline      # language.db background download, offline use, failure and
                                      #   recovery states, single request, interrupted downloads
+python3 tests/verify.py storage      # search index after edits and its one-time repair, empty and
+                                     #   damaged core.db, persistent storage request and settings line
 ```
 
 For changes to `js/db.js`, snapshot the results of its query functions before and after and compare:

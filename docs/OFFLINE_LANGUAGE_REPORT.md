@@ -28,7 +28,9 @@ Fresh profile, booted via `127.0.0.1` so the service worker installs, on the cod
 
 **C. Any verse click loaded `language.db`.** `reference.js` `renderAll()` rendered the Language tab on every selection, whichever tab was showing. One click on Genesis 1:1 with the Info tab showing fetched the file and opened it, and renderer RSS rose about 81 MB (507→588 MB). The spec, `USER_MANUAL.md`, and `FEATURE_INVENTORY.md` all described it as waiting for the Language tab.
 
-**D. `seedTranslations()` has the same hole as Finding A. Not fixed; your decision.** It creates each file before writing and skips any file that exists. A tab closed during the first boot's seeding would, by the same mechanism, leave an empty translation file that is never re-seeded, and that translation's queries would fail on every later boot. I confirmed this by reading the code and by the `language.db` behaviour above, but didn't reproduce it on a translation. `isCompleteSqliteFile()` would fix it in a few lines, because the check is already general.
+**D. `seedTranslations()` had the same hole as Finding A. Now fixed.** It created each file before writing and skipped any file that existed, so a tab closed during the first boot's seeding could leave an empty translation file that was never re-seeded. It now uses `isCompleteSqliteFile()`, so an empty file seeds again on the next boot. `loadTranslationBuffer()` uses the same check, so if that next boot is offline, the translation falls back to KJV rather than opening an empty database. `tests/verify.py offline` covers both.
+
+**E. `core.db` had the same hole on a first boot. Now fixed**, more narrowly, since that file holds notes. See "Found along the way" in `STRESS_TEST_RESULTS.md`.
 
 ---
 
@@ -78,7 +80,7 @@ Titled Psalms in KJV/ASV/Darby still open `language.db` when rendered, because t
 - **`js/reader.js`:** Psalm titles warn instead of logging an error. Removing the row on failure already matched the spec.
 - **`warnLanguageUnavailable()`:** one `console.warn` per session, however many selections and titles hit it.
 - **Seeders (`js/db.js`):** return early when `navigator.onLine === false`, and a network rejection is a warning. A bad HTTP status or unparseable file stays `console.error`, because that's a packaging bug `verify.py` should keep catching. Online boots still fetch all six files, so a newly bundled plan reaches existing users.
-- **`sw.js`:** `CACHE_NAME` is `ember-v11`; the comments are corrected.
+- **`sw.js`:** `CACHE_NAME` is `ember-v13` after the follow-up fixes; the comments are corrected.
 
 ### Open questions from the spec
 
@@ -90,7 +92,7 @@ Titled Psalms in KJV/ASV/Darby still open `language.db` when rendered, because t
 
 ## 3. Verification
 
-**`tests/verify.py offline`:** 57 checks, 0 failures, each part on a fresh profile. It covers the spec's four cases and also:
+**`tests/verify.py offline`:** 62 checks, 0 failures, each part on a fresh profile. It covers the spec's four cases and also:
 
 - both orderings of the single-request case (tab opened before the background timer, and after)
 - offline at boot, then online later
@@ -99,6 +101,9 @@ Titled Psalms in KJV/ASV/Darby still open `language.db` when rendered, because t
 - a response that ends cleanly but short
 - a tab showing the message rendering by itself once a download starts, and retry on returning to the tab
 - tab-switch behaviour
+- an emptied translation file, online and offline
+
+**`tests/verify.py storage`** (new, with the follow-up fixes): 29 checks, 0 failures, covering the search index after edits and its one-time repair, the worker returning buffers, empty and damaged `core.db` files, the `persist()` request and the Backup & Restore line. The `notes` scenario gained long-anchor checks, including both sides of the `LONG_ANCHOR_SPAN` limit.
 
 Every existing scenario passes: `popovers`, `smoke`, `notes`, `indicators`, `sw`, `hebrew`.
 
@@ -117,16 +122,38 @@ Every existing scenario passes: `popovers`, `smoke`, `notes`, `indicators`, `sw`
 | Tab switch always re-renders | "Clearing the selection while hidden shows the empty state" |
 | No downloading state | Message never appears (timeout) |
 
+The follow-up fixes got the same treatment, and all 15 breaks were caught:
+
+| Deliberate break | Caught by |
+|---|---|
+| `updateNote()` back to the old order | "Edited note: its old word no longer finds it" |
+| No index repair | "Repair: integrity_check is ok after the next boot" |
+| Repair not marked done | "Repair: marked done, so it only runs once" |
+| Worker keeps its buffer | Returned buffers never arrive (timeout) |
+| `persist()` with no notes | "Not requested at first boot, with no notes yet" |
+| `persist()` on every call | "A second note does not ask again" |
+| `persist()` even when persisted | "Never asks once already persisted" |
+| Settings line never updates | "Backup & Restore line when persisted" |
+| Anchor window one short | "Anchor exactly at the long-anchor limit" |
+| Long anchors not searched | "Whole-Bible anchor found from first, middle and last verse" |
+| Overlap misses the lower bound | "Anchor one past the long-anchor limit" |
+| Translation seed trusts any file | "Empty translation file: seeded again on the next boot" |
+| Translation load trusts any file | `no such table: verses` |
+| Empty `core.db` trusted | App never comes up (timeout) |
+| Damaged `core.db` treated as missing | It gets replaced, so "Failed to load" never shows (timeout) |
+
 **Startup time to "app live"**, warm boot, 5 boots, median:
 
 | | Median | Samples |
 |---|---|---|
 | Before (`522619a`) | 422 ms | 430, 421, 420, 422, 436 |
-| After | 421 ms | 397, 428, 424, 419, 421 |
+| After Item 1 | 421 ms | 397, 428, 424, 419, 421 |
 
 No measurable difference. The download starts after this point, by design.
 
-**`dbsnapshot` / `dbcompare`:** the only two keys that differ are `created_at` timestamps on seeded rows (`bookmarkForVerse`, `search.notes[0]`), which the tool's docstring says will differ between runs. Query results are unchanged.
+After the follow-up fixes I alternated 4 runs of 5 boots each against `522619a`, to keep machine noise from favouring either side. Medians were 416, 423, 392, 424 ms before and 421, 428, 425, 422 ms now. Those ranges overlap, so there's no clear difference, though a few milliseconds' cost from the extra header reads can't be ruled out.
+
+**`dbsnapshot` / `dbcompare`** (re-run against the original snapshot after the follow-up fixes too)**:** the only two keys that differ are `created_at` timestamps on seeded rows (`bookmarkForVerse`, `search.notes[0]`), which the tool's docstring says will differ between runs. Query results are unchanged.
 
 **Changed test, `sw`:** its "no `/data/` in any cache" check could have started passing without testing anything, because the background download may finish before the worker takes control. It now confirms the worker is in control and fetches from `/data/` through it before checking.
 
@@ -151,22 +178,17 @@ No measurable difference. The download starts after this point, by design.
 
 ## 5. Item 3: Persistent storage
 
-**Current behaviour:** Ember never calls `navigator.storage.persist()`; a search of `js/` finds no call to it or to `persisted()`.
+**Before this work:** Ember never called `navigator.storage.persist()`.
 
 | Context | `persisted()` | `persist()` |
 |---|---|---|
 | Headless Chromium tab, fresh profile | `false` | `false` (not granted) |
-| Real Chrome tab | not yet measured | |
-| Installed PWA on Chromium | not yet measured | |
+| Your own check | `false` | not run |
 
-The two unmeasured rows can't be automated from here. To fill them in, run this in the DevTools console of your installed Ember and of a normal Chrome tab:
+You reported `false` from the console command, without separate results for the installed app and the tab, so I haven't recorded them separately.
 
-```js
-await navigator.storage.persisted()
-```
+**Your decision: added.**
 
-**Recommendation: add a `persist()` request at first boot, and a line in Settings → Backup & Restore when it isn't granted.** Your decision; none of this is implemented.
-
-- **Why:** without persistence, the browser may delete the site's data under storage pressure, and that data is the only copy of someone's notes. One call is small insurance against that loss.
-- **Prompting differs by browser:** Chromium decides silently, using signals such as installation and site engagement, so the call is invisible there. Firefox shows a permission prompt, so on Firefox it would be better tied to the user's first note than to first boot.
-- **It isn't a guarantee,** and a backup is still the only protection against a lost or broken device. So a line suggesting regular backups is worth having whether or not persistence is granted.
+- **The request:** `requestPersistentStorageIfDue()` asks at boot and on saving a note, once at least one note exists, and at most every 30 days while not granted. Firefox shows a prompt, which is why it waits for a first note and doesn't repeat often. Chromium decides silently and its answer can change later, for example after installing the app, which is why it asks again at all.
+- **The line in Settings → Backup & Restore:** when not persisted, "Your browser may clear Ember's data if this device runs low on storage. Export a backup regularly to keep your notes safe." When persisted, it says the browser has agreed to keep the data, and that a backup still protects against a lost or failed device. It's read again each time the popover opens.
+- **What to expect:** on your install, Chromium may keep answering `false` for a while. It decides by its own signals, such as installation and how much the site is used, so the request doesn't guarantee a grant. I couldn't test a real grant here, because headless Chromium always declines; the `storage` scenario simulates one to check the granted path.
