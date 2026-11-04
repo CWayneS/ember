@@ -1499,10 +1499,8 @@ body.markup-mode-on .verse.markup-circle {
 }
 
 /* content-visibility: auto clips overflow, which would cut off the tag
-   autocomplete list; it only opens while the tag input has focus. A block
-   with a save pending stays rendered so the save can read its text. */
-.note-block:focus-within,
-.note-block-save-pending {
+   autocomplete list; it only opens while the tag input has focus. */
+.note-block:focus-within {
     content-visibility: visible;
 }
 

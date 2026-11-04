@@ -475,7 +475,34 @@ def scenario_notes(app):
     check_long_anchors(p)
     check_note_lists(p)
     check_long_study(p)
+    check_save_after_leaving(p)
     return FAILURES
+
+
+def check_save_after_leaving(p):
+    """A save can fire after its study stopped showing. The view is hidden for All Studies
+    and rebuilt for another study, and innerText loses line breaks in both, so the text
+    has to be read while the block is still on screen."""
+    body_of = lambda study: p.evaluate(f"import('./js/db.js').then(db => db.getNotesForStudy({study})[0].body)")
+    p.click('#notes-tab-add')
+    study = p.evaluate("import('./js/panels.js').then(m => m.getActiveStudyId())")
+    p.click('.add-note-btn'); p.wait_for_timeout(150)
+
+    p.click('.note-block-body'); p.keyboard.type('one'); p.keyboard.press('Enter'); p.keyboard.type('two')
+    p.click('#notes-tabs [data-study-id="all"]')
+    p.wait_for_timeout(1100)
+    body = body_of(study)
+    check(body == 'one\ntwo', f"switching to All Studies before the save keeps line breaks ({body!r})")
+
+    p.click(f'#notes-tabs [data-study-id="{study}"]'); p.wait_for_timeout(150)
+    shown = p.evaluate("document.querySelector('#notes-active-view .note-block-body').innerText")
+    check(shown == 'one\ntwo', f"reopened note shows its line breaks ({shown!r})")
+
+    p.click('.note-block-body'); p.keyboard.press('Control+End'); p.keyboard.press('Enter'); p.keyboard.type('three')
+    p.click('#notes-tab-add')
+    p.wait_for_timeout(1100)
+    body = body_of(study)
+    check(body == 'one\ntwo\nthree', f"switching to another study before the save keeps line breaks ({body!r})")
 
 
 def check_note_lists(p):
@@ -578,10 +605,8 @@ def check_long_study(p):
     p.keyboard.type('edited'); p.keyboard.press('Enter'); p.keyboard.type('second line')
     p.evaluate(f"document.activeElement.blur(); getSelection().removeAllRanges(); {view}.scrollTop = 0;")
     p.wait_for_timeout(100)
-    is_skipped = f"!document.querySelector('{note_sel}').checkVisibility({{ contentVisibilityAuto: true }})"
-    check(not p.evaluate(is_skipped), 'edited block off-screen stays rendered while its save is pending')
+    check(p.evaluate(f"!document.querySelector('{note_sel}').checkVisibility({{ contentVisibilityAuto: true }})"), 'edited block is skipped while its save is pending')
     p.wait_for_timeout(1000)
-    check(p.evaluate(is_skipped), 'and is skipped again once saved')
     body = p.evaluate(f"import('./js/db.js').then(db => db.getNotesForStudy({study_id}).find(n => n.id === {target}).body)")
     check(body.endswith('edited\nsecond line'), f"autosave of a skipped block keeps line breaks ({body[-24:]!r})")
 

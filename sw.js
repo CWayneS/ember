@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v14'; // bumped: faster long lists (db.js, notes.js, style.css changed)
+const CACHE_NAME = 'ember-v15'; // bumped: autosave keeps line breaks after leaving a study (notes.js, style.css changed)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:

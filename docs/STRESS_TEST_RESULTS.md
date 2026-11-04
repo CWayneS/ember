@@ -72,7 +72,7 @@ A study now passes the 200 ms threshold at roughly 1,000 notes, interpolated fro
 Chunked rendering would have left most of that in place and put editing, scroll-to-note and in-page find at risk. Three changes went in instead:
 
 - **`attachTagsAndAnchors()` runs one tags query and one anchors query for the whole list.** Checked against the old per-note queries for all 31,200 notes at 40 years: identical rows in identical order. This also speeds up the Info tab, the tag view and search.
-- **`.note-block` has `content-visibility: auto`,** so the browser lays out and paints only what's on screen. Every block stays in the DOM. A block that has focus or a pending save is exempt: this CSS clips overflow, which would cut off the tag autocomplete, and `innerText` returns an empty string in a skipped block, which would have made a save blank the note.
+- **`.note-block` has `content-visibility: auto`,** so the browser lays out and paints only what's on screen. Every block stays in the DOM. A block with focus is exempt, because this CSS clips overflow, which would cut off the tag autocomplete. `innerText` also returns an empty string in a skipped block, which would have made a save blank the note, so autosave now reads the text as you type.
 - **Delete, attach, remove-anchor and Add Note update one block in place.** A full rebuild would reset every block to its estimated height and move the scroll position to a different note.
 
 **Info cards don't use `content-visibility`.** The Info tab rebuilds on every autosave, so its cards would lose their measured heights each time and the tab would jump while scrolled. That's why John 3:16 improved less, and it's the main cost left there at 4×.

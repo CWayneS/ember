@@ -501,14 +501,12 @@ function addNote(studyId) {
 }
 
 function scheduleSave(noteId, bodyEl) {
-    // innerText is empty in a block the browser has skipped (content-visibility
-    // in style.css), so the block stays rendered until the save has read it.
-    const block = bodyEl.closest('.note-block');
-    block.classList.add('note-block-save-pending');
+    // Read now, while the block is on screen. By the time the timer fires it may
+    // be skipped (content-visibility), hidden or rebuilt, and innerText then
+    // comes back empty or without its line breaks.
+    const raw = bodyEl.innerText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     clearTimeout(saveTimers.get(noteId));
     saveTimers.set(noteId, setTimeout(() => {
-        const raw = bodyEl.innerText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-        block.classList.remove('note-block-save-pending');
         updateNote(noteId, raw);
         refreshAfterWrite();
     }, 800));

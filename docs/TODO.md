@@ -25,7 +25,7 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 
 ## Bugs
 
-- **Switching tabs within 800 ms of typing loses a note's line breaks.** The pending save reads `innerText` from a block that's no longer rendered, because its view was hidden or rebuilt, and that returns the text without its breaks: `one⏎two` is saved as `onetwo`. Reproduced by switching to All Studies; it predates the long-list work. Two possible fixes: flush pending saves when the study view changes, or read the text at input time and have the timer only write, which would also make `.note-block-save-pending` unnecessary. See `scheduleSave()` in `js/notes.js`.
+- **Leaving a study and returning within 800 ms of typing shows stale text.** The save still reaches the database, but the rebuilt block shows the old text until the study is reopened, and typing into it then overwrites the newer words. Reproduced by switching to All Studies and straight back. It's a narrow window and predates the long-list work. Writing pending saves when the study view changes, before it rebuilds, should fix it. See `scheduleSave()` in `js/notes.js`.
 
 ## Documentation
 

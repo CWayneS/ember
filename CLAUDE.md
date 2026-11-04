@@ -63,7 +63,7 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - sql.js has no FTS5 module: Scripture search falls back to LIKE; notes_fts is FTS4
 - Note anchors use range-aware queries through anchorsOverlapping() in db.js — see docs/ANCHOR_QUERIES.md
 - notes_fts is external-content: delete from it before changing a note's body in `notes`, never after
-- `.note-block` uses content-visibility: auto. In a skipped block, innerText is empty and overflow is clipped, so read text only from a rendered block (see scheduleSave in js/notes.js). Update a block in place rather than rebuilding the study, or the scroll position moves
+- `.note-block` uses content-visibility: auto. In a skipped block, innerText is empty and overflow is clipped, so read a note's text at input time (see scheduleSave in js/notes.js). Update a block in place rather than rebuilding the study, or the scroll position moves
 
 ## Reference Documents
 - README.md — overview, data sources and attribution, documentation index
