@@ -218,15 +218,23 @@ async function loadTranslationBuffer(filename) {
 // ============================================================
 //
 // Unlike translations (opened eagerly for all 6 at init — small files, always
-// needed), language.db is ~50MB of read-only reference data most sessions may
-// never open. It is not seeded into OPFS or opened until the Language tab
-// first actually needs it, so it adds no cost to app startup. Once opened,
-// the handle is cached for the rest of the session. It is never part of the
-// db.export()/saveToStorage() write cycle — it's read-only reference data,
-// not part of core.db.
+// needed), language.db is ~64MB of read-only reference data most sessions may
+// never open. Getting it onto the device and opening it are separate steps:
+// startLanguageBackgroundDownload() streams the file into OPFS shortly after
+// launch, so it is there before the user next goes offline, but nothing loads
+// it into memory until the Language tab or a titled Psalm first needs it. Once
+// opened, the handle is cached for the rest of the session. It is never part
+// of the db.export()/saveToStorage() write cycle — it's read-only reference
+// data, not part of core.db.
+
+const LANGUAGE_DB_FILE = 'language.db';
+const LANGUAGE_DB_URL  = './data/language.db';
+const LANGUAGE_DOWNLOAD_DELAY_MS = 2000; // keeps it clear of first render
+const SQLITE_MAGIC = 'SQLite format 3\0';
 
 let _languageDb        = null;
 let _languageDbPromise = null;
+let _languageWarned    = false;
 
 function getLanguageDb() {
     if (_languageDb) return Promise.resolve(_languageDb);
@@ -236,42 +244,145 @@ function getLanguageDb() {
         const buffer = await loadLanguageBuffer();
         _languageDb = new _SQL.Database(new Uint8Array(buffer));
         return _languageDb;
-    })();
+    })().catch(e => {
+        // Not cached: the next use tries again, so the tab recovers without a
+        // reload once the network is back.
+        _languageDbPromise = null;
+        throw e;
+    });
     return _languageDbPromise;
 }
 
-// OPFS is the primary store; network is the fallback, and also seeds OPFS
-// for next time (mirrors loadTranslationBuffer(), but seeding happens lazily
-// here on first use instead of eagerly at init via seedTranslations()).
+// Being offline with no language.db yet is an expected state with its own
+// message in the Language tab, not an error — one warning per session is
+// enough, however many selections and Psalm titles run into it.
+export function warnLanguageUnavailable(e) {
+    if (_languageWarned) return;
+    _languageWarned = true;
+    console.warn('Original-language data is not available yet:', e.message);
+}
+
+export function isLanguageDownloading() {
+    return _opfsDownloads.has(LANGUAGE_DB_FILE);
+}
+
+// OPFS is the primary store; a download into OPFS is how it gets there, shared
+// with the background step so there is only ever one. A plain fetch into memory
+// remains for browsers that can't write OPFS, and for a write that fails (quota).
 async function loadLanguageBuffer() {
-    if ('storage' in navigator && 'getDirectory' in navigator.storage) {
-        try {
-            const root   = await navigator.storage.getDirectory();
-            const handle = await root.getFileHandle('language.db');
-            const file   = await handle.getFile();
-            return await file.arrayBuffer();
-        } catch (_) {
-            // Not in OPFS yet — fall through to network.
-        }
-    }
+    const file = await getCompleteOpfsFile(LANGUAGE_DB_FILE);
+    if (file) return await file.arrayBuffer();
 
-    const response = await fetch('./data/language.db');
-    if (!response.ok) throw new Error(`HTTP ${response.status} fetching language.db`);
-    const buffer = await response.arrayBuffer();
+    // `false` is reliable; `true` only means "maybe", so that case just tries.
+    if (navigator.onLine === false) throw new Error('the browser is offline');
 
-    if ('storage' in navigator && 'getDirectory' in navigator.storage) {
+    if (canDownloadToOpfs()) {
         try {
-            const root     = await navigator.storage.getDirectory();
-            const handle   = await root.getFileHandle('language.db', { create: true });
-            const writable = await handle.createWritable();
-            await writable.write(buffer);
-            await writable.close();
+            await downloadLanguageDb();
+            const downloaded = await getCompleteOpfsFile(LANGUAGE_DB_FILE);
+            if (downloaded) return await downloaded.arrayBuffer();
         } catch (e) {
-            console.error('loadLanguageBuffer: failed to seed OPFS:', e);
+            // File system calls reject with a DOMException; anything else is
+            // the network or the response itself, which a second fetch won't fix.
+            if (!(e instanceof DOMException)) throw e;
+            console.warn('loadLanguageBuffer: could not store language.db, keeping it in memory for this session:', e);
         }
     }
 
-    return buffer;
+    const response = await fetch(LANGUAGE_DB_URL);
+    if (!response.ok) throw new Error(`HTTP ${response.status} fetching language.db`);
+    return await response.arrayBuffer();
+}
+
+// Called once the app is live. Only ever puts the file on disk — it must not
+// create a Database, which would cost every session the memory the lazy open
+// exists to save. If it can't finish now it tries again the next time the
+// browser reports coming online; getLanguageDb() also retries on its next use.
+export function startLanguageBackgroundDownload() {
+    setTimeout(downloadLanguageDbInBackground, LANGUAGE_DOWNLOAD_DELAY_MS);
+}
+
+async function downloadLanguageDbInBackground() {
+    if (_languageDb || !canDownloadToOpfs()) return;
+    if (await getCompleteOpfsFile(LANGUAGE_DB_FILE)) return;
+
+    try {
+        if (navigator.onLine === false) throw new Error('the browser is offline');
+        await downloadLanguageDb();
+    } catch (e) {
+        warnLanguageUnavailable(e);
+        window.addEventListener('online', downloadLanguageDbInBackground, { once: true });
+    }
+}
+
+function downloadLanguageDb() {
+    const alreadyDownloading = isLanguageDownloading();
+    const download = downloadToOpfs(LANGUAGE_DB_FILE, LANGUAGE_DB_URL);
+    if (!alreadyDownloading) document.dispatchEvent(new CustomEvent('language-download-started'));
+    return download;
+}
+
+// ---- Downloading a read-only .db file into OPFS ----------------------------
+
+const _opfsDownloads = new Map(); // filename -> in-flight download promise
+
+function canDownloadToOpfs() {
+    return 'storage' in navigator && 'getDirectory' in navigator.storage
+        && 'FileSystemFileHandle' in window && 'createWritable' in FileSystemFileHandle.prototype;
+}
+
+// Streams `url` into OPFS as `filename`, joining a download of that file already
+// in flight. Rejects if the file isn't whole afterwards. The response is piped
+// rather than buffered, so a large file never sits in memory on its way to disk.
+function downloadToOpfs(filename, url) {
+    if (_opfsDownloads.has(filename)) return _opfsDownloads.get(filename);
+
+    const download = (async () => {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status} fetching ${filename}`);
+        const root     = await navigator.storage.getDirectory();
+        const handle   = await root.getFileHandle(filename, { create: true });
+        const writable = await handle.createWritable();
+        await response.body.pipeTo(writable);
+        if (!await getCompleteOpfsFile(filename)) throw new Error(`${filename} arrived incomplete`);
+    })().finally(() => _opfsDownloads.delete(filename));
+
+    _opfsDownloads.set(filename, download);
+    return download;
+}
+
+// The OPFS file if it is there and whole, otherwise null. "There" isn't enough:
+// getFileHandle(create) leaves an empty file in place as soon as a download
+// starts, and createWritable only swaps the data in when it closes, so a tab
+// closed mid-download leaves a 0-byte file behind. The next download overwrites
+// whatever fails this check, so nothing needs deleting.
+async function getCompleteOpfsFile(filename) {
+    if (!('storage' in navigator && 'getDirectory' in navigator.storage)) return null;
+    try {
+        const root   = await navigator.storage.getDirectory();
+        const handle = await root.getFileHandle(filename);
+        const file   = await handle.getFile();
+        return await isCompleteSqliteFile(file) ? file : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+// Reads only the 100-byte SQLite header, so it costs nothing at startup: the
+// magic string, then page size x page count against the real file size. The
+// page count is only meaningful while the file's version-valid-for number
+// (offset 92) matches its change counter (offset 24); a file where they differ
+// can't be judged, and counts as whole rather than being re-downloaded on every
+// boot. Every .db this app ships passes the real check (tests/verify.py offline).
+async function isCompleteSqliteFile(file) {
+    if (file.size < 100) return false;
+    const bytes  = await file.slice(0, 100).arrayBuffer();
+    const header = new DataView(bytes);
+    const magic  = String.fromCharCode(...new Uint8Array(bytes, 0, SQLITE_MAGIC.length));
+    if (magic !== SQLITE_MAGIC) return false;
+    if (header.getUint32(24) !== header.getUint32(92)) return true;
+    const pageSize = header.getUint16(16) === 1 ? 65536 : header.getUint16(16);
+    return pageSize * header.getUint32(28) === file.size;
 }
 
 // Ensure all user-writable tables exist (idempotent — safe to run on every init).
@@ -623,9 +734,17 @@ export function insertPlan(meta, days, source) {
     return { planRowId, approximateCount, unresolvedCount };
 }
 
+// The seeders below run on every boot, so a network failure (fetch rejects with
+// a TypeError) is routine for an offline user. A bad response or unparseable
+// file is a packaging bug and stays an error.
+function logSeedLoadFailure(message, e) {
+    (e instanceof TypeError ? console.warn : console.error)(message, e);
+}
+
 // Seed the bundled reading plans from data/plans/ on first install. Idempotent:
 // a plan already present (matched by its stable plan_id) is left untouched.
 async function seedBundledPlans() {
+    if (navigator.onLine === false) return;
     for (const filename of BUNDLED_PLAN_FILES) {
         let plan;
         try {
@@ -633,7 +752,7 @@ async function seedBundledPlans() {
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             plan = await response.json();
         } catch (e) {
-            console.error(`seedBundledPlans: failed to load ${filename}:`, e);
+            logSeedLoadFailure(`seedBundledPlans: failed to load ${filename}:`, e);
             continue;
         }
 
@@ -686,6 +805,7 @@ function insertTemplate(meta, steps) {
 // Seed the built-in study templates from data/templates/ on first install.
 // Idempotent: a template already present (matched by its name) is left untouched.
 async function seedBundledTemplates() {
+    if (navigator.onLine === false) return;
     for (const filename of BUNDLED_TEMPLATE_FILES) {
         let template;
         try {
@@ -693,7 +813,7 @@ async function seedBundledTemplates() {
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             template = await response.json();
         } catch (e) {
-            console.error(`seedBundledTemplates: failed to load ${filename}:`, e);
+            logSeedLoadFailure(`seedBundledTemplates: failed to load ${filename}:`, e);
             continue;
         }
 

@@ -1,6 +1,7 @@
 // panels.js — Study panel management: tabs, views, resize handles
 
 import { createStudy } from './db.js';
+import { languageTabShown } from './language.js';
 
 // Open study tabs — browser-tab model
 // "all" is the permanent All Studies tab; study IDs are integers.
@@ -38,6 +39,7 @@ function switchTab(tabName) {
         panel.classList.toggle('active', active);
         panel.classList.toggle('hidden', !active);
     });
+    if (tabName === 'language') languageTabShown();
 }
 
 // ============================================================

@@ -1,6 +1,6 @@
 // reader.js — Scripture rendering and navigation
 
-import { getChapter, getBooks, getBook, getTranslations, chapterExistsInTranslation, getNoteCountsForChapter, getMarkupsForChapter, getBookmarksForChapter, getOriginalWordsForVerses } from './db.js';
+import { getChapter, getBooks, getBook, getTranslations, chapterExistsInTranslation, getNoteCountsForChapter, getMarkupsForChapter, getBookmarksForChapter, getOriginalWordsForVerses, warnLanguageUnavailable } from './db.js';
 
 // ============================================================
 // Per-pane state — persisted to localStorage
@@ -272,7 +272,7 @@ async function populateTitleGloss(el, textSpan, verseId) {
     try {
         words = await getOriginalWordsForVerses([verseId]);
     } catch (e) {
-        console.error('populateTitleGloss: failed to load title words:', e);
+        warnLanguageUnavailable(e);
     }
     // STEPBible's gloss uses '/' to mark prefix/root/suffix boundaries within a
     // printed word — meaningful in the Language tab's per-word interlinear

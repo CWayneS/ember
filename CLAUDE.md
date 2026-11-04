@@ -8,7 +8,7 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - SQLite databases accessed via sql.js:
   - data/core.db — books, cross-references, Nave's topics; on first run it's copied to OPFS and the user-data tables (notes, tags, bookmarks, markups, plans) are added there
   - data/translations/*.db — one per translation (KJV, ASV, Darby, WEB, YLT, BSB)
-  - data/language.db — original-language words, Greek lexicon (TBESG), Greek and Hebrew morphology (TEGMC, TEHMC), Hebrew word pieces and Ketiv/variants; read-only, lazy-loaded; built by scripts/build_language.py (`--ship` to copy to data/; decisions in docs/HEBREW_ANATOMY_DATA_REPORT.md)
+  - data/language.db — original-language words, Greek lexicon (TBESG), Greek and Hebrew morphology (TEGMC, TEHMC), Hebrew word pieces and Ketiv/variants; read-only; downloaded to OPFS in the background after launch, opened only when the Language tab or a titled Psalm needs it; built by scripts/build_language.py (`--ship` to copy to data/; decisions in docs/HEBREW_ANATOMY_DATA_REPORT.md)
 - OPFS for persistent storage, IndexedDB as fallback; writes go through a storage worker
 - Service worker for offline caching
 - CSS custom properties for theming (light + dark)
@@ -46,6 +46,7 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - build/ — core.db build script and its source data
 - scripts/ — Translation, language.db, cross-reference, and plan conversion scripts
 - tests/verify.py — Playwright browser verification (`python3 tests/verify.py smoke`, etc.)
+- tests/stress.py, scripts/gen_stress_data.py — Longevity stress test (measurement only; generated data under tests/stress-data/ is gitignored)
 - docs/ — Build specs, standalone feature specs, BUILD_N_ACTUAL_STATE records
 
 ## Code Style

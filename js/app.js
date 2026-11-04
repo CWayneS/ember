@@ -1,6 +1,6 @@
 // app.js — Entry point
 
-import { initDatabase } from './db.js';
+import { initDatabase, startLanguageBackgroundDownload } from './db.js';
 
 import { initReader } from './reader.js';
 
@@ -65,6 +65,8 @@ async function init() {
 
         // Hide loading screen
         document.getElementById('loading').classList.add('hidden');
+
+        startLanguageBackgroundDownload();
 
         // Register service worker for production only.
         // Skip on localhost so development refreshes always load fresh files.

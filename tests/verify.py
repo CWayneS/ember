@@ -14,6 +14,8 @@ Usage (from the repo root):
    python3 tests/verify.py notes         # removing tags and verse anchors from a note
    python3 tests/verify.py sw            # service worker installs and precaches every js/ file
    python3 tests/verify.py hebrew        # Hebrew word anatomy: TEHMC decode, pieces, affixes, Ketiv
+   python3 tests/verify.py offline       # language.db background download, offline use, failure and
+                                         #   recovery states, single request, interrupted downloads
    python3 tests/verify.py dbsnapshot out.json          # results of ~36 db.js calls as JSON
    python3 tests/verify.py dbcompare before.json after.json
 
@@ -23,12 +25,13 @@ user rows, which differ between runs.
 
 Requires: python3, playwright (pip install playwright && playwright install chromium).
 """
-import json, os, sqlite3, subprocess, sys, time
+import json, os, sqlite3, struct, subprocess, sys, time
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PORT = 8765
 URL  = f'http://localhost:{PORT}/'
+SW_URL = URL.replace('localhost', '127.0.0.1')  # app.js registers the worker everywhere but 'localhost'
 
 # Console errors matching any of these are not failures. (The FTS5→LIKE
 # fallback used to log an error per search; it is a one-time warning now,
@@ -44,12 +47,12 @@ def start_server():
 
 
 class App:
-    def __init__(self, page):
+    def __init__(self, page, ignore=lambda message: False):
         self.page = page
         self.errors = []
         page.on('pageerror', lambda e: self.errors.append(f'pageerror: {e}'))
         page.on('console', lambda m: self.errors.append(f'console.error: {m.text}')
-                if m.type == 'error' and not any(k in m.text for k in KNOWN_ERRORS) else None)
+                if m.type == 'error' and not ignore(m) and not any(k in m.text for k in KNOWN_ERRORS) else None)
 
     def boot(self, url=URL):
         self.page.goto(url)
@@ -467,6 +470,7 @@ def scenario_notes(app):
     return FAILURES
 
 
+
 # ---------------------------------------------------------------- service worker
 def scenario_sw(app):
     """app.js skips service-worker registration only for hostname 'localhost',
@@ -499,8 +503,11 @@ def scenario_sw(app):
     stale = [f for f in listed if not os.path.exists(os.path.join(ROOT, f.lstrip('/')))]
     check(stale == [], f'sw.js PRECACHE has no entries for deleted files (stale: {stale})')
     # data/ must never be copied into Cache Storage: db.js keeps those files in
-    # OPFS. Open the Language tab so language.db is fetched with the worker
-    # in control, then check nothing under /data/ is in any cache.
+    # OPFS. The background download may already have finished before the worker
+    # took control, so fetch from data/ directly with the worker in control, then
+    # check nothing under /data/ is in any cache.
+    check(p.evaluate("!!navigator.serviceWorker.controller"), 'worker controls the page')
+    p.evaluate("Promise.all(['language.db', 'plans/mcheyne-1year.json'].map(f => fetch(`./data/${f}`).then(r => r.arrayBuffer())))")
     app.select_verse(1001001)
     p.click('#reference-tabs [data-tab="language"]')
     p.wait_for_selector('.language-word-row', timeout=120_000)
@@ -789,6 +796,349 @@ def scenario_hebrew(app):
     return FAILURES
 
 
+# ---------------------------------------------------------------- offline
+LANGUAGE_DB_PATH = os.path.join(ROOT, 'data', 'language.db')
+LANGUAGE_DB_SIZE = os.path.getsize(LANGUAGE_DB_PATH)
+UNAVAILABLE_TEXT = 'downloads the first time Ember is online'
+DOWNLOADING_TEXT = 'Downloading original-language data'
+
+# Records the byte length of every sql.js Database the app opens, without any
+# hook in the app: sql-wasm.js assigns the initSqlJs global, so an accessor on
+# window can wrap what it returns. language.db is the only 64 MB one.
+SQL_HOOK_JS = """
+window.__emberTest = { databaseSizes: [] };
+(() => {
+    let realInit;
+    Object.defineProperty(window, 'initSqlJs', {
+        configurable: true,
+        set(value) { realInit = value; },
+        get() {
+            return realInit && (async (config) => {
+                const SQL = await realInit(config);
+                const Original = SQL.Database;
+                SQL.Database = function (data) {
+                    window.__emberTest.databaseSizes.push(data ? data.length : 0);
+                    return new Original(data);
+                };
+                SQL.Database.prototype = Original.prototype;
+                return SQL;
+            });
+        },
+    });
+})();
+"""
+
+
+def is_expected_network_line(message):
+    """The browser's own line for a failed request under data/. JS can't suppress
+    it, and these scenarios fail those requests on purpose."""
+    return (message.text.startswith('Failed to load resource')
+            and '/data/' in (message.location or {}).get('url', ''))
+
+
+class OfflineRun:
+    """One fresh profile: a new context with the Database hook and a request log."""
+
+    def __init__(self, browser):
+        self.ctx = browser.new_context(viewport={'width': 1600, 'height': 1000})
+        self.ctx.add_init_script(SQL_HOOK_JS)
+        self.requests = []
+        self.new_page()
+
+    def new_page(self):
+        page = self.ctx.new_page()
+        page.on('request', lambda r: self.requests.append(r.url) if r.url.endswith('/data/language.db') else None)
+        self.app = App(page, ignore=is_expected_network_line)
+        self.page = page
+        return page
+
+    def boot(self):
+        self.app.boot(SW_URL)
+
+    def reload(self):
+        self.page.reload()
+        self.page.wait_for_selector('#loading.hidden', state='attached', timeout=60_000)
+        self.page.wait_for_selector('#reader-pane-a .verse', timeout=30_000)
+
+    def worker_ready(self):
+        self.page.evaluate('navigator.serviceWorker.ready')
+        self.page.wait_for_timeout(1500)
+
+    def opfs_size(self):
+        return self.page.evaluate("""async () => {
+            const root = await navigator.storage.getDirectory();
+            try { return (await (await root.getFileHandle('language.db')).getFile()).size; }
+            catch (_) { return null; }
+        }""")
+
+    def wait_for_download(self, timeout_ms=30_000):
+        """Polls the size, not existence: an empty file sits at the real name for
+        the whole download."""
+        waited = 0
+        while self.opfs_size() != LANGUAGE_DB_SIZE and waited < timeout_ms:
+            self.page.wait_for_timeout(100)
+            waited += 100
+        return self.opfs_size() == LANGUAGE_DB_SIZE
+
+    def language_db_opened(self):
+        return LANGUAGE_DB_SIZE in self.page.evaluate('window.__emberTest.databaseSizes')
+
+    def language_text(self):
+        return self.page.evaluate("document.getElementById('language-tab').textContent")
+
+    def open_language(self, book, chapter, verse_id):
+        self.app.navigate(book, chapter)
+        self.app.select_verse(verse_id)
+        self.page.click('#reference-tabs [data-tab="language"]')
+
+    def verse_rows_render(self, book, chapter, verse_id, script):
+        self.open_language(book, chapter, verse_id)
+        self.page.wait_for_selector(f'.language-word-row .language-{script}', timeout=30_000)
+        return True
+
+    def wait_for_message(self, text):
+        self.page.wait_for_function('(text) => document.getElementById("language-tab").textContent.includes(text)',
+                                    arg=text, timeout=15_000)
+        return True
+
+    def check_no_errors(self, label):
+        check(self.app.errors == [], f'{label}: no app console errors {self.app.errors[:3]}')
+
+    def close(self):
+        self.ctx.close()
+
+
+def offline_happy_path(browser):
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    run.worker_ready()
+    check(run.wait_for_download(), 'language.db reaches OPFS without the Language tab being opened')
+    check(len(run.requests) == 1, f'one request for language.db ({len(run.requests)})')
+    check(not run.language_db_opened(), 'downloading did not open a Database')
+    run.app.select_verse(1001001)
+    p.wait_for_timeout(500)
+    active = p.evaluate("document.querySelector('#reference-tabs .tab-btn.active').dataset.tab")
+    check(active == 'info' and not run.language_db_opened(), f'a verse click on the {active} tab does not open it either')
+
+    run.ctx.set_offline(True)
+    run.reload()
+    check(run.verse_rows_render(43, 1, 43001001, 'greek'), 'offline: John 1:1 renders Greek')
+    check(run.verse_rows_render(1, 1, 1001001, 'hebrew'), 'offline: Genesis 1:1 renders Hebrew')
+    run.app.navigate(19, 3)
+    p.wait_for_function("document.querySelector('.verse.verse-title')?.textContent.includes('David')", timeout=15_000)
+    check(True, 'offline: KJV Psalm 3 shows its gloss title')
+    run.check_no_errors('happy path')
+    run.close()
+
+
+def retry_by_returning_to_tab(run):
+    run.page.click('#reference-tabs [data-tab="info"]')
+    run.page.click('#reference-tabs [data-tab="language"]')
+    run.page.wait_for_selector('.language-word-row .language-greek', timeout=30_000)
+    return True
+
+
+def offline_never_downloaded_and_recovery(browser):
+    run = OfflineRun(browser)
+    p = run.page
+    p.route('**/data/language.db', lambda route: route.abort())
+    run.boot()
+    run.worker_ready()
+    p.wait_for_timeout(2500)  # the background attempt has failed by now
+    run.open_language(43, 1, 43001001)
+    check(run.wait_for_message(UNAVAILABLE_TEXT), 'never downloaded: the Language tab shows the message')
+    run.app.navigate(19, 3)
+    p.wait_for_timeout(500)
+    verses = p.evaluate("document.querySelectorAll('#reader-pane-a .verse').length")
+    title = p.evaluate("!!document.querySelector('.verse.verse-title')")
+    check(verses == 8 and not title, f'never downloaded: Psalm 3 renders, no title row ({verses} verses)')
+    run.check_no_errors('never downloaded')
+
+    # A warm HTTP cache hides the plan/template seeders from an offline boot.
+    # Cleared, they really fail, and still may only warn.
+    run.ctx.set_offline(True)
+    run.ctx.new_cdp_session(p).send('Network.clearBrowserCache')
+    run.reload()
+    p.wait_for_timeout(2500)
+    run.open_language(43, 1, 43001001)
+    check(run.wait_for_message(UNAVAILABLE_TEXT), 'offline boot, cold HTTP cache: message shows')
+    run.check_no_errors('offline boot, cold HTTP cache')
+
+    run.ctx.set_offline(False)
+    p.wait_for_timeout(500)  # still blocked: this attempt fails too, and re-arms
+    time_origin = p.evaluate('performance.timeOrigin')
+    p.unroute('**/data/language.db')
+    p.evaluate("window.dispatchEvent(new Event('online'))")
+    check(run.wait_for_download(), 'recovery: the online path downloads the file')
+    p.wait_for_selector('.language-word-row .language-greek', timeout=30_000)
+    check(True, 'recovery: the tab showing the message renders by itself once the download starts')
+    check(run.verse_rows_render(43, 1, 43001002, 'greek'), 'recovery: next selection renders')
+    check(p.evaluate('performance.timeOrigin') == time_origin, 'recovery: no reload happened')
+    run.check_no_errors('recovery')
+    run.close()
+
+    # Retry on next use, with no online event at all. Each waits out the background
+    # attempt first, so only the retry under test can load the file afterwards.
+    for label, retry in (('next selection', lambda run: run.verse_rows_render(43, 1, 43001002, 'greek')),
+                         ('returning to the tab', retry_by_returning_to_tab)):
+        run = OfflineRun(browser)
+        p = run.page
+        p.route('**/data/language.db', lambda route: route.abort())
+        run.boot()
+        p.wait_for_timeout(2500)
+        run.open_language(43, 1, 43001001)
+        check(run.wait_for_message(UNAVAILABLE_TEXT), f'retry on {label}: first use fails with the message')
+        p.unroute('**/data/language.db')
+        check(retry(run), f'retry on {label}: renders without an online event')
+        run.check_no_errors(f'retry on {label}')
+        run.close()
+
+    # Offline at boot, online later
+    run = OfflineRun(browser)
+    p = run.page
+    p.route('**/data/language.db', lambda route: route.abort())
+    run.boot()
+    run.worker_ready()
+    p.unroute('**/data/language.db')
+    run.ctx.set_offline(True)
+    run.reload()
+    p.wait_for_timeout(2500)
+    check(run.opfs_size() != LANGUAGE_DB_SIZE, 'offline at boot: nothing downloaded yet')
+    run.ctx.set_offline(False)
+    p.wait_for_timeout(500)
+    p.evaluate("window.dispatchEvent(new Event('online'))")  # navigator.onLine is unreliable across an offline reload here
+    check(run.wait_for_download(), 'offline at boot: going online later downloads it without a reload')
+    run.check_no_errors('offline at boot')
+    run.close()
+
+
+def offline_single_download(browser):
+    held = []
+    for order in ('tab first', 'background first'):
+        held.clear()
+        run = OfflineRun(browser)
+        p = run.page
+        p.route('**/data/language.db', lambda route: held.append(route))
+        run.boot()
+        if order == 'background first':
+            p.wait_for_timeout(2500)
+            check(len(held) == 1, 'background first: the background download has started')
+        run.app.select_verse(1001001)
+        p.click('#reference-tabs [data-tab="language"]')
+        check(run.wait_for_message(DOWNLOADING_TEXT), f'{order}: the downloading state shows')
+        p.wait_for_timeout(2500)  # past the background timer, whichever came first
+        check(DOWNLOADING_TEXT in run.language_text(), f'{order}: still showing it while the download is held')
+        held[0].continue_()
+        p.wait_for_selector('.language-word-row .language-hebrew', timeout=30_000)
+        check(len(run.requests) == 1, f'{order}: exactly one request for language.db ({len(run.requests)})')
+        run.check_no_errors(order)
+        run.close()
+
+
+def offline_interrupted(browser):
+    # A real interruption: tab closed mid-download
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    cdp = run.ctx.new_cdp_session(p)
+    cdp.send('Network.enable')
+    cdp.send('Network.emulateNetworkConditions', {'offline': False, 'latency': 0,
+                                                  'downloadThroughput': 4 * 1024 * 1024, 'uploadThroughput': 4 * 1024 * 1024})
+    p.wait_for_timeout(4000)  # timer fired, a few MB in
+    check(run.opfs_size() == 0, f'mid-download the real name is an empty file ({run.opfs_size()})')
+    run.new_page()
+    p.close()
+    run.page.goto(SW_URL + 'manifest.json')
+    run.page.wait_for_timeout(500)
+    check(run.opfs_size() == 0, f'closing the tab leaves that empty file ({run.opfs_size()})')
+    run.boot()
+    check(run.wait_for_download(), 'tab closed mid-download: the next boot re-downloads it')
+    check(run.verse_rows_render(43, 1, 43001001, 'greek'), 'tab closed mid-download: Language tab works')
+    run.check_no_errors('tab closed')
+    run.close()
+
+    # An empty file already there, as older builds could leave behind
+    run = OfflineRun(browser)
+    p = run.page
+    p.route('**/data/language.db', lambda route: route.abort())
+    run.boot()
+    p.unroute('**/data/language.db')
+    p.evaluate("navigator.storage.getDirectory().then(root => root.getFileHandle('language.db', { create: true }))")
+    run.reload()
+    check(run.wait_for_download(), 'existing 0-byte file: replaced on the next boot')
+    check(run.verse_rows_render(1, 1, 1001001, 'hebrew'), 'existing 0-byte file: Language tab works')
+    run.check_no_errors('0-byte file')
+    run.close()
+
+    # A response that ends cleanly but short: only the header check can catch it
+    with open(LANGUAGE_DB_PATH, 'rb') as fh:
+        truncated = fh.read(1_000_000)
+    run = OfflineRun(browser)
+    p = run.page
+    p.route('**/data/language.db', lambda route: route.fulfill(status=200, body=truncated, content_type='application/octet-stream'))
+    run.boot()
+    p.wait_for_timeout(3000)
+    check(run.opfs_size() == len(truncated), f'truncated body: stored short ({run.opfs_size()})')
+    run.open_language(43, 1, 43001001)
+    check(run.wait_for_message(UNAVAILABLE_TEXT), 'truncated body: treated as unavailable, not opened')
+    check(not run.language_db_opened(), 'truncated body: no Database made from it')
+    p.unroute('**/data/language.db')
+    run.reload()
+    check(run.wait_for_download(), 'truncated file: replaced on the next boot')
+    check(run.verse_rows_render(43, 1, 43001001, 'greek'), 'truncated file: Language tab works')
+    run.check_no_errors('truncated body')
+    run.close()
+
+
+def offline_tab_switch(browser):
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    run.wait_for_download()
+    run.app.select_verse(1001001)
+    p.wait_for_timeout(300)
+    check(not run.language_db_opened() and run.language_text() == '', 'selecting on Info leaves the Language tab unrendered')
+    p.click('#reference-tabs [data-tab="language"]')
+    p.wait_for_selector('.language-word-row .language-hebrew', timeout=30_000)
+    check(run.language_db_opened(), 'switching to the tab renders the selected verse with no second click')
+    p.locator('.language-word-row').first.click()
+    p.wait_for_selector('.language-word-card')
+    p.click('#reference-tabs [data-tab="info"]')
+    p.click('#reference-tabs [data-tab="language"]')
+    p.wait_for_timeout(300)
+    check(p.locator('.language-word-card').count() == 1, 'an open word card survives switching away and back')
+
+    p.click('#reference-tabs [data-tab="info"]')
+    run.app.select_verse(1001002)
+    p.wait_for_timeout(200)
+    check(p.locator('.language-word-row').count() == 0, 'a selection made while hidden clears the old rows')
+    p.click('#reader-pane-a .pane-content', position={'x': 5, 'y': 5})
+    p.wait_for_timeout(200)
+    p.click('#reference-tabs [data-tab="language"]')
+    p.wait_for_timeout(300)
+    check('Select a verse' in run.language_text(), 'clearing the selection while hidden shows the empty state, not a stale verse')
+    run.check_no_errors('tab switch')
+    run.close()
+
+
+def scenario_offline(browser):
+    """Offline_Language_And_Stress_Test_Spec Item 1d. Each part needs its own
+    fresh profile, so this takes the browser rather than one booted app."""
+    with open(LANGUAGE_DB_PATH, 'rb') as fh:
+        header = fh.read(100)
+    page_size = struct.unpack('>H', header[16:18])[0]
+    page_count, change_counter, valid_for = (struct.unpack('>I', header[o:o + 4])[0] for o in (28, 24, 92))
+    check(change_counter == valid_for and page_size * page_count == LANGUAGE_DB_SIZE,
+          'shipped language.db passes the real header check, not the "unverifiable" branch')
+    offline_happy_path(browser)
+    offline_never_downloaded_and_recovery(browser)
+    offline_single_download(browser)
+    offline_interrupted(browser)
+    offline_tab_switch(browser)
+    return FAILURES
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -801,9 +1151,15 @@ def main():
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
+            if args[0] == 'offline':
+                print('== offline')
+                failures = scenario_offline(browser)
+                browser.close()
+                print(f'\n{len(failures)} failure(s)')
+                sys.exit(1 if failures else 0)
             ctx = browser.new_context(viewport={'width': 1600, 'height': 1000})
             app = App(ctx.new_page())
-            app.boot(URL.replace('localhost', '127.0.0.1') if args[0] == 'sw' else URL)
+            app.boot(SW_URL if args[0] == 'sw' else URL)
             print(f'== {args[0]}')
             if args[0] == 'sw':         failures = scenario_sw(app)
             elif args[0] == 'popovers': failures = scenario_popovers(app)

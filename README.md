@@ -82,6 +82,7 @@ ember/
 │   ├── build_translation.py   # Builds each translation's .db file
 │   ├── build_crossrefs.py     # Ingests OpenBible cross-references into core.db
 │   ├── build_language.py      # Builds language.db from STEPBible-Data
+│   ├── gen_stress_data.py     # Generates 1/10/25/40-year user data for tests/stress.py (output gitignored)
 │   ├── analysis/              # Data investigation and checking scripts (not part of the app or build);
 │   │                           #   hebrew_anatomy/ holds the Hebrew rebuild's source fetch, rebuild check, and parity tests
 │   └── convert-canonical.js, convert-mcheyne.js, convert-chronological.js
@@ -90,7 +91,8 @@ ember/
 │   └── build_db.py            # Builds core.db's schema, books table, and Nave's Topical Bible topics/topic_verses
 │                               # (run before scripts/build_crossrefs.py, which adds cross-references to the same file)
 ├── tests/
-│   └── verify.py              # Live Playwright verification of the running app — see "Verifying Changes"
+│   ├── verify.py              # Live Playwright verification of the running app — see "Verifying Changes"
+│   └── stress.py              # Longevity stress test measurements — see docs/STRESS_TEST_RESULTS.md
 └── icons/                     # icon-192.png / icon-512.png referenced by manifest.json — not currently present
                                 # in the repo; PWA install currently falls back to no custom icon
 ```
@@ -144,7 +146,7 @@ Serve the project root with any static file server:
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000` in a Chromium-based browser. Databases load on first visit and are cached locally (OPFS) for all subsequent launches.
+Open `http://localhost:8000` in a Chromium-based browser. On first visit, the core database and translations load before the app starts, and `language.db` follows in the background just after. All of them are kept locally (OPFS) for later launches.
 
 To install as a PWA, use your browser's install option (usually in the address bar or menu). The app will open in its own window without browser chrome.
 
@@ -159,6 +161,8 @@ python3 tests/verify.py popovers     # every help/settings popover, bookmark pro
 python3 tests/verify.py smoke        # notes, tags, bookmarks, markups, reference tabs, search,
                                      #   plans, template bar, study templates, split view
 python3 tests/verify.py indicators   # note/bookmark dots on a titled Psalm (verse=0 row)
+python3 tests/verify.py offline      # language.db background download, offline use, failure and
+                                     #   recovery states, single request, interrupted downloads
 ```
 
 For changes to `js/db.js`, snapshot the results of its query functions before and after and compare:
@@ -211,6 +215,8 @@ STEPBible-Data's license permits inclusion in software without requesting permis
 | `docs/Psalm_Title_Fix_Spec.md`, `docs/Grammar_Decode_Spec_DRAFT.md`, `docs/Language_Panel_Word_Inspector_Spec.md`, `docs/Hebrew_Word_Anatomy_Spec.md` | Standalone feature specs between numbered builds |
 | `docs/HEBREW_ANATOMY_DATA_REPORT.md` | The Hebrew Word Anatomy build's record: the language.db rebuild (sources, checks, sizes) and every decision that changed the spec |
 | `docs/BUILD_N_ACTUAL_STATE.md` (per build) | Ground-truth audit of each build's shipped code, derived from source, not planning docs. Latest: `docs/BUILD_6.1_ACTUAL_STATE.md` (post-Build-6 Language tab rework + September 2026 architecture-review pass) |
+| `docs/Offline_Language_And_Stress_Test_Spec.md`, `docs/OFFLINE_LANGUAGE_REPORT.md` | Spec for offline language data and the stress test, and the record of what was found and decided |
+| `docs/STRESS_TEST_RESULTS.md` | Longevity stress test: results at 1/10/25/40 years of use, what drives the cost, ranked candidate remedies |
 | `docs/ANCHOR_QUERIES.md` | SQL query convention for range-aware verse-anchor lookups |
 
 ## License

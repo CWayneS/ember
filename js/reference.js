@@ -8,7 +8,7 @@ import {
 import { navigateTo, getCurrentLocation } from './reader.js';
 import { selectVerseRange } from './selection.js';
 import { openStudy, openTagView } from './panels.js';
-import { renderLanguageTab as renderLanguageTabContent } from './language.js';
+import { initLanguageTab, renderLanguageTab as renderLanguageTabContent } from './language.js';
 
 const EMPTY_MSG = 'Select a verse to see reference material.';
 
@@ -23,6 +23,7 @@ export function refreshReference(verseId) {
 }
 
 export function initReference() {
+    initLanguageTab();
     document.addEventListener('selection-changed', (e) => {
         const { verseIds } = e.detail;
         if (verseIds.length > 0) {
@@ -48,9 +49,10 @@ function renderAll(verseIds) {
 }
 
 function clearAll() {
-    for (const id of ['info-tab', 'tags-tab', 'related-tab', 'language-tab']) {
+    for (const id of ['info-tab', 'tags-tab', 'related-tab']) {
         setPlaceholder(document.getElementById(id), EMPTY_MSG);
     }
+    renderLanguageTabContent([]);
 }
 
 // ============================================================

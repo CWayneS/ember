@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v10'; // bumped: Hebrew word anatomy (db.js, grammar-decode.js, language.js, global-settings.js, style.css changed)
+const CACHE_NAME = 'ember-v11'; // bumped: background language.db download (app.js, db.js, language.js, panels.js, reader.js, reference.js changed)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:
@@ -11,10 +11,11 @@ const CACHE_NAME = 'ember-v10'; // bumped: Hebrew word anatomy (db.js, grammar-d
 //
 // core.db is NOT included here — it is large (23 MB) and already persisted
 // in OPFS/IndexedDB by db.js on first load. The translation .db files and
-// data/language.db (~57 MB) are the same story — seeded into OPFS by db.js
-// (eagerly / lazily on first Language-tab use) and served from there. The
-// bundled plan/template JSON is only read while seeding core.db on a first
-// install, which can't happen offline anyway.
+// data/language.db (~64 MB) are the same story — seeded into OPFS by db.js
+// (during first boot / in the background just after it) and served from there.
+// The bundled plan/template JSON is fetched on every online boot so a newly
+// bundled plan reaches existing installs, but anything it holds is already in
+// core.db after the first boot, so offline boots simply skip it.
 const PRECACHE = [
     './',
     './index.html',
@@ -86,10 +87,10 @@ self.addEventListener('activate', (event) => {
 // ============================================================
 //
 // Everything under data/ (core.db, the translation .db files, language.db,
-// the bundled plan/template JSON) is fetched by db.js at most once per
+// the bundled plan/template JSON) is either fetched by db.js at most once per
 // install and then persisted in OPFS/IndexedDB, or only read while seeding
 // core.db. Copying those responses into Cache Storage as well would store
-// a second ~57 MB language.db (and any translation fetched after the worker
+// a second ~64 MB language.db (and any translation fetched after the worker
 // took control) that nothing ever reads back — db.js goes to OPFS first and
 // only re-fetches when OPFS is empty. So data/ requests go straight to the
 // network and are never cached here.

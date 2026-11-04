@@ -18,12 +18,14 @@
 import {
     formatReference, getOriginalWordsForVerses, getGreekLexiconEntry,
     getPiecesForWords, getVariantsForWords, getHebrewAffixes,
+    isLanguageDownloading, warnLanguageUnavailable,
 } from './db.js';
 import { decodeMorphCode, splitHebrewWord } from './grammar-decode.js';
 
 const EMPTY_MSG        = 'Select a verse to see its original-language text.';
 const NO_DATA_MSG      = 'No original-language data for this verse yet.';
-const UNAVAILABLE_MSG  = 'Original-language data is unavailable.';
+const DOWNLOADING_MSG  = 'Downloading original-language data…';
+const UNAVAILABLE_MSG  = 'Original-language data downloads the first time Ember is online. Connect once and it stays on this device for good.';
 
 let currentVerseIds      = [];   // last selection this tab was asked to show
 let lastInterlinearWords = null; // cached render input, for re-renders on tap
@@ -44,28 +46,77 @@ let openTier2Ids   = new Set();
 let openTier3Ids   = new Set();
 let renderGeneration = 0; // staleness guard for overlapping async rebuilds
 
+// A selection this tab still owes a render: made while the tab was hidden, or
+// whose load failed. language.db stays closed until the tab is actually looked
+// at, so a selection on another tab costs nothing.
+let renderPending = false;
+let wordsLoading  = false; // a load for the current selection is in flight
+
+export function initLanguageTab() {
+    document.addEventListener('language-download-started', () => {
+        if (wordsLoading) {
+            setPlaceholder(document.getElementById('language-tab'), DOWNLOADING_MSG);
+        } else if (renderPending && isLanguageTabActive()) {
+            renderCurrentSelection();
+        }
+    });
+}
+
+// Called when the tab becomes visible. A selection already rendered is left
+// alone, so an open word card survives switching away and back.
+export function languageTabShown() {
+    if (renderPending) renderCurrentSelection();
+}
+
+function isLanguageTabActive() {
+    return document.getElementById('language-tab').classList.contains('active');
+}
+
 export async function renderLanguageTab(verseIds) {
     const container = document.getElementById('language-tab');
     currentVerseIds = verseIds || [];
     openCardKey = null;
     openTier2Ids.clear();
     openTier3Ids.clear();
+    renderGeneration++; // a rebuild still in flight belongs to the old selection
+    lastInterlinearWords = null;
+    wordsLoading = false;
 
     if (currentVerseIds.length === 0) {
-        lastInterlinearWords = null;
+        renderPending = false;
         setPlaceholder(container, EMPTY_MSG);
         return;
     }
 
+    if (!isLanguageTabActive()) {
+        renderPending = true;
+        container.innerHTML = '';
+        return;
+    }
+
+    await renderCurrentSelection();
+}
+
+async function renderCurrentSelection() {
+    const container = document.getElementById('language-tab');
     const requestIds = currentVerseIds;
+    renderPending = false;
+    wordsLoading = true;
+    if (isLanguageDownloading()) setPlaceholder(container, DOWNLOADING_MSG);
+
     let words;
     try {
         words = await getOriginalWordsForVerses(requestIds);
     } catch (e) {
-        console.error('renderLanguageTab: failed to load original-language data:', e);
-        if (requestIds === currentVerseIds) setPlaceholder(container, UNAVAILABLE_MSG);
+        warnLanguageUnavailable(e);
+        if (requestIds === currentVerseIds) {
+            wordsLoading = false;
+            renderPending = true;
+            setPlaceholder(container, UNAVAILABLE_MSG);
+        }
         return;
     }
+    if (requestIds === currentVerseIds) wordsLoading = false;
 
     const hebrewIds = words.filter(w => w.language === 'hebrew').map(w => w.id);
     let pieces = new Map(), variants = new Map();
