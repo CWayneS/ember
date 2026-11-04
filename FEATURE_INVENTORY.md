@@ -171,7 +171,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 86. Notes displayed in creation-order (ascending) as `.note-block` cards — notes.js:buildNoteBlock
 87. Each note block: verse anchor chip(s) at top, contenteditable body, tag area, delete button in footer
 87a. Long studies and tag views: off-screen `.note-block` cards skip layout and paint (`content-visibility: auto`), but stay in the DOM, so in-page find still reaches them. A block with focus stays rendered — style.css `.note-block`
-88. Note body autosaves 800ms after last input. The text is read at input time, so line breaks survive scrolling away or leaving the study before the save — notes.js:scheduleSave
+88. Note body autosaves 800ms after last input. The text is read at input time, so line breaks survive scrolling away or leaving the study before the save. Changing the study view writes any pending save straight away, before notes are re-read — notes.js:scheduleSave, writePendingSave
 89. Note body placeholder text "Write your note…" when empty — notes.js:131
 90. Note block gains accent-color border when focused (`focus-within`) — style.css
 91. Anchor chip(s) above note body: show verse reference(s), clickable to navigate to that verse — notes.js:buildNoteBlock

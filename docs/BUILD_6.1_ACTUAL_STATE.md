@@ -358,11 +358,11 @@ Record: `STRESS_TEST_RESULTS.md`, "Long lists, fixed". This replaces §3's note 
 
 **`db.js`:** `attachTagsAndAnchors()` runs one tags query and one anchors query for the whole list, with `ORDER BY rowid` to keep insertion order. `getTagsForNote()` is gone. `getAnchorsForNote()` is now exported.
 
-**`notes.js`:** delete, attach, remove-anchor and Add Note update one block in place; `buildAnchorsArea()` and `refreshAnchorsArea()` are new. `renderStudyDocument()` now runs only on opening or switching to a study, and when the last note is deleted. `scheduleSave()` reads `innerText` at input time and the timer only writes, because `innerText` is empty in a skipped block and loses line breaks in a hidden or rebuilt one.
+**`notes.js`:** delete, attach, remove-anchor and Add Note update one block in place; `buildAnchorsArea()` and `refreshAnchorsArea()` are new. `renderStudyDocument()` now runs only on opening or switching to a study, and when the last note is deleted. `scheduleSave()` reads `innerText` at input time and the timer only writes, because `innerText` is empty in a skipped block and loses line breaks in a hidden or rebuilt one. `study-changed` writes any pending save through `writePendingSave()` before notes are re-read.
 
 **`style.css`:** `.note-block` has `content-visibility: auto`, with `--note-block-estimated-height` as its estimated height. `:focus-within` is exempt.
 
-**`sw.js`:** `CACHE_NAME` is `ember-v15`.
+**`sw.js`:** `CACHE_NAME` is `ember-v16`.
 
 **Tests:** `tests/verify.py notes` gains `check_note_lists()`, `check_long_study()` and `check_save_after_leaving()`. `tests/stress.py` times queries in a task of their own, because a statement costs about 5x more there than directly in `page.evaluate`.
 

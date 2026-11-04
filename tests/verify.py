@@ -504,6 +504,34 @@ def check_save_after_leaving(p):
     body = body_of(study)
     check(body == 'one\ntwo\nthree', f"switching to another study before the save keeps line breaks ({body!r})")
 
+    # leaving and straight back: the rebuilt block has to show what was just typed
+    note = lambda: p.evaluate(f"import('./js/db.js').then(db => db.getNotesForStudy({study})[0])")
+    p.click(f'#notes-tabs [data-study-id="{study}"]'); p.wait_for_timeout(150)
+    p.click('.note-block-body'); p.keyboard.press('Control+End'); p.keyboard.type(' four')
+    p.evaluate(f"""(() => {{
+        document.querySelector('#notes-tabs [data-study-id="all"]').click();
+        document.querySelector('#notes-tabs [data-study-id="{study}"]').click();
+    }})()""")
+    shown = p.evaluate("document.querySelector('#notes-active-view .note-block-body').textContent")
+    check(shown == 'one\ntwo\nthree four', f"returning before the save shows the new text ({shown!r})")
+    written = note()
+    check(written['body'] == shown, f"leaving the study writes the save straight away ({written['body']!r})")
+    p.wait_for_timeout(1100)
+    check(note()['modified_at'] == written['modified_at'], 'the timer does not write it a second time')
+    p.click('.note-block-body'); p.keyboard.press('Control+End'); p.keyboard.type(' five')
+    p.wait_for_timeout(1100)
+    body = note()['body']
+    check(body == 'one\ntwo\nthree four five', f"typing after returning keeps the earlier words ({body!r})")
+
+    # deleting still cancels a pending save
+    p.click('.note-block-body'); p.keyboard.press('Control+End'); p.keyboard.type(' six')
+    p.once('dialog', lambda dialog: dialog.accept())
+    p.click('.note-block-delete')
+    p.click('#notes-tabs [data-study-id="all"]')
+    p.wait_for_timeout(1100)
+    left = p.evaluate(f"import('./js/db.js').then(db => db.getNotesForStudy({study}).length)")
+    check(left == 0, f"deleting a note with a pending save leaves it deleted ({left})")
+
 
 def check_note_lists(p):
     """attachTagsAndAnchors() fetches for the whole list at once: each note must

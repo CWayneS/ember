@@ -23,10 +23,6 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 
 **Not recommended on current numbers:** splitting user data into its own database (remedy 5) or replacing sql.js (remedy 6). The reasoning is in "My read now that 1 to 3 are done", under "Candidate remedies" in `docs/STRESS_TEST_RESULTS.md`.
 
-## Bugs
-
-- **Leaving a study and returning within 800 ms of typing shows stale text.** The save still reaches the database, but the rebuilt block shows the old text until the study is reopened, and typing into it then overwrites the newer words. Reproduced by switching to All Studies and straight back. It's a narrow window and predates the long-list work. Writing pending saves when the study view changes, before it rebuilds, should fix it. See `scheduleSave()` in `js/notes.js`.
-
 ## Documentation
 
 - **Fix drifted line references in `FEATURE_INVENTORY.md`.** For example, item 8 says the load error is shown at `app.js:46`, which is now `initMarkups()`; the `catch` is at line 77. Not recorded anywhere else.

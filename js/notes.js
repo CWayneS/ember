@@ -12,7 +12,7 @@ import { refreshReference }                         from './reference.js';
 import { setupTagInput }                            from './tags.js';
 
 let currentVerseIds = [];       // verses currently selected in the reader
-const saveTimers    = new Map(); // noteId → debounce timer
+const pendingSaves  = new Map(); // noteId → { timer, text }, until written
 
 // ============================================================
 // Init
@@ -25,6 +25,10 @@ export function initNotes() {
     });
 
     document.addEventListener('study-changed', (e) => {
+        // Before anything re-reads notes: a block rebuilt from older text
+        // would show it, and typing there would overwrite the newer words.
+        for (const noteId of pendingSaves.keys()) writePendingSave(noteId);
+
         const { studyId } = e.detail;
         if (studyId === 'all') {
             renderAllStudies();
@@ -248,8 +252,8 @@ function buildDeleteButton(noteId, studyId) {
     btn.textContent = 'Delete';
     btn.addEventListener('click', () => {
         if (!confirm('Delete this note?')) return;
-        clearTimeout(saveTimers.get(noteId));
-        saveTimers.delete(noteId);
+        clearTimeout(pendingSaves.get(noteId)?.timer);
+        pendingSaves.delete(noteId);
         deleteNote(noteId);
         const container = document.getElementById('notes-active-view');
         btn.closest('.note-block').remove();
@@ -504,12 +508,18 @@ function scheduleSave(noteId, bodyEl) {
     // Read now, while the block is on screen. By the time the timer fires it may
     // be skipped (content-visibility), hidden or rebuilt, and innerText then
     // comes back empty or without its line breaks.
-    const raw = bodyEl.innerText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    clearTimeout(saveTimers.get(noteId));
-    saveTimers.set(noteId, setTimeout(() => {
-        updateNote(noteId, raw);
-        refreshAfterWrite();
-    }, 800));
+    const text = bodyEl.innerText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    clearTimeout(pendingSaves.get(noteId)?.timer);
+    const timer = setTimeout(() => writePendingSave(noteId), 800);
+    pendingSaves.set(noteId, { timer, text });
+}
+
+function writePendingSave(noteId) {
+    const { timer, text } = pendingSaves.get(noteId);
+    clearTimeout(timer);
+    pendingSaves.delete(noteId);
+    updateNote(noteId, text);
+    refreshAfterWrite();
 }
 
 // ============================================================
