@@ -10,7 +10,7 @@ The measurement itself changed no app code. The fixes you chose afterward are re
 
 **Ember stays stable, and most of it stays fast, through 40 years of heavy use.** Nothing crashed, lost data, or logged a console error at any profile. Boot and search are in the spec's "Good" band even at 40 years on a throttled CPU.
 
-As first measured, three things degraded, all gradually. The second and third are now much improved, and the first is still open:
+As first measured, three things degraded, all gradually. All three are now much improved; see "After the fixes" and "Long lists, fixed":
 
 1. **Very long lists.** A 500-note study takes 628 ms to open and a 2,000-note study 2.6 s. Cost follows the size of the list, about 1.3 ms per note, not the age of the data. A study passes the 200 ms threshold at roughly 150 notes (my extrapolation from that rate).
 2. **Autosave stutter.** Each save blocks the main thread for 60 ms at 10 years and 168 ms at 40. That crosses the "typing feels sticky" line (150 ms) only near year 40 on this machine, but already at year 10 on a CPU 4× slower.
@@ -24,7 +24,7 @@ As first measured, three things degraded, all gradually. The second and third ar
 
 ## After the fixes
 
-Two of the remedies below (1 and 2) and the search-index bug are now fixed. Everything from "Results" down to "Candidate remedies" describes Ember **before** those fixes, because that's what the diagnosis was based on. These are the same measurements re-run on the fixed code, with the data regenerated from a fresh base. `python3 tests/stress.py all` now reproduces this section's numbers.
+Two of the remedies below (1 and 2) and the search-index bug are fixed in this section's numbers, and remedy 3 follows in "Long lists, fixed". Everything from "Results" down to "Candidate remedies" describes Ember **before** those fixes, because that's what the diagnosis was based on. These are the same measurements re-run on the fixed code, with the data regenerated from a fresh base. `python3 tests/stress.py all` now reproduces these numbers apart from what "Long lists, fixed" changes: list rendering and the query timers.
 
 | Profile | Block per autosave, before (ms) | After | Refresh queries, before (ms) | After | Highest RSS during autosaves, before (MB) | After |
 |---|---|---|---|---|---|---|
@@ -47,6 +47,40 @@ Block is the median per save. RSS is the highest of the samples taken every 5 sa
 - **Unchanged, as expected:** long-list rendering (the 2,000-note study still takes about 2.5 s), `export()` time, and boot. Single-sample figures like Restore vary between runs (40y 1×: 1,515 → 2,230 ms, but 4×: 3,086 → 2,899 ms), so I wouldn't read anything into that difference.
 - **Stability:** no console errors at any profile, every autosave's text intact, and 0 of 30 write bursts lost their last write.
 
+### Long lists, fixed
+
+This came after the section above, so the tables above and below still show the old long-list figures. I re-ran only the 10-year and 40-year profiles.
+
+| Profile | Hot study, before (ms) | After | John 3:16, before (ms) | After | All Studies, before (ms) | After |
+|---|---|---|---|---|---|---|
+| 10y 1× (500 notes) | 723 (Problem) | 82 (Good) | 114 (Good) | 54 (Good) | 50 (Good) | 30 (Good) |
+| 10y 4× | 3,798 (Problem) | 382 (Watch) | 538 (Watch) | 229 (Watch) | 232 (Watch) | 144 (Good) |
+| 40y 1× (2,000 notes) | 2,476 (Problem) | 406 (Watch) | 342 (Watch) | 163 (Good) | 153 (Good) | 105 (Good) |
+| 40y 4× | 12,298 (Problem) | 1,907 (Problem) | 1,668 (Problem) | 759 (Problem) | 723 (Problem) | 525 (Watch) |
+
+A study now passes the 200 ms threshold at roughly 1,000 notes, interpolated from those two sizes, where before it was roughly 150.
+
+**The diagnosis below was wrong, and so remedy 3 wasn't what got built.** "What's causing the cost" says long lists are almost entirely DOM, with `getNotesForStudy()` at 216 ms of 2,578. The harness timed that query from inside `page.evaluate`, where a statement costs about 0.05 ms. From any real task, such as a click or a timer, the same statement costs about 0.25 ms. Timing the real render path of the 2,000-note study at 40 years gave:
+
+| Step | Time |
+|---|---|
+| `getNotesForStudy()`: two queries per note, about 4,000 statements | about 1,170 ms |
+| Building the blocks | about 95 ms |
+| Layout | about 1,180 ms |
+| Paint | about 180 ms |
+
+Chunked rendering would have left most of that in place and put editing, scroll-to-note and in-page find at risk. Three changes went in instead:
+
+- **`attachTagsAndAnchors()` runs one tags query and one anchors query for the whole list.** Checked against the old per-note queries for all 31,200 notes at 40 years: identical rows in identical order. This also speeds up the Info tab, the tag view and search.
+- **`.note-block` has `content-visibility: auto`,** so the browser lays out and paints only what's on screen. Every block stays in the DOM. A block that has focus or a pending save is exempt: this CSS clips overflow, which would cut off the tag autocomplete, and `innerText` returns an empty string in a skipped block, which would have made a save blank the note.
+- **Delete, attach, remove-anchor and Add Note update one block in place.** A full rebuild would reset every block to its estimated height and move the scroll position to a different note.
+
+**Info cards don't use `content-visibility`.** The Info tab rebuilds on every autosave, so its cards would lose their measured heights each time and the tab would jump while scrolled. That's why John 3:16 improved less, and it's the main cost left there at 4×.
+
+**The query timers are fixed.** `query_*_ms` and `refresh_queries_ms` now run in a task of their own. Those figures elsewhere in this report, including the "Refresh queries" columns above and the query columns below, were measured the old way and understate the real cost, by up to about 5× where the time is mostly statement overhead. Timed the new way, 40y 1× refresh queries take 3.5 ms, not 2. This also explains the earlier gap between the 90 ms refresh and the two isolated lookups: those lookups weren't timed in a task. Render and block figures were never affected, because they time the app itself.
+
+**A lead on all queries, not acted on:** the extra cost per statement seems to come from SQLite's check for a leftover journal file. With `PRAGMA locking_mode=EXCLUSIVE`, which skips that check, a statement fell from 0.25 ms to 0.02 ms in every context. See `TODO.md`.
+
 ### Thresholds after the fixes
 
 | Measurement | At 1× | At 4× |
@@ -56,6 +90,8 @@ Block is the median per save. RSS is the highest of the samples taken every 5 sa
 | John 3:16 render | 25y Watch | 10y Watch, 25y Problem |
 | RSS after boot | 40y Watch | 40y Watch |
 | Boot, notes search | Never | Never |
+
+This table predates "Long lists, fixed", which changes the Hot-study, John 3:16 and All Studies rows.
 
 Psalm 119 and All Studies stay Good at every age at 1×. At 4×, Psalm 119 moves between Good and Watch from 10y, and All Studies reaches Watch at 10y and Problem at 40y.
 
@@ -290,6 +326,8 @@ The 24.0 MB of reference data is `cross_references` (14.0 MB), `topic_verses` (8
 
 ## What's causing the cost
 
+**Corrected in "Long lists, fixed":** the next paragraph is wrong about SQL, because the query time it quotes wasn't measured from a real task.
+
 **Long lists are almost entirely DOM, not SQL.** Opening the 2,000-note study takes 2,578 ms, of which `getNotesForStudy()` is 216 ms (8%). All Studies at 40 years: 153 ms total, 12 ms query. Every note in a study is built as an editable block up front, so cost rises linearly with list size: 1.3–1.5 ms per note at every profile. Note the hot study scales with the profile, so its row shows size more than age. At the generator's rates a typical study holds about 30 notes.
 
 **Autosave is two roughly equal costs.** At 40 years, 168 ms of blocking is about 86 ms in `updateNote()` (70 ms of that `export()`) and about 90 ms in the refresh queries that follow. `export()` is close to linear, at about 0.55 ms per MB. The write itself stays off the main thread: 104 ms at 0y, 495 ms at 40y, which is still shorter than the 800 ms debounce.
@@ -333,18 +371,18 @@ Tested through `db.js` in the running app, on a fresh profile with sql.js:
 
 ## Candidate remedies, ranked by expected benefit against disruption
 
-**Remedies 1 and 2 are done** (see "After the fixes"); 3 to 6 aren't. The table keeps the estimates as written before any of this was tried.
+**Remedies 1 to 3 are done** (see "After the fixes" and "Long lists, fixed"); 4 to 6 aren't. The table keeps the estimates as written before any of this was tried.
 
 | # | Remedy | Expected benefit | Disruption |
 |---|---|---|---|
 | 1 ✓ | **Bound anchor lookups on both sides**, with a query or index change to replace the scan. Needs some design, because anchor ranges can span chapters and books, and a planner hint alone isn't enough (tested above). | About half of the ~90 ms refresh at 40y (the ~50 ms the isolated lookups account for), so autosave likely falls from Problem to Watch. Helps every selection, for every user. | Small. `db.js` queries, verified with `dbsnapshot`/`dbcompare` against `docs/ANCHOR_QUERIES.md`. |
 | 2 ✓ | **Release export buffers sooner**, for example by recycling the storage worker periodically. (Done differently: the worker transfers each buffer back to the main thread, which removes the climb and, unlike recycling, never reloads the worker script, so it can't lose a write that way.) | In the `gc()` probe, 40y autosaves added no peak at all: 771 MB before the first save, then a flat 462 MB, against a climb to 1,186 MB as shipped. A production mechanism is untested, since `gc()` needs a test flag. | Small. `storage-worker.js` and `saveToStorage()`. |
-| 3 | **Render long lists incrementally** (study documents, All Studies, Info cards). | The largest visible gain: a 2.6 s study open becomes roughly constant. Only matters past about 150 notes in one list. | Moderate. `notes.js` has to keep editing, scrolling to a note, and in-page find working. |
+| 3 ✓ | **Render long lists incrementally** (study documents, All Studies, Info cards). (Done differently: batched queries, `content-visibility`, and in-place edits. Blocks aren't built in chunks.) | The largest visible gain: a 2.6 s study open becomes roughly constant. Only matters past about 150 notes in one list. | Moderate. `notes.js` has to keep editing, scrolling to a note, and in-page find working. |
 | 4 | **Save less often while typing**: a longer debounce, or saving on idle or blur. | Fewer saves, so less disk writing and less memory churn. Doesn't shrink each save's block, so typing still stutters, just less often. | Small, with a trade-off: a little more unsaved text is at risk in a crash. |
 | 5 | **Split user data into its own database file**, so writes stop re-exporting reference data. | Large early, small late: each export shrinks 87% at 1y, 43% at 10y, 19% at 40y. That saves only about 13 ms of the 168 ms block at 40y, though on a slow CPU it could bring the early years' block near Good. | Moderate to high. Backup and restore format with compatibility for old backups, a migration of every install, and queries that join across the two (`bookmarks` to `books`, tag search to `topics`). |
 | 6 | **Page-level storage**, such as wa-sqlite's OPFS mode. | The only remedy that removes whole-file export: autosave blocking, disk volume and peak memory all drop, and boot may too. | Highest. Replaces sql.js, a vendored-dependency change against the zero-dependency rule. Such storage typically runs in a worker, which would make the queries async and touch every caller of `db.js`. |
 
-**My read now that 1 and 2 are done:** nothing left is urgent. Remedy 3 is the largest remaining gain and worth doing if you expect studies past a couple of hundred notes. I wouldn't take on 5 or 6 on these numbers alone. If whole-file export ever becomes the real limit, 6 addresses it, whereas 5 mostly doesn't by the time it would matter.
+**My read now that 1 to 3 are done:** nothing left is urgent. I wouldn't take on 5 or 6 on these numbers alone. If whole-file export ever becomes the real limit, 6 addresses it, whereas 5 mostly doesn't by the time it would matter.
 
 ---
 

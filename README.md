@@ -161,7 +161,8 @@ python3 tests/verify.py popovers     # every help/settings popover, bookmark pro
 python3 tests/verify.py smoke        # notes, tags, bookmarks, markups, reference tabs, search,
                                      #   plans, template bar, study templates, split view
 python3 tests/verify.py indicators   # note/bookmark dots on a titled Psalm (verse=0 row)
-python3 tests/verify.py notes        # removing tags and verse anchors from a note, long anchors
+python3 tests/verify.py notes        # removing tags and verse anchors from a note, long anchors,
+                                     #   a 300-note study: scrolling, find, autocomplete, in-place edits
 python3 tests/verify.py sw           # service worker installs and precaches every js/ file
 python3 tests/verify.py hebrew       # Hebrew word anatomy: TEHMC decode, pieces, affixes, Ketiv
 python3 tests/verify.py offline      # language.db background download, offline use, failure and

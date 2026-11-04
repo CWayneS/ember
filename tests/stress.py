@@ -270,14 +270,18 @@ class Run:
         # An autosave is updateNote() (SQL + export) then refreshAfterWrite() (these queries, then DOM).
         split = p.evaluate("""async ([noteId, text, repeats]) => {
             const db = await import('./js/db.js');
-            const time = (fn) => {
+            // Each sample runs in its own task, as in the app: a SQL statement costs
+            // about 5x more there than in this evaluate's own continuation.
+            const time = async (fn) => {
                 const samples = [];
-                for (let i = 0; i < repeats; i++) { const start = performance.now(); fn(); samples.push(performance.now() - start); }
+                for (let i = 0; i < repeats; i++) {
+                    samples.push(await new Promise(done => setTimeout(() => { const start = performance.now(); fn(); done(performance.now() - start); })));
+                }
                 return samples.sort((a, b) => a - b)[Math.floor(repeats / 2)];
             };
             return {
-                update_note_ms: time(() => db.updateNote(noteId, text)),
-                refresh_queries_ms: time(() => { db.getNoteCountsForChapter(1, 1); db.getNotesForVerse(1001001); }),
+                update_note_ms: await time(() => db.updateNote(noteId, text)),
+                refresh_queries_ms: await time(() => { db.getNoteCountsForChapter(1, 1); db.getNotesForVerse(1001001); }),
             };
         }""", [note_id, persisted, REPEATS])
         return {
@@ -358,15 +362,18 @@ class Run:
         hot_id = sidecar['hot_study']['id'] if sidecar['hot_study'] else 'null'
         result.update(p.evaluate(f"""async () => {{
             const db = await import('./js/db.js');
-            const time = (fn) => {{
+            // In a task of its own, as in the app (see autosave_run).
+            const time = async (fn) => {{
                 const samples = [];
-                for (let i = 0; i < {REPEATS}; i++) {{ const start = performance.now(); fn(); samples.push(performance.now() - start); }}
+                for (let i = 0; i < {REPEATS}; i++) {{
+                    samples.push(await new Promise(done => setTimeout(() => {{ const start = performance.now(); fn(); done(performance.now() - start); }})));
+                }}
                 return samples.sort((a, b) => a - b)[{REPEATS // 2}];
             }};
             return {{
-                query_john_3_16_ms: time(() => db.getNotesForVerse(43003016)),
-                query_hot_study_ms: {hot_id} === null ? null : time(() => db.getNotesForStudy({hot_id})),
-                query_all_studies_ms: time(() => db.getStudies()),
+                query_john_3_16_ms: await time(() => db.getNotesForVerse(43003016)),
+                query_hot_study_ms: {hot_id} === null ? null : await time(() => db.getNotesForStudy({hot_id})),
+                query_all_studies_ms: await time(() => db.getStudies()),
             }};
         }}"""))
         result['render_john_3_16_ms'] = median(john)

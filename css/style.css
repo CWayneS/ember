@@ -34,6 +34,7 @@
     --global-header-height: 44px;
     --reader-header-height: 44px;
     --panel-width:          380px;
+    --note-block-estimated-height: 180px; /* off-screen .note-block, until first shown */
     --resize-handle-size:   4px;
     --toolbar-radius:       6px;
     --content-max-width:    var(--measure);
@@ -1487,10 +1488,22 @@ body.markup-mode-on .verse.markup-circle {
     padding: 12px;
     margin-bottom: 10px;
     transition: border-color 0.15s;
+    /* Off-screen blocks skip layout and paint, so opening a long study doesn't
+       lay out every note. They stay in the DOM, so in-page find still works. */
+    content-visibility: auto;
+    contain-intrinsic-height: auto var(--note-block-estimated-height);
 }
 
 .note-block:focus-within {
     border-color: var(--accent);
+}
+
+/* content-visibility: auto clips overflow, which would cut off the tag
+   autocomplete list; it only opens while the tag input has focus. A block
+   with a save pending stays rendered so the save can read its text. */
+.note-block:focus-within,
+.note-block-save-pending {
+    content-visibility: visible;
 }
 
 .note-block-anchor {

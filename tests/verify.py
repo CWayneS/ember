@@ -11,7 +11,8 @@ Usage (from the repo root):
                                          #   tabs, search, plans, template bar, templates,
                                          #   translation switch, split view, global settings
    python3 tests/verify.py indicators    # note/bookmark dots on a titled Psalm (verse=0 row)
-   python3 tests/verify.py notes         # removing tags and verse anchors from a note
+   python3 tests/verify.py notes         # removing tags and verse anchors from a note, long anchors,
+                                         #   a 300-note study: scrolling, find, autocomplete, in-place edits
    python3 tests/verify.py sw            # service worker installs and precaches every js/ file
    python3 tests/verify.py hebrew        # Hebrew word anatomy: TEHMC decode, pieces, affixes, Ketiv
    python3 tests/verify.py offline       # language.db background download, offline use, failure and
@@ -472,7 +473,171 @@ def scenario_notes(app):
     rows = p.evaluate("import('./js/db.js').then(db => db.getNotesForVerse(1001003).length + db.getNotesForVerse(1001004).length)")
     check(rows == 0 and p.evaluate("document.querySelectorAll('#notes-active-view .note-block-anchor').length") == 0, f'coalesced chip removal deletes both rows ({rows})')
     check_long_anchors(p)
+    check_note_lists(p)
+    check_long_study(p)
     return FAILURES
+
+
+def check_note_lists(p):
+    """attachTagsAndAnchors() fetches for the whole list at once: each note must
+    still get its own rows, in insertion order, and notes with none get empty lists."""
+    res = p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        const a = db.saveNote('list a', [{ verseStart: 2001003, verseEnd: null }, { verseStart: 2001001, verseEnd: 2001002 }], ['zebra', 'apple', 'mango'], null);
+        const b = db.saveNote('list b', [{ verseStart: 2001001, verseEnd: null }], [], null);
+        const notes = db.getNotesForVerse(2001001);
+        const shape = id => { const n = notes.find(n => n.id === id); return { tags: n.tags.map(t => t.name), anchors: n.anchors.map(x => [x.note_id, x.verse_start, x.verse_end]), tagKeys: Object.keys(n.tags[0] ?? {}) }; };
+        return { a, b, noteA: shape(a), noteB: shape(b), noStudy: db.getNotesForStudy(-1), noTag: db.getNotesForTag('no-such-tag') };
+    }""")
+    check(res['noteA']['tags'] == ['zebra', 'apple', 'mango'], f"tags keep insertion order ({res['noteA']['tags']})")
+    check(res['noteA']['tagKeys'] == ['id', 'name', 'type'], f"tag rows keep their shape ({res['noteA']['tagKeys']})")
+    check(res['noteA']['anchors'] == [[res['a'], 2001003, None], [res['a'], 2001001, 2001002]], f"anchors keep insertion order ({res['noteA']['anchors']})")
+    check(res['noteB']['tags'] == [] and res['noteB']['anchors'] == [[res['b'], 2001001, None]], f"a note without tags gets an empty list ({res['noteB']})")
+    check(res['noStudy'] == [] and res['noTag'] == [], 'no matching notes returns an empty list')
+
+
+LONG_STUDY_NOTES = 300
+
+def check_long_study(p):
+    """Off-screen blocks skip layout and paint (content-visibility) and edits update one
+    block in place: everything that needs a block must still work, and the view must not jump."""
+    study_id = p.evaluate(f"""async () => {{
+        const db = await import('./js/db.js');
+        const panels = await import('./js/panels.js');
+        document.querySelector('#notes-tab-add').click();
+        const studyId = panels.getActiveStudyId();
+        for (let i = 0; i < {LONG_STUDY_NOTES}; i++) {{
+            // Heights vary, so they differ from the estimate the browser starts from.
+            const body = i === {LONG_STUDY_NOTES - 20} ? 'needle-far-down' : `long study note ${{i}} ` + 'word '.repeat(i % 7 * 40);
+            db.saveNote(body, [{{ verseStart: 1001001 + (i % 30), verseEnd: null }}], i % 3 ? [] : [`long-study-tag-${{i % 8}}`], studyId);
+        }}
+        document.querySelector('#notes-tabs [data-study-id="all"]').click();
+        panels.openStudy(studyId, 'Long study');
+        return studyId;
+    }}""")
+    p.wait_for_timeout(300)
+    view = "document.querySelector('#notes-active-view')"
+    top_note = f"""(() => {{
+        const top = {view}.getBoundingClientRect().top;
+        const block = [...{view}.querySelectorAll('.note-block')].find(b => b.getBoundingClientRect().bottom > top);
+        return {{ id: Number(block.dataset.noteId), offset: block.getBoundingClientRect().top - top }};
+    }})()"""
+    scroll_to_middle = f"""async () => {{
+        const view = {view};
+        view.scrollTop = view.scrollHeight / 2;
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }}"""
+
+    states = p.evaluate(f"""(() => {{
+        const blocks = [...{view}.querySelectorAll('.note-block')];
+        const painted = b => b.checkVisibility({{ contentVisibilityAuto: true }});
+        const inner = b => b.querySelector('.note-block-body');
+        return {{ blocks: blocks.length, first: painted(inner(blocks[0])), last: painted(inner(blocks.at(-1))) }};
+    }})()""")
+    check(states['blocks'] == LONG_STUDY_NOTES, f"every note has a block in the DOM ({states['blocks']})")
+    check(states['first'] and not states['last'], f"on-screen block rendered, far-off block skipped ({states})")
+    check(p.evaluate("window.find('needle-far-down')"), 'find reaches text in a block that was skipped')
+    p.evaluate("getSelection().removeAllRanges()")
+
+    # scrolling up through blocks whose real height differs from the estimate
+    p.evaluate(scroll_to_middle)
+    p.wait_for_timeout(100)
+    before = p.evaluate(top_note)
+    p.evaluate(f"{view}.scrollBy(0, -300)")
+    p.wait_for_timeout(200)
+    after = p.evaluate(top_note)
+    check(0 <= before['id'] - after['id'] <= 3, f"scrolling up 300 px moves a few notes, not a long way ({before['id']} → {after['id']})")
+
+    # tag autocomplete overflows its block: it has to stay visible
+    p.evaluate(scroll_to_middle)
+    p.wait_for_timeout(100)
+    target = p.evaluate(top_note)['id']
+    input_sel = f'[data-note-id="{target}"] .note-block-tag-input'
+    p.click(input_sel); p.keyboard.type('long-st')
+    p.wait_for_selector(f'[data-note-id="{target}"] .tag-suggestion-item')
+    clipped = p.evaluate(f"""(() => {{
+        const block = document.querySelector('[data-note-id="{target}"]');
+        const list = block.querySelector('.note-block-tag-suggestions').getBoundingClientRect();
+        const centre = item => {{ const r = item.getBoundingClientRect(); return {{ x: r.left + r.width / 2, y: r.top + r.height / 2 }}; }};
+        // An item whose centre is past the block's edge: the part clipping would cut off.
+        const item = [...block.querySelectorAll('.tag-suggestion-item')].find(item => {{
+            const y = centre(item).y;
+            return y > block.getBoundingClientRect().bottom && y < list.bottom;
+        }});
+        if (!item) return {{ overflows: false, visible: false }};
+        const point = centre(item);
+        return {{ overflows: true, visible: document.elementFromPoint(point.x, point.y) === item }};
+    }})()""")
+    check(clipped['overflows'], f"autocomplete list extends past its block ({clipped})")
+    check(clipped['visible'], f"the part past the block can be hit, not clipped ({clipped})")
+    p.keyboard.press('Escape'); p.fill(input_sel, '')
+
+    # autosave after scrolling the edited block out of view keeps its line breaks
+    note_sel = f'[data-note-id="{target}"] .note-block-body'
+    p.click(note_sel); p.keyboard.press('Control+End')
+    p.keyboard.type('edited'); p.keyboard.press('Enter'); p.keyboard.type('second line')
+    p.evaluate(f"document.activeElement.blur(); getSelection().removeAllRanges(); {view}.scrollTop = 0;")
+    p.wait_for_timeout(100)
+    is_skipped = f"!document.querySelector('{note_sel}').checkVisibility({{ contentVisibilityAuto: true }})"
+    check(not p.evaluate(is_skipped), 'edited block off-screen stays rendered while its save is pending')
+    p.wait_for_timeout(1000)
+    check(p.evaluate(is_skipped), 'and is skipped again once saved')
+    body = p.evaluate(f"import('./js/db.js').then(db => db.getNotesForStudy({study_id}).find(n => n.id === {target}).body)")
+    check(body.endswith('edited\nsecond line'), f"autosave of a skipped block keeps line breaks ({body[-24:]!r})")
+
+    # attaching a verse keeps the scroll position and unsaved typing
+    p.evaluate(scroll_to_middle)
+    p.wait_for_timeout(100)
+    app_select = '.verse[data-verse-id="1001005"]'
+    p.click(app_select); p.wait_for_timeout(100)
+    before = p.evaluate(top_note)
+    second = p.evaluate(f"""(() => {{
+        const top = {view}.getBoundingClientRect().top;
+        return Number([...{view}.querySelectorAll('.note-block')].filter(b => b.getBoundingClientRect().bottom > top)[1].dataset.noteId);
+    }})()""")
+    typed_sel = f'[data-note-id="{second}"] .note-block-body'
+    p.evaluate(f"""(() => {{ const body = document.querySelector('{typed_sel}'); body.textContent = 'unsaved typing'; body.dispatchEvent(new Event('input')); }})()""")
+    p.click(f'[data-note-id="{second}"] .note-block-attach-btn')
+    p.wait_for_timeout(150)
+    after = p.evaluate(top_note)
+    check(after['id'] == before['id'] and abs(after['offset'] - before['offset']) < 2, f"attach keeps the scroll position ({before} → {after})")
+    check(p.evaluate(f"document.querySelector('{typed_sel}').textContent") == 'unsaved typing', 'attach keeps unsaved typing in that note')
+    p.wait_for_timeout(1000)
+    saved = p.evaluate(f"import('./js/db.js').then(db => db.getNotesForStudy({study_id}).find(n => n.id === {second}))")
+    check(saved['body'] == 'unsaved typing' and any(a['verse_start'] == 1001005 for a in saved['anchors']), 'that note saves both the typing and the verse')
+
+    # deleting keeps the scroll position
+    before = p.evaluate(top_note)
+    p.once('dialog', lambda dialog: dialog.accept())
+    p.click(f'[data-note-id="{second}"] .note-block-delete')
+    p.wait_for_timeout(150)
+    after = p.evaluate(top_note)
+    check(p.evaluate(f"!document.querySelector('[data-note-id=\"{second}\"]')"), 'deleted block is gone')
+    check(after['id'] == before['id'] and abs(after['offset'] - before['offset']) < 2, f"delete keeps the scroll position ({before} → {after})")
+
+    # adding at the end of a long list lands on the new, focused block
+    p.click('.add-note-btn')
+    p.wait_for_timeout(1200)
+    added = p.evaluate(f"""(() => {{
+        const view = {view};
+        const block = document.activeElement.closest('.note-block');
+        const rect = block?.getBoundingClientRect(), box = view.getBoundingClientRect();
+        return {{ focused: !!block && block === [...view.querySelectorAll('.note-block')].at(-1), inView: !!rect && rect.top >= box.top && rect.top < box.bottom }};
+    }})()""")
+    check(added == {'focused': True, 'inView': True}, f"Add Note focuses a new last block, in view ({added})")
+
+    # the empty state comes and goes without a full re-render being needed
+    p.evaluate("""async () => {
+        document.querySelector('#notes-tab-add').click();
+        await new Promise(r => setTimeout(r, 50));
+    }""")
+    check(p.evaluate(f"!!{view}.querySelector('.notes-empty')"), 'new study shows the empty state')
+    p.click('.add-note-btn'); p.wait_for_timeout(150)
+    check(p.evaluate(f"!{view}.querySelector('.notes-empty') && {view}.querySelectorAll('.note-block').length === 1"), 'first note replaces the empty state')
+    p.once('dialog', lambda dialog: dialog.accept())
+    p.click('.note-block-delete'); p.wait_for_timeout(150)
+    check(p.evaluate(f"!!{view}.querySelector('.notes-empty') && {view}.querySelectorAll('.note-block').length === 0"), 'deleting the last note brings the empty state back')
+    check(p.evaluate(f"!!{view}.querySelector('.study-title') && !!{view}.querySelector('.add-note-btn')"), 'title and Add Note button remain after that')
 
 
 def check_long_anchors(p):

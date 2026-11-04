@@ -170,17 +170,18 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 85. Empty state: "No notes yet. Select a verse and click Add Note." — notes.js:64-73
 86. Notes displayed in creation-order (ascending) as `.note-block` cards — notes.js:buildNoteBlock
 87. Each note block: verse anchor chip(s) at top, contenteditable body, tag area, delete button in footer
+87a. Long studies and tag views: off-screen `.note-block` cards skip layout and paint (`content-visibility: auto`), but stay in the DOM, so in-page find still reaches them. A block with focus or a pending save stays rendered — style.css `.note-block`, notes.js:scheduleSave
 88. Note body autosaves 800ms after last input — notes.js:scheduleSave
 89. Note body placeholder text "Write your note…" when empty — notes.js:131
 90. Note block gains accent-color border when focused (`focus-within`) — style.css
 91. Anchor chip(s) above note body: show verse reference(s), clickable to navigate to that verse — notes.js:buildNoteBlock
-91a. Each anchor chip has a ✕ that detaches that verse or range from the note. Chips are coalesced display ranges (item 184), so removal deletes every stored anchor row lying within the chip's range — db.js:removeAnchorsFromNote. The study re-renders, reader dots and the Info/Tags tabs refresh
+91a. Each anchor chip has a ✕ that detaches that verse or range from the note. Chips are coalesced display ranges (item 184), so removal deletes every stored anchor row lying within the chip's range — db.js:removeAnchorsFromNote. That note's chips re-render in place, reader dots and the Info/Tags tabs refresh
 92. Attach button appears next to anchor chips when a verse is selected; labeled "+ BookName Chapter:Verse" — notes.js:updateAttachButtons
 93. Clicking attach: adds selected verse as additional anchor to that note (no duplicate check if same verse) — notes.js:115-123
 94. Attach button hidden when no verse is selected — notes.js:82
 95. "Add Note" button: dashed full-width button at bottom of study — notes.js:buildAddNoteButton
-96. Clicking "Add Note": creates a new empty note; if a verse is selected, anchors it to that verse; scrolls to and focuses the new note body — notes.js:addNote
-97. Delete button: asks "Delete this note?"; on confirm, cancels pending autosave, deletes from DB, re-renders — notes.js:buildDeleteButton
+96. Clicking "Add Note": creates a new empty note; if a verse is selected, anchors it to that verse; appends its block, then scrolls to and focuses the new note body — notes.js:addNote
+97. Delete button: asks "Delete this note?"; on confirm, cancels pending autosave, deletes from DB, removes that block, keeping the scroll position; deleting the last note brings back the empty state — notes.js:buildDeleteButton
 
 ---
 

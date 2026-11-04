@@ -4,7 +4,7 @@ import {
     saveNote, updateNote, deleteNote,
     getNotesForStudy, getStudies, getNotesForTag, getVersesForTopic, getTopicVerseCount,
     parseVerseId, formatReference, deleteStudy, renameStudy, getStudyName,
-    addNoteTag, removeNoteTag, addAnchorToNote, removeAnchorsFromNote
+    addNoteTag, removeNoteTag, addAnchorToNote, removeAnchorsFromNote, getAnchorsForNote
 } from './db.js';
 import { refreshVerseIndicators, navigateTo, getActivePaneTranslationId } from './reader.js';
 import { openStudy, closeStudy, openTagView, renameStudyTab } from './panels.js';
@@ -88,12 +88,45 @@ function updateAttachButtons() {
     });
 }
 
+// Edits update one block in place. Rebuilding the document would drop every
+// block back to its estimated height (see .note-block in style.css), which
+// moves the scroll position to a different note.
+function refreshAnchorsArea(note, anchorsArea) {
+    note.anchors = getAnchorsForNote(note.id);
+    anchorsArea.replaceWith(buildAnchorsArea(note));
+    updateAttachButtons();
+    refreshAfterWrite();
+}
+
 function buildNoteBlock(note, studyId) {
     const block = document.createElement('div');
     block.className      = 'note-block';
     block.dataset.noteId = note.id;
 
-    // Anchor chips + attach button
+    block.appendChild(buildAnchorsArea(note));
+
+    // Body — contenteditable, click anywhere to edit, autosave on input
+    const body = document.createElement('div');
+    body.className       = 'note-block-body';
+    body.contentEditable = 'true';
+    body.setAttribute('data-placeholder', 'Write your note…');
+    body.textContent     = note.body;
+    body.addEventListener('input', () => scheduleSave(note.id, body));
+    block.appendChild(body);
+
+    // Footer: tags + delete button
+    const footer     = document.createElement('div');
+    footer.className = 'note-block-footer';
+
+    footer.appendChild(buildTagsArea(note));
+    footer.appendChild(buildDeleteButton(note.id, studyId));
+
+    block.appendChild(footer);
+    return block;
+}
+
+// Anchor chips + attach button
+function buildAnchorsArea(note) {
     const anchorsArea     = document.createElement('div');
     anchorsArea.className = 'note-block-anchors';
 
@@ -121,8 +154,7 @@ function buildNoteBlock(note, studyId) {
         remove.addEventListener('click', (e) => {
             e.stopPropagation();
             removeAnchorsFromNote(note.id, anchor.verse_start, anchor.verse_end);
-            renderStudyDocument(studyId);
-            refreshAfterWrite();
+            refreshAnchorsArea(note, anchorsArea);
         });
         chip.appendChild(remove);
 
@@ -137,30 +169,10 @@ function buildNoteBlock(note, studyId) {
         const verseEnd   = currentVerseIds.length > 1 ? Math.max(...currentVerseIds) : null;
         if (note.anchors.some(a => a.verse_start === verseStart)) return;
         addAnchorToNote(note.id, verseStart, verseEnd);
-        renderStudyDocument(studyId);
-        refreshAfterWrite();
+        refreshAnchorsArea(note, anchorsArea);
     });
     anchorsArea.appendChild(attachBtn);
-    block.appendChild(anchorsArea);
-
-    // Body — contenteditable, click anywhere to edit, autosave on input
-    const body = document.createElement('div');
-    body.className       = 'note-block-body';
-    body.contentEditable = 'true';
-    body.setAttribute('data-placeholder', 'Write your note…');
-    body.textContent     = note.body;
-    body.addEventListener('input', () => scheduleSave(note.id, body));
-    block.appendChild(body);
-
-    // Footer: tags + delete button
-    const footer     = document.createElement('div');
-    footer.className = 'note-block-footer';
-
-    footer.appendChild(buildTagsArea(note));
-    footer.appendChild(buildDeleteButton(note.id, studyId));
-
-    block.appendChild(footer);
-    return block;
+    return anchorsArea;
 }
 
 function buildTagsArea(note) {
@@ -239,7 +251,10 @@ function buildDeleteButton(noteId, studyId) {
         clearTimeout(saveTimers.get(noteId));
         saveTimers.delete(noteId);
         deleteNote(noteId);
-        renderStudyDocument(studyId);
+        const container = document.getElementById('notes-active-view');
+        btn.closest('.note-block').remove();
+        // The last note is gone: re-render for the empty-state message.
+        if (!container.querySelector('.note-block')) renderStudyDocument(studyId);
         refreshAfterWrite();
     });
     return btn;
@@ -473,21 +488,27 @@ function addNote(studyId) {
 
     const noteId = saveNote('', anchors, [], studyId);
 
-    // Re-render the whole document — guarantees the new block is visible
-    renderStudyDocument(studyId);
+    const container = document.getElementById('notes-active-view');
+    container.querySelector('.notes-empty')?.remove();
+    const block = buildNoteBlock({ id: noteId, body: '', tags: [], anchors: getAnchorsForNote(noteId) }, studyId);
+    container.querySelector('.add-note-btn').before(block);
+    updateAttachButtons();
 
-    // Find the new block and focus it
-    const block = document.querySelector(`[data-note-id="${noteId}"]`);
-    block?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    block?.querySelector('.note-block-body')?.focus();
+    block.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    block.querySelector('.note-block-body').focus();
 
     refreshAfterWrite();
 }
 
 function scheduleSave(noteId, bodyEl) {
+    // innerText is empty in a block the browser has skipped (content-visibility
+    // in style.css), so the block stays rendered until the save has read it.
+    const block = bodyEl.closest('.note-block');
+    block.classList.add('note-block-save-pending');
     clearTimeout(saveTimers.get(noteId));
     saveTimers.set(noteId, setTimeout(() => {
         const raw = bodyEl.innerText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        block.classList.remove('note-block-save-pending');
         updateNote(noteId, raw);
         refreshAfterWrite();
     }, 800));

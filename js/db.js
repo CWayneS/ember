@@ -1423,24 +1423,45 @@ export function getNoteCountsForChapter(bookId, chapter) {
 
 // Fills in `tags` and `anchors` on each note row — every note-list query
 // wants both, so they're attached in one place.
+// One tags query and one anchors query for the whole list, not two per note:
+// a statement costs about 0.25 ms from an event handler, which is most of the
+// time a long study took to open (docs/STRESS_TEST_RESULTS.md). The ids are
+// inlined because a list can pass SQLite's bound-parameter limit, and they are
+// integers read back from the database. Rows keep their insertion order within
+// a note, the order chips and anchors have always shown in.
 function attachTagsAndAnchors(notes) {
+    if (notes.length === 0) return notes;
+    const noteIds = [...new Set(notes.map(note => note.id))].join(',');
+
+    const tagsByNote = new Map();
+    const tagRows = queryAll(db,
+        `SELECT ta.note_id, t.id, t.name, t.type FROM tag_assignments ta
+         JOIN tags t ON t.id = ta.tag_id
+         WHERE ta.note_id IN (${noteIds})
+         ORDER BY ta.rowid`
+    );
+    for (const { note_id, ...tag } of tagRows) {
+        if (!tagsByNote.has(note_id)) tagsByNote.set(note_id, []);
+        tagsByNote.get(note_id).push(tag);
+    }
+
+    const anchorsByNote = new Map();
+    const anchorRows = queryAll(db,
+        `SELECT * FROM note_anchors WHERE note_id IN (${noteIds}) ORDER BY rowid`
+    );
+    for (const anchor of anchorRows) {
+        if (!anchorsByNote.has(anchor.note_id)) anchorsByNote.set(anchor.note_id, []);
+        anchorsByNote.get(anchor.note_id).push(anchor);
+    }
+
     for (const note of notes) {
-        note.tags    = getTagsForNote(note.id);
-        note.anchors = getAnchorsForNote(note.id);
+        note.tags    = tagsByNote.get(note.id) ?? [];
+        note.anchors = anchorsByNote.get(note.id) ?? [];
     }
     return notes;
 }
 
-function getTagsForNote(noteId) {
-    return queryAll(db,
-        `SELECT t.id, t.name, t.type FROM tags t
-         JOIN tag_assignments ta ON ta.tag_id = t.id
-         WHERE ta.note_id = ?`,
-        [noteId]
-    );
-}
-
-function getAnchorsForNote(noteId) {
+export function getAnchorsForNote(noteId) {
     return queryAll(db, 'SELECT * FROM note_anchors WHERE note_id = ?', [noteId]);
 }
 

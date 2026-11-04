@@ -349,3 +349,21 @@ The Offline Language and Stress Test spec and the fixes chosen from its results.
 **Tests:** `tests/verify.py` gains `offline`, `storage` and `boots`. `tests/stress.py` and `scripts/gen_stress_data.py` are new; generated data is in gitignored `tests/stress-data/`.
 
 **Left alone:** `getMarkupsForChapter()` still uses the one-sided overlap test; markups weren't part of the anchor fix. Long lists still build every block up front (stress-test remedy 3).
+
+---
+
+## 13. ADDENDUM — 2026-11-04, long lists
+
+Record: `STRESS_TEST_RESULTS.md`, "Long lists, fixed". This replaces §3's note that `getTagsForNote` and `getAnchorsForNote` are module-private, and §12's "Long lists still build every block up front" only in part: every block is still built up front, but the cost that mattered is gone.
+
+**`db.js`:** `attachTagsAndAnchors()` runs one tags query and one anchors query for the whole list, with `ORDER BY rowid` to keep insertion order. `getTagsForNote()` is gone. `getAnchorsForNote()` is now exported.
+
+**`notes.js`:** delete, attach, remove-anchor and Add Note update one block in place; `buildAnchorsArea()` and `refreshAnchorsArea()` are new. `renderStudyDocument()` now runs only on opening or switching to a study, and when the last note is deleted. `scheduleSave()` adds `.note-block-save-pending` until the save has read the text.
+
+**`style.css`:** `.note-block` has `content-visibility: auto`, with `--note-block-estimated-height` as its estimated height. `:focus-within` and `.note-block-save-pending` are exempt.
+
+**`sw.js`:** `CACHE_NAME` is `ember-v14`.
+
+**Tests:** `tests/verify.py notes` gains `check_note_lists()` and `check_long_study()`. `tests/stress.py` times queries in a task of their own, because a statement costs about 5x more there than directly in `page.evaluate`.
+
+**Left alone:** Info cards don't use `content-visibility`, because the Info tab rebuilds on every autosave and would jump while scrolled.
