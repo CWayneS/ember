@@ -235,6 +235,7 @@ STEPBible-Data's license permits inclusion in software without requesting permis
 | `docs/STRESS_TEST_RESULTS.md` | Longevity stress test: results at 1/10/25/40 years of use, what drives the cost, ranked candidate remedies |
 | `docs/crossref_audit_bundle.md`, `docs/grammar_decode_audit_bundle.md`, `docs/tegmc_value_domain.md` | Raw extracted material and query output, assembled for earlier audits and content authoring; no interpretation |
 | `docs/ANCHOR_QUERIES.md` | SQL query convention for range-aware verse-anchor lookups |
+| `docs/TODO.md` | Everything known to be open, with links to where the detail lives |
 
 ## License
 
