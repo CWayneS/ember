@@ -16,8 +16,10 @@ Usage (from the repo root):
    python3 tests/verify.py hebrew        # Hebrew word anatomy: TEHMC decode, pieces, affixes, Ketiv
    python3 tests/verify.py offline       # language.db background download, offline use, failure and
                                          #   recovery states, single request, interrupted downloads
-   python3 tests/verify.py storage       # search index after edits and its one-time repair, empty and
-                                         #   damaged core.db, persistent storage request and settings line
+   python3 tests/verify.py storage       # search index after edits and its one-time repair, anchor lookups
+                                         #   against a plain scan, empty and damaged core.db, persistent
+                                         #   storage request and settings line
+   python3 tests/verify.py boots         # warm-boot time to "app live": prints samples and the median
    python3 tests/verify.py dbsnapshot out.json          # results of ~36 db.js calls as JSON
    python3 tests/verify.py dbcompare before.json after.json
 
@@ -27,7 +29,7 @@ user rows, which differ between runs.
 
 Requires: python3, playwright (pip install playwright && playwright install chromium).
 """
-import json, os, sqlite3, struct, subprocess, sys, time
+import json, os, random, sqlite3, statistics, struct, subprocess, sys, time
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1372,12 +1374,138 @@ def storage_core_db_files(browser):
     run.close()
 
 
+def random_anchors(rng, verses_by_chapter, count):
+    """Every shape of anchor, weighted toward the sizes around LONG_ANCHOR_SPAN, where
+    anchorsOverlapping() switches between its two searches."""
+    chapters = sorted(verses_by_chapter)
+    anchors = []
+    for _ in range(count):
+        chapter = rng.choice(chapters)
+        start = rng.choice(verses_by_chapter[chapter])
+        shape = rng.randrange(6)
+        if shape == 0:
+            anchors.append((start, None))
+        elif shape == 1:
+            anchors.append((start, start + rng.randint(1, 30)))     # within a chapter
+        elif shape == 2:
+            anchors.append((start, start + rng.choice((4999, 5000, 5001)))) # right at the limit
+        elif shape == 3:
+            anchors.append((start, start + rng.randint(1000, 40_000))) # several chapters
+        elif shape == 4:
+            anchors.append((start, start + rng.randint(1_000_000, 3_000_000))) # across books
+        else:
+            anchors.append((rng.choice(verses_by_chapter[chapters[0]]), 66022021)) # nearly everything
+    return anchors
+
+
+def storage_anchor_lookups(browser):
+    """anchorsOverlapping() against the plain overlap test it stands in for. A wrong
+    answer here silently hides notes, so random anchors of every shape are compared on
+    both the verse and chapter lookups, at the edges of each anchor as well as inside."""
+    rng = random.Random(1611)
+    kjv = sqlite3.connect(f"file:{os.path.join(ROOT, 'data', 'translations', 'kjv.db')}?mode=ro", uri=True)
+    verses_by_chapter = {}
+    for book, chapter, verse in kjv.execute('SELECT book, chapter, verse FROM verses WHERE verse > 0'):
+        verses_by_chapter.setdefault(book * 1000 + chapter, []).append(book * 1_000_000 + chapter * 1000 + verse)
+    kjv.close()
+    anchors = random_anchors(rng, verses_by_chapter, 400)
+    probes = sorted({edge + delta for pair in anchors for edge in pair if edge for delta in (-1, 0, 1)})
+    verse_ids = rng.sample(probes, 500) + [rng.choice(ids) for ids in rng.sample(list(verses_by_chapter.values()), 100)]
+    chapter_keys = rng.sample(sorted(verses_by_chapter), 150)
+
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    res = p.evaluate("""async ([anchors, verseIds, chapterKeys]) => {
+        const db = await import('./js/db.js');
+        const core = window.__emberTest.databases[0];
+        const noteIds = [];
+        for (let i = 0; i < 80; i++) {
+            core.run("INSERT INTO notes (body) VALUES ('anchor probe')");
+            noteIds.push(core.exec('SELECT last_insert_rowid()')[0].values[0][0]);
+        }
+        anchors.forEach(([start, end], i) => core.run(
+            'INSERT INTO note_anchors (note_id, verse_start, verse_end) VALUES (?, ?, ?)', [noteIds[i % noteIds.length], start, end]));
+        core.run("INSERT INTO tags (name) VALUES ('anchor-probe')");
+        const tagId = core.exec('SELECT last_insert_rowid()')[0].values[0][0];
+        core.run('INSERT INTO tag_assignments (tag_id, note_id) VALUES (?, ?)', [tagId, noteIds[0]]);
+
+        const plain = (rangeStart, rangeEnd) => {
+            const rows = core.exec(
+                `SELECT note_id, verse_start, COALESCE(verse_end, verse_start) FROM note_anchors
+                 WHERE verse_start <= ${rangeEnd} AND COALESCE(verse_end, verse_start) >= ${rangeStart}`);
+            return rows.length ? rows[0].values : [];
+        };
+        const wrong = { verses: [], chapters: [], tags: [] };
+        let hits = 0;
+        for (const verseId of verseIds) {
+            const expected = [...new Set(plain(verseId, verseId).map(row => row[0]))].sort((a, b) => a - b);
+            const actual = db.getNotesForVerse(verseId).map(note => note.id).sort((a, b) => a - b);
+            hits += expected.length;
+            if (JSON.stringify(expected) !== JSON.stringify(actual)) wrong.verses.push(verseId);
+            const expectTag = expected.includes(noteIds[0]);
+            if (db.getUserTagsForVerse(verseId).includes('anchor-probe') !== expectTag) wrong.tags.push(verseId);
+        }
+        for (const key of chapterKeys) {
+            const book = Math.floor(key / 1000), chapter = key % 1000;
+            const start = key * 1000, end = key * 1000 + 999;
+            const expected = new Map();
+            for (const [noteId, from, to] of plain(start, end)) {
+                for (let verse = Math.max(from, start); verse <= Math.min(to, end); verse++) {
+                    if (!expected.has(verse)) expected.set(verse, new Set());
+                    expected.get(verse).add(noteId);
+                }
+            }
+            const actual = db.getNoteCountsForChapter(book, chapter);
+            const same = actual.size === expected.size && [...expected].every(([verse, ids]) => actual.get(verse) === ids.size);
+            if (!same) wrong.chapters.push(key);
+        }
+        return { wrong, hits };
+    }""", [anchors, verse_ids, chapter_keys])
+    wrong = res['wrong']
+    check(res['hits'] > 1000, f"anchor lookups: the comparison found real overlaps to check ({res['hits']})")
+    check(wrong['verses'] == [], f"getNotesForVerse matches a plain scan on {len(verse_ids)} verses {wrong['verses'][:5]}")
+    check(wrong['tags'] == [], f"getUserTagsForVerse matches a plain scan on those verses {wrong['tags'][:5]}")
+    check(wrong['chapters'] == [], f"getNoteCountsForChapter matches a plain scan on {len(chapter_keys)} chapters {wrong['chapters'][:5]}")
+    run.check_no_errors('anchor lookups')
+    run.close()
+
+
 def scenario_storage(browser):
     storage_search_index(browser)
+    storage_anchor_lookups(browser)
     storage_worker_hands_back(browser)
     storage_core_db_files(browser)
     storage_persist(browser)
     return FAILURES
+
+
+# ---------------------------------------------------------------- boots
+WARM_BOOTS = 5
+
+
+def scenario_boots(browser):
+    """Warm boots to "app live", with the service worker in play as for a real user.
+    Reports rather than judges, since the numbers belong to this machine. To compare
+    with an older commit, `git archive` it into a scratch directory, symlink data/ into
+    that, and alternate runs with this one: a single run is too noisy to compare."""
+    ctx = browser.new_context(viewport={'width': 1600, 'height': 1000})
+    page = ctx.new_page()
+    App(page).boot(SW_URL)
+    page.wait_for_timeout(1500)
+    page.close()
+    samples = []
+    for _ in range(WARM_BOOTS):
+        page = ctx.new_page()
+        App(page).boot(SW_URL)
+        samples.append(page.evaluate('performance.now()'))
+        page.close()
+    ctx.close()
+    print(f"  warm boots ms {[round(s) for s in samples]}, median {round(statistics.median(samples))}")
+    return FAILURES
+
+
+BROWSER_SCENARIOS = {'offline': scenario_offline, 'storage': scenario_storage, 'boots': scenario_boots}
 
 
 def main():
@@ -1392,9 +1520,9 @@ def main():
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
-            if args[0] in ('offline', 'storage'):
+            if args[0] in BROWSER_SCENARIOS:
                 print(f'== {args[0]}')
-                failures = (scenario_offline if args[0] == 'offline' else scenario_storage)(browser)
+                failures = BROWSER_SCENARIOS[args[0]](browser)
                 browser.close()
                 print(f'\n{len(failures)} failure(s)')
                 sys.exit(1 if failures else 0)

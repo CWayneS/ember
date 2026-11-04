@@ -4,6 +4,8 @@
 
 **Prerequisite:** Build 6.1 state (`BUILD_6.1_ACTUAL_STATE.md`), including the §11 addendum. `tests/verify.py` harness in place.
 
+**Status:** Implemented 2026-11-04, in commit `5ec380c`. `OFFLINE_LANGUAGE_REPORT.md` records what was found and every way the code differed from this spec, and `STRESS_TEST_RESULTS.md` has the numbers. Wayne then chose fixes from those results (search index, empty-file holes in translations and `core.db`, anchor lookups, write buffers, persistent storage), which are in `72a0102`.
+
 **Shape of this work:** Item 1 is a fix. Item 2 is **measurement only** — it produces numbers and a short results document, not code changes to the app. Item 3 is a small, separable check.
 
 **Ground rule (as always):** codebase over documentation. If anything below disagrees with the code, the code wins — report the difference, don't force the spec.
@@ -47,7 +49,7 @@ Before changing anything, record exactly what happens today. Using Playwright wi
 Write the findings into the implementation report. Step 5 matters: if `getLanguageDb()` caches a *rejected* promise, the tab stays broken until reload even after the network returns, and Item 1b must fix that.
 
 ### Definition of Done (Item 1a)
-- [ ] Current behavior for steps 3–5 documented, with console output, before any code changes
+- [x] Current behavior for steps 3–5 documented, with console output, before any code changes
 
 ---
 
@@ -67,12 +69,12 @@ Write the findings into the implementation report. Step 5 matters: if `getLangua
 **Out of scope:** browsers without OPFS. Where `language.db` lives (if anywhere) when OPFS is unavailable is a question for the separate OPFS-fallback test. Note what the code does today in the report, don't fix it here.
 
 ### Definition of Done (Item 1b)
-- [ ] Fresh install, online: `language.db` appears in OPFS shortly after launch without the Language tab ever being opened
-- [ ] Startup time to "app live" is not measurably worse than before (measure both)
-- [ ] No sql.js `Database` is created for `language.db` until first real use
-- [ ] Opening the Language tab mid-download waits for it — exactly one network request for `language.db` (assert via request log)
-- [ ] Offline at boot → going online later triggers the download without a reload
-- [ ] An interrupted download never results in a broken Language tab on a later boot
+- [x] Fresh install, online: `language.db` appears in OPFS shortly after launch without the Language tab ever being opened
+- [x] Startup time to "app live" is not measurably worse than before (measure both)
+- [x] No sql.js `Database` is created for `language.db` until first real use
+- [x] Opening the Language tab mid-download waits for it — exactly one network request for `language.db` (assert via request log)
+- [x] Offline at boot → going online later triggers the download without a reload
+- [x] An interrupted download never results in a broken Language tab on a later boot
 
 ---
 
@@ -87,12 +89,12 @@ When `language.db` is unavailable and can't be downloaded right now:
 - When the data becomes available (download completes, network returns), the next selection renders normally — no reload required.
 
 ### Definition of Done (Item 1c)
-- [ ] Offline-and-never-downloaded: Language tab shows the message, zero console errors (one `console.warn` acceptable)
-- [ ] Mid-download: the "downloading" state shows, then the tab renders when the download finishes
-- [ ] Psalm 3 in KJV renders cleanly with or without language data
-- [ ] `USER_MANUAL.md` notes that original-language data downloads once in the background after first launch
-- [ ] `README.md` "Running Locally" sentence about first-visit loading is accurate
-- [ ] `FEATURE_INVENTORY.md` updated
+- [x] Offline-and-never-downloaded: Language tab shows the message, zero console errors (one `console.warn` acceptable)
+- [x] Mid-download: the "downloading" state shows, then the tab renders when the download finishes
+- [x] Psalm 3 in KJV renders cleanly with or without language data
+- [x] `USER_MANUAL.md` notes that original-language data downloads once in the background after first launch
+- [x] `README.md` "Running Locally" sentence about first-visit loading is accurate
+- [x] `FEATURE_INVENTORY.md` updated
 
 ---
 
@@ -108,9 +110,9 @@ New scenario, fresh profile, booted via `127.0.0.1`:
 All existing scenarios (`popovers`, `smoke`, `notes`, `indicators`, `sw`) still pass. The `sw` scenario's "no `/data/` path in any cache" assertion still holds — this fix uses OPFS, not Cache Storage.
 
 ### Definition of Done (Item 1d)
-- [ ] `offline` scenario added and passing
-- [ ] All existing scenarios passing
-- [ ] Scenario listed in `README.md` "Verifying Changes"
+- [x] `offline` scenario added and passing
+- [x] All existing scenarios passing
+- [x] Scenario listed in `README.md` "Verifying Changes"
 
 ---
 
@@ -192,10 +194,10 @@ These are starting points for judging the results, not hard requirements. Wayne 
 - **Candidate remedies, listed but not implemented** — for example: splitting user data into its own small database file so writes stop re-exporting reference data; saving less often or only on idle; a page-level storage layer such as wa-sqlite's OPFS mode (note: that would replace sql.js, a vendored-dependency change Wayne would need to weigh against the zero-dependency rule). CC should rank them by expected benefit vs. disruption, based on the numbers.
 
 ### Definition of Done (Item 2)
-- [ ] Generator produces 1/10/25/40-year files that pass the realism checks in 2.2
-- [ ] All measurements in 2.3 collected for all profiles, normal and throttled
-- [ ] `STRESS_TEST_RESULTS.md` written with the breakdown, the degradation points, and ranked candidate remedies
-- [ ] **No changes to app code** in this item (instrumentation lives in the test harness, or behind a debug flag that is off by default)
+- [x] Generator produces 1/10/25/40-year files that pass the realism checks in 2.2
+- [x] All measurements in 2.3 collected for all profiles, normal and throttled
+- [x] `STRESS_TEST_RESULTS.md` written with the breakdown, the degradation points, and ranked candidate remedies
+- [x] **No changes to app code** in this item (instrumentation lives in the test harness, or behind a debug flag that is off by default). The later fixes in `72a0102` are separate, by Wayne's decision.
 
 ---
 
@@ -207,8 +209,8 @@ Browsers can delete site data when storage runs low unless the site has been gra
 - Report findings. **Wayne decides** whether to add a `persist()` request at first boot, and whether a lack of persistence should be shown anywhere (e.g. a line in Settings → Backup & Restore suggesting regular backups).
 
 ### Definition of Done (Item 3)
-- [ ] Current behavior and `persisted()` results reported
-- [ ] Recommendation included in the implementation report
+- [x] Current behavior and `persisted()` results reported (headless tab, plus one `false` from Wayne's own check, not recorded separately for the installed app and a tab)
+- [x] Recommendation included in the implementation report
 
 ---
 

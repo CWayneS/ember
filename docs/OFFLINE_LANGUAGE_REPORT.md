@@ -103,7 +103,7 @@ Titled Psalms in KJV/ASV/Darby still open `language.db` when rendered, because t
 - tab-switch behaviour
 - an emptied translation file, online and offline
 
-**`tests/verify.py storage`** (new, with the follow-up fixes): 29 checks, 0 failures, covering the search index after edits and its one-time repair, the worker returning buffers, empty and damaged `core.db` files, the `persist()` request and the Backup & Restore line. The `notes` scenario gained long-anchor checks, including both sides of the `LONG_ANCHOR_SPAN` limit.
+**`tests/verify.py storage`** (new, with the follow-up fixes): 34 checks, 0 failures, covering the search index after edits and its one-time repair, anchor lookups compared with a plain scan on random anchors of every shape, the worker returning buffers, empty and damaged `core.db` files, the `persist()` request and the Backup & Restore line. The `notes` scenario gained long-anchor checks, including both sides of the `LONG_ANCHOR_SPAN` limit.
 
 Every existing scenario passes: `popovers`, `smoke`, `notes`, `indicators`, `sw`, `hebrew`.
 
@@ -151,7 +151,7 @@ The follow-up fixes got the same treatment, and all 15 breaks were caught:
 
 No measurable difference. The download starts after this point, by design.
 
-After the follow-up fixes I alternated 4 runs of 5 boots each against `522619a`, to keep machine noise from favouring either side. Medians were 416, 423, 392, 424 ms before and 421, 428, 425, 422 ms now. Those ranges overlap, so there's no clear difference, though a few milliseconds' cost from the extra header reads can't be ruled out.
+`python3 tests/verify.py boots` now takes this measurement. After the follow-up fixes I alternated 4 runs of 5 boots each against `522619a`, to keep machine noise from favouring either side. Medians were 416, 423, 392, 424 ms before and 421, 428, 425, 422 ms now. Those ranges overlap, so there's no clear difference, though a few milliseconds' cost from the extra header reads can't be ruled out.
 
 **`dbsnapshot` / `dbcompare`** (re-run against the original snapshot after the follow-up fixes too)**:** the only two keys that differ are `created_at` timestamps on seeded rows (`bookmarkForVerse`, `search.notes[0]`), which the tool's docstring says will differ between runs. Query results are unchanged.
 

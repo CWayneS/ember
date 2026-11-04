@@ -161,10 +161,15 @@ python3 tests/verify.py popovers     # every help/settings popover, bookmark pro
 python3 tests/verify.py smoke        # notes, tags, bookmarks, markups, reference tabs, search,
                                      #   plans, template bar, study templates, split view
 python3 tests/verify.py indicators   # note/bookmark dots on a titled Psalm (verse=0 row)
+python3 tests/verify.py notes        # removing tags and verse anchors from a note, long anchors
+python3 tests/verify.py sw           # service worker installs and precaches every js/ file
+python3 tests/verify.py hebrew       # Hebrew word anatomy: TEHMC decode, pieces, affixes, Ketiv
 python3 tests/verify.py offline      # language.db background download, offline use, failure and
                                      #   recovery states, single request, interrupted downloads
-python3 tests/verify.py storage      # search index after edits and its one-time repair, empty and
-                                     #   damaged core.db, persistent storage request and settings line
+python3 tests/verify.py storage      # search index after edits and its one-time repair, anchor lookups
+                                     #   against a plain scan, empty and damaged core.db, persistent
+                                     #   storage request and settings line
+python3 tests/verify.py boots        # warm-boot time to "app live": prints samples and the median
 ```
 
 For changes to `js/db.js`, snapshot the results of its query functions before and after and compare:
@@ -177,12 +182,21 @@ python3 tests/verify.py dbcompare /tmp/before.json /tmp/after.json
 
 Every key should report identical except creation timestamps on the seeded user rows, which differ between runs. Each scenario takes a few minutes on first run while translations seed into OPFS.
 
+To see how Ember behaves with decades of user data, run the stress test (about 20 minutes; results and method in `docs/STRESS_TEST_RESULTS.md`):
+
+```bash
+python3 tests/stress.py base
+python3 scripts/gen_stress_data.py
+python3 tests/stress.py all
+python3 tests/stress.py report
+```
+
 ## Roadmap
 
 Builds are additive — nothing in a later build requires reworking earlier code.
 
 ### Shipped
-Build 1 (core reading + notes) → Build 1.5 (polish) → Build 2 (cross-references, markups, multi-translation) → Build 3 (reading plans) → Build 4 (backup/restore) → Build 5 (study templates) → Build 6 (Language tab — original-language word study)
+Build 1 (core reading + notes) → Build 1.5 (polish) → Build 2 (cross-references, markups, multi-translation) → Build 3 (reading plans) → Build 4 (backup/restore) → Build 5 (study templates) → Build 6 (Language tab — original-language word study) → offline language data and stress-test fixes
 
 ### Future
 - Nested notes
@@ -216,9 +230,10 @@ STEPBible-Data's license permits inclusion in software without requesting permis
 | `docs/Build_N_Spec.md` (per build) | Per-build specifications |
 | `docs/Psalm_Title_Fix_Spec.md`, `docs/Grammar_Decode_Spec_DRAFT.md`, `docs/Language_Panel_Word_Inspector_Spec.md`, `docs/Hebrew_Word_Anatomy_Spec.md` | Standalone feature specs between numbered builds |
 | `docs/HEBREW_ANATOMY_DATA_REPORT.md` | The Hebrew Word Anatomy build's record: the language.db rebuild (sources, checks, sizes) and every decision that changed the spec |
-| `docs/BUILD_N_ACTUAL_STATE.md` (per build) | Ground-truth audit of each build's shipped code, derived from source, not planning docs. Latest: `docs/BUILD_6.1_ACTUAL_STATE.md` (post-Build-6 Language tab rework + September 2026 architecture-review pass) |
+| `docs/BUILD_N_ACTUAL_STATE.md` (per build) | Ground-truth audit of each build's shipped code, derived from source, not planning docs. Latest: `docs/BUILD_6.1_ACTUAL_STATE.md` (post-Build-6 Language tab rework + September 2026 architecture-review pass; its §12 addendum covers the November 2026 offline and stress-test work) |
 | `docs/Offline_Language_And_Stress_Test_Spec.md`, `docs/OFFLINE_LANGUAGE_REPORT.md` | Spec for offline language data and the stress test, and the record of what was found and decided |
 | `docs/STRESS_TEST_RESULTS.md` | Longevity stress test: results at 1/10/25/40 years of use, what drives the cost, ranked candidate remedies |
+| `docs/crossref_audit_bundle.md`, `docs/grammar_decode_audit_bundle.md`, `docs/tegmc_value_domain.md` | Raw extracted material and query output, assembled for earlier audits and content authoring; no interpretation |
 | `docs/ANCHOR_QUERIES.md` | SQL query convention for range-aware verse-anchor lookups |
 
 ## License

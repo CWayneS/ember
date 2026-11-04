@@ -370,7 +370,7 @@ Tested through `db.js` in the running app, on a fresh profile with sql.js:
 - **"RSS after autosaves" and "Peak" include 3 rapid timing writes** made right after the 20 saves, and the first RSS sample follows 2 setup writes, in both the before and after runs. The every-5-saves series is the cleaner view of ordinary typing.
 - **Autosave** means 20 single keystrokes, each followed by waiting for the debounced write to finish.
 - **Separate one-off probes** (not in `tests/stress.py`) produced the unhooked and worker-`gc()` memory figures, the `EXPLAIN QUERY PLAN` results, the FTS bug table, and the comparison below.
-- **The new anchor query was compared row for row with the old one** on the 40-year file with sql.js, after adding whole-Bible, whole-book and cross-book anchors: identical results across 782 verses and 691 chapters.
+- **The new anchor query was compared row for row with the old one** on the 40-year file with sql.js, after adding whole-Bible, whole-book and cross-book anchors: identical results across 782 verses and 691 chapters. A permanent version is in `tests/verify.py storage`, which compares against a plain scan on random anchors of every shape, including spans right at `LONG_ANCHOR_SPAN`.
 
 **To reproduce:**
 

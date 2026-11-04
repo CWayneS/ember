@@ -271,7 +271,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 ## Reference Panel — Language Tab
 
-142. Interlinear Hebrew/Greek word study, driven by `selection-changed` like the Tags/Related tabs — no word-level selection machinery added to the reader itself — reference.js:renderAll (passes the full `verseIds` array, not just the first verse), language.js:renderLanguageTab
+142. Interlinear Hebrew/Greek word study, driven by `selection-changed` like the Tags/Related tabs, but rendered only while the tab is showing (142k) — no word-level selection machinery added to the reader itself — reference.js:renderAll (passes the full `verseIds` array, not just the first verse), language.js:renderLanguageTab
 142a. Works for any active translation/pane — the interlinear is keyed to `original_words.verse_id`, not to a specific translation's wording — language.js
 142b. Supports a multi-verse range selection (shift-click), not just a single verse — one verse block per selected verse, each with its own heading — language.js:renderInterlinear
 142c. Each verse block: a book/chapter:verse heading; a running verse line (full verse, continuous, decorative/non-interactive, RTL block for Hebrew) in Ezra SIL (Hebrew) or the display serif (Greek); a plain-text gloss list below (original-language column fixed left, gloss fixed right, regardless of language — only the verse line flips for RTL) — language.js:renderVerseBlock, css:`.language-verse-line`/`.language-word-row`
@@ -466,7 +466,7 @@ All five prefixes are functional:
 
 ## Bundled Reading Plans
 
-216. Three plans ship as JSON files in `data/plans/` and are seeded into `plans`/`plan_days`/`plan_day_scripture` on first run — db.js:seedBundledPlans, called from `initDatabase()` right after `createUserTables()`/schema migration, before translation seeding
+216. Three plans ship as JSON files in `data/plans/` and are seeded into `plans`/`plan_days`/`plan_day_scripture`. The files are fetched on every online boot, so a newly bundled plan reaches existing installs (and a deleted bundled plan returns); offline boots skip this, and a network failure is only a warning — db.js:seedBundledPlans, called from `initDatabase()` right after `createUserTables()`/schema migration, before translation seeding
 216a. **M'Cheyne One-Year Reading Plan** (`mcheyne-1year`) — 365 days, 4 passages/day — data/plans/mcheyne-1year.json
 216b. **Bible in a Year (Canonical)** (`bible-in-a-year-canonical`) — 362 days (not 365 — the actual bundled data covers the whole Bible in fewer, denser days) — data/plans/bible-in-a-year-canonical.json
 216c. **Bible in a Year (Chronological)** (`bible-in-a-year-chronological`) — 365 days, passages ordered by historical sequence — data/plans/bible-in-a-year-chronological.json
@@ -546,7 +546,7 @@ All five prefixes are functional:
 ## Study Templates
 
 237. `study_templates`/`template_steps` schema (id/name/description; id/template_id/step_index/prompt_text) plus nullable `studies.template_id` and `notes.template_step_id` linkage columns — added idempotently in `createUserTables()`, migrate cleanly against an existing pre-Build-5 database — db.js
-238. Three built-in templates seeded from `data/templates/*.json` on first run, idempotent by template name (no separate stable-key column exists for templates, unlike `plans.plan_id`) — db.js:seedBundledTemplates/insertTemplate
+238. Three built-in templates seeded from `data/templates/*.json`, fetched on every online boot and skipped offline like the plans (216), idempotent by template name (no separate stable-key column exists for templates, unlike `plans.plan_id`) — db.js:seedBundledTemplates/insertTemplate
 238a. **Inductive Study (OIA)** — 4 steps (intro + Observation/Interpretation/Application) — data/templates/inductive-study.json
 238b. **Word Study** — 6 steps (intro + Key Word/Original Language/Other Occurrences/Patterns/Summary) — data/templates/word-study.json
 238c. **Passage Overview** — 5 steps (intro + Context/Structure/Themes/Response) — data/templates/passage-overview.json

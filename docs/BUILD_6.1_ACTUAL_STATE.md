@@ -322,3 +322,30 @@ A second look at the four areas the review had not opened (service-worker fetch 
 - **`90808aa`** — `css/style.css` 3,175 → 3,000 lines: the Build 1 "Notes List" and "Note Editor" sections (replaced by the study-document view in Build 1.5), `.chapter-heading`, and `#study-name-btn` deleted. A scan of every class and id selector against `index.html` + `js/` now finds zero unreferenced selectors (prefix-built families `markup-*`, `plan-status-*`, `theme-*` excepted). The live `.tag-chip` rules head their own section.
 
 **Looked at and left alone:** `storage-worker.js` (30 lines, correct); `USER_MANUAL.md` (current, including the reworked Language tab). One unverified platform note: OPFS `createWritable()` is not available in Safari, so `restoreCoreDb()` would reject there with the "could not be written" alert while ordinary writes fall back to IndexedDB correctly. The README targets Chromium; recorded here, not fixed.
+
+---
+
+## 12. ADDENDUM — 2026-11-04, commits `5ec380c`..`72a0102`
+
+The Offline Language and Stress Test spec and the fixes chosen from its results. Records: `OFFLINE_LANGUAGE_REPORT.md`, `STRESS_TEST_RESULTS.md`. Unlike §11, these deltas **replace** some statements above: every mention of `language.db`'s lazy OPFS-seed-on-first-use path (the "Unchanged" lines in §3 and §5), and §11's "`storage-worker.js` (30 lines, correct)". The Hebrew Word Anatomy commit `6368515` also falls between §11 and this section; `HEBREW_ANATOMY_DATA_REPORT.md` is its record.
+
+**`language.db`**
+- Reaching the device and opening are now separate. `startLanguageBackgroundDownload()` (called from `app.js` once live, after about 2 s) streams the file into OPFS through `downloadToOpfs()` and never creates a `Database`. One in-flight download per file; `getLanguageDb()` joins it. A failed attempt retries on `online` and on next use: the rejected promise is no longer cached.
+- `isCompleteSqliteFile()` checks the 100-byte header (magic, page size x page count against file size), because a tab closed mid-download leaves a 0-byte file at the real name.
+- It opens only when the Language tab is showing or a titled Psalm needs it. `renderLanguageTab()` records a selection made on another tab and `languageTabShown()`, called from `panels.js:switchTab`, renders it. Previously any verse click opened it.
+- The tab has downloading and unavailable states. `warnLanguageUnavailable()` warns once per session.
+
+**`db.js`, other**
+- `updateNote()` deletes from `notes_fts` before updating `notes`. The old order left every edit's old words indexed and made `PRAGMA integrity_check` report a malformed index. `repairNotesSearchIndexOnce()` rebuilds once at boot, marked by `app_state.notes_fts_repaired` inside `core.db`.
+- Note lookups by verse or chapter go through `anchorsOverlapping()`, bounded on both sides, with a new partial index `idx_anchors_long`. See `ANCHOR_QUERIES.md`. `getNotesForVerse()` also gains `n.id DESC` as a tie-break.
+- `seedTranslations()` and `loadTranslationBuffer()` use `isCompleteSqliteFile()`. `loadFromStorage()` treats a 0-byte `core.db` as a first run, and deliberately nothing stricter.
+- The plan and template seeders return early when `navigator.onLine === false`; a network failure is a warning, anything else stays an error. They still fetch on every online boot.
+- `requestPersistentStorageIfDue()` and `isStoragePersisted()` are new. `global-settings.js` shows a line reflecting the result.
+
+**`storage-worker.js`:** transfers each written buffer back to the main thread, because whole-file copies left in the worker's heap piled up to 1.2 GB at 40 years of data.
+
+**`sw.js`:** `CACHE_NAME` is `ember-v13`.
+
+**Tests:** `tests/verify.py` gains `offline`, `storage` and `boots`. `tests/stress.py` and `scripts/gen_stress_data.py` are new; generated data is in gitignored `tests/stress-data/`.
+
+**Left alone:** `getMarkupsForChapter()` still uses the one-sided overlap test; markups weren't part of the anchor fix. Long lists still build every block up front (stress-test remedy 3).

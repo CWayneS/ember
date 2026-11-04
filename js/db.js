@@ -102,15 +102,17 @@ export async function initDatabase() {
 
     createUserTables();
 
-    // Seed bundled reading plans on first install (idempotent — skips any
-    // plan_id already present).
+    // Seed any bundled reading plan not installed yet (idempotent — skips any
+    // plan_id already present). Runs every online boot, so a newly bundled plan
+    // reaches existing installs.
     await seedBundledPlans();
 
-    // Seed built-in study templates on first install (idempotent — skips any
-    // template name already present).
+    // Same for built-in study templates (idempotent — skips any template name
+    // already present).
     await seedBundledTemplates();
 
-    // Seed translation files into OPFS on first install (no-op on subsequent loads).
+    // Seed translation files into OPFS on first install; later loads only re-seed
+    // a file that isn't whole.
     await seedTranslations();
 
     // Open sql.js Database handles for all bundled translations.
@@ -764,7 +766,7 @@ function logSeedLoadFailure(message, e) {
     (e instanceof TypeError ? console.warn : console.error)(message, e);
 }
 
-// Seed the bundled reading plans from data/plans/ on first install. Idempotent:
+// Seed the bundled reading plans from data/plans/ on every online boot. Idempotent:
 // a plan already present (matched by its stable plan_id) is left untouched.
 async function seedBundledPlans() {
     if (navigator.onLine === false) return;
@@ -825,7 +827,7 @@ function insertTemplate(meta, steps) {
     return { templateRowId };
 }
 
-// Seed the built-in study templates from data/templates/ on first install.
+// Seed the built-in study templates from data/templates/ on every online boot.
 // Idempotent: a template already present (matched by its name) is left untouched.
 async function seedBundledTemplates() {
     if (navigator.onLine === false) return;
