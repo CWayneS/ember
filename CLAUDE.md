@@ -9,6 +9,7 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
   - data/core.db — books, cross-references, Nave's topics; on first run it's copied to OPFS and the user-data tables (notes, tags, bookmarks, markups, plans) are added there
   - data/translations/*.db — one per translation (KJV, ASV, Darby, WEB, YLT, BSB)
   - data/language.db — original-language words, Greek lexicon (TBESG), Greek and Hebrew morphology (TEGMC, TEHMC), Hebrew word pieces and Ketiv/variants; read-only; downloaded to OPFS in the background after launch, opened only when the Language tab or a titled Psalm needs it; built by scripts/build_language.py (`--ship` to copy to data/; decisions in docs/HEBREW_ANATOMY_DATA_REPORT.md)
+  - data/lexicon-hebrew.db — Hebrew lexicon: Strong's, Brown-Driver-Briggs, and the links between them ranked by OSHB word counts; read-only; downloaded in the background like language.db, opened only on the first Hebrew Lexicon tap; built by scripts/build_lexicon_hebrew.py from pinned, sha256-checked Open Scriptures sources, byte-identical on rebuild (`--ship`; decisions in docs/HEBREW_LEXICON_REPORT.md). After rebuilding it, clear its OPFS copy to see the change locally
 - OPFS for persistent storage, IndexedDB as fallback; writes go through a storage worker
 - Service worker for offline caching
 - CSS custom properties for theming (light + dark)
@@ -30,6 +31,7 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - js/panels.js — Study panel tabs, views, resize handles
 - js/reference.js — Reference panel: Info, Tags, Related, Language tabs
 - js/language.js — Language tab: interlinear view + inline word card
+- js/hebrew-lexicon.js — Hebrew tier 3 (Strong's, BDB): builds DOM from the stored markup's allowed elements, never innerHTML
 - js/grammar-decode.js — Greek/Hebrew morphology-code decode, Hebrew word splitting (anatomy view)
 - js/search.js — Full-text search UI
 - js/plans.js — Reading plan import and Plans tab
@@ -44,7 +46,7 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - js/vendor/ — sql-wasm.js and sql-wasm.wasm (local, no CDN)
 - data/plans/, data/templates/ — Bundled reading plans and study templates (JSON)
 - build/ — core.db build script and its source data
-- scripts/ — Translation, language.db, cross-reference, and plan conversion scripts
+- scripts/ — Translation, language.db, lexicon-hebrew.db, cross-reference, and plan conversion scripts
 - tests/verify.py — Playwright browser verification (`python3 tests/verify.py smoke`, etc.)
 - tests/stress.py, scripts/gen_stress_data.py — Longevity stress test (measurement only; generated data under tests/stress-data/ is gitignored)
 - docs/ — Build specs, standalone feature specs, BUILD_N_ACTUAL_STATE records

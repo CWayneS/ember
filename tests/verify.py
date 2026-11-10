@@ -15,6 +15,8 @@ Usage (from the repo root):
                                          #   a 300-note study: scrolling, find, autocomplete, in-place edits
    python3 tests/verify.py sw            # service worker installs and precaches every js/ file
    python3 tests/verify.py hebrew        # Hebrew word anatomy: TEHMC decode, pieces, affixes, Ketiv
+   python3 tests/verify.py lexicon       # Hebrew lexicon: the spec's test words, safe rendering, every stored
+                                         #   entry rendered, lazy open, offline message, single download
    python3 tests/verify.py offline       # language.db background download, offline use, failure and
                                          #   recovery states, single request, interrupted downloads
    python3 tests/verify.py storage       # search index after edits and its one-time repair, anchor lookups
@@ -287,7 +289,7 @@ def check_grammar_decode(app):
     check(tier2.locator('.language-morph-decode-part-heading').count() == 2, 'compound code shows both parts')
     check('G2532' in tier2.locator('.language-morph-decode-crossref').inner_text(), 'compound code shows cross-reference line')
 
-    # Hebrew: TEHMC decode lines (Hebrew Word Anatomy spec), no Lexicon link (TBESH gap)
+    # Hebrew: TEHMC decode lines (Hebrew Word Anatomy spec), and a Lexicon link (Hebrew_Lexicon_Spec)
     app.navigate(1, 1)
     app.select_verse(1001001)
     p.click('#reference-tabs [data-tab="language"]')
@@ -296,7 +298,7 @@ def check_grammar_decode(app):
     p.locator('.language-card-more-btn').first.click()
     p.wait_for_selector('.language-card-tier2')
     check(p.evaluate("document.querySelectorAll('.language-card-tier2 .language-morph-decode-line').length") > 0, 'Hebrew shows decode lines')
-    check(p.evaluate("document.querySelectorAll('.language-card-lexicon-btn').length") == 0, 'Hebrew shows no Lexicon button')
+    check(p.evaluate("document.querySelectorAll('.language-card-lexicon-btn').length") == 1, 'Hebrew shows a Lexicon button')
 
     app.navigate(43, 1)
     app.select_verse(43001001)
@@ -1096,11 +1098,13 @@ class OfflineRun:
         self.ctx = browser.new_context(viewport={'width': 1600, 'height': 1000})
         self.ctx.add_init_script(SQL_HOOK_JS)
         self.requests = []
+        self.lexicon_requests = []
         self.new_page()
 
     def new_page(self):
         page = self.ctx.new_page()
         page.on('request', lambda r: self.requests.append(r.url) if r.url.endswith('/data/language.db') else None)
+        page.on('request', lambda r: self.lexicon_requests.append(r.url) if r.url.endswith('/data/lexicon-hebrew.db') else None)
         self.app = App(page, ignore=is_expected_network_line)
         self.page = page
         return page
@@ -1409,20 +1413,318 @@ def offline_tab_switch(browser):
     run.close()
 
 
-def scenario_offline(browser):
-    """Offline_Language_And_Stress_Test_Spec Item 1d. Each part needs its own
-    fresh profile, so this takes the browser rather than one booted app."""
-    with open(LANGUAGE_DB_PATH, 'rb') as fh:
+def passes_header_check(path):
+    """db.js:isCompleteSqliteFile's real branch: page size x page count is the file size,
+    and the page count is valid (version-valid-for equals the change counter)."""
+    with open(path, 'rb') as fh:
         header = fh.read(100)
     page_size = struct.unpack('>H', header[16:18])[0]
     page_count, change_counter, valid_for = (struct.unpack('>I', header[o:o + 4])[0] for o in (28, 24, 92))
-    check(change_counter == valid_for and page_size * page_count == LANGUAGE_DB_SIZE,
-          'shipped language.db passes the real header check, not the "unverifiable" branch')
+    return change_counter == valid_for and page_size * page_count == os.path.getsize(path)
+
+
+def scenario_offline(browser):
+    """Offline_Language_And_Stress_Test_Spec Item 1d. Each part needs its own
+    fresh profile, so this takes the browser rather than one booted app."""
+    for path in (LANGUAGE_DB_PATH, LEXICON_DB_PATH):
+        check(passes_header_check(path),
+              f'shipped {os.path.basename(path)} passes the real header check, not the "unverifiable" branch')
     offline_happy_path(browser)
     offline_never_downloaded_and_recovery(browser)
     offline_single_download(browser)
     offline_interrupted(browser)
     offline_tab_switch(browser)
+    return FAILURES
+
+
+# ---------------------------------------------------------------- lexicon
+LEXICON_DB_PATH = os.path.join(ROOT, 'data', 'lexicon-hebrew.db')
+LEXICON_DB_SIZE = os.path.getsize(LEXICON_DB_PATH)
+LEXICON_UNAVAILABLE_TEXT = 'The Hebrew lexicon downloads the first time Ember is online'
+LEXICON_LINK = '.language-card-tier2 > .language-card-lexicon-btn'
+
+# Reads one word card member's Hebrew tier 3 into plain data.
+READ_LEXICON_JS = """(member) => {
+    const text = (el) => el ? el.textContent.replace(/\\s+/g, ' ').trim() : null;
+    const tier3 = member.querySelector('.language-card-lexicon');
+    const strongs = tier3 && tier3.querySelector('.language-lexicon-strongs');
+    const bdb = tier3 && tier3.querySelector('.language-lexicon-bdb');
+    const field = (label) => {
+        const f = strongs && [...strongs.querySelectorAll('.language-detail-field')]
+            .find(f => text(f.querySelector('.language-detail-label')) === label);
+        return f ? text(f.querySelector('.language-detail-value')) : null;
+    };
+    const entries = bdb ? [...bdb.querySelectorAll(':scope > .language-lexicon-bdb-entry')] : [];
+    return {
+        links: [...member.querySelectorAll('.language-card-tier2 > .language-card-lexicon-btn')].map(text),
+        message: tier3 && !strongs ? text(tier3) : null,
+        headword: text(strongs && strongs.querySelector('.language-lexicon-headword')),
+        strongsAramaic: !!(strongs && strongs.querySelector(':scope > .language-card-language')),
+        meaning: field('Meaning'),
+        kjv: field('KJV translates as'),
+        intro: bdb ? [...bdb.querySelectorAll(':scope > .language-lexicon-quiet')].map(text) : [],
+        entries: entries.map(e => ({
+            id: e.dataset.bdbId,
+            text: text(e.querySelector('.language-detail-lexicon')),
+            aramaic: !!e.querySelector(':scope > .language-card-language'),
+            abridged: !!e.querySelector(':scope > .language-lexicon-quiet'),
+            topSenses: [...e.querySelectorAll('.language-detail-lexicon > .language-lexicon-sense > .language-lexicon-sense-label')].map(text),
+        })),
+        collapsed: bdb ? [...bdb.querySelectorAll('.language-lexicon-entry-btn')].map(b => ({ text: text(b), open: b.classList.contains('open') })) : [],
+        placeholders: tier3 ? [...tier3.querySelectorAll('.language-lexicon-placeholder')].map(text) : [],
+        tier2Lines: member.querySelectorAll('.language-card-tier2 .language-morph-decode-line').length,
+    };
+}"""
+
+LEXICON_SETTLED_JS = """() => { const t = document.querySelector('.language-card-lexicon');
+    return !!t && !t.dataset.loading; }"""
+
+
+def open_tier2(app, db, verse_id, word_position):
+    """Open one word's card and its tier 2; returns a locator for that member."""
+    p = app.page
+    app.navigate(verse_id // 1_000_000, verse_id // 1000 % 1000)
+    app.select_verse(verse_id)
+    p.click('#reference-tabs [data-tab="language"]')
+    p.wait_for_selector('.language-word-row', timeout=60_000)
+    surface = word_surface(db, verse_id, word_position)
+    p.locator('.language-word-row', has_text=surface).first.click()
+    p.wait_for_selector('.language-word-card')
+    member = p.locator('.language-card-member').filter(has=p.locator('.language-card-original', has_text=surface)).first
+    member.locator('.language-card-more-btn').click()
+    p.wait_for_selector('.language-card-tier2')
+    return member
+
+
+def open_lexicon(app, db, verse_id, word_position, link=0):
+    """Open one word's Hebrew Lexicon and read it once it has loaded (or failed)."""
+    member = open_tier2(app, db, verse_id, word_position)
+    member.locator(LEXICON_LINK).nth(link).click()
+    app.page.wait_for_function(LEXICON_SETTLED_JS, timeout=60_000)
+    app.page.wait_for_timeout(100)
+    return member, member.evaluate(READ_LEXICON_JS)
+
+
+def lexicon_words(app, db, lexicon):
+    """Item 8's table, word by word, against the live app."""
+    p = app.page
+    strongs_headword = lambda base: lexicon.execute(
+        'SELECT headword FROM lexicon_strongs_hebrew WHERE strongs_base = ?', (base,)).fetchone()[0]
+
+    member, card = open_lexicon(app, db, 1001001, 1)  # Gen 1:1 #02 בָּרָא, H1254A
+    check(card['links'] == ['Hide Lexicon'], f"Gen 1:1 #02: one Lexicon link ({card['links']})")
+    check('create' in (card['meaning'] or ''), "Gen 1:1 #02: Strong's meaning shows \"create\"")
+    check(any('covers 2 entries' in line for line in card['intro']), 'Gen 1:1 #02: the "covers 2 entries" line shows')
+    check(len(card['entries']) == 1 and 'shape' in card['entries'][0]['text'] and 'create' in card['entries'][0]['text'],
+          'Gen 1:1 #02: "shape, create" is open')
+    check(len(card['collapsed']) == 1 and 'be fat' in card['collapsed'][0]['text'] and not card['collapsed'][0]['open'],
+          f"Gen 1:1 #02: \"be fat\" collapsed below it ({card['collapsed']})")
+    member.locator('.language-lexicon-entry-btn').click()
+    p.wait_for_timeout(300)
+    card = member.evaluate(READ_LEXICON_JS)
+    check(len(card['entries']) == 2 and 'be fat' in card['entries'][1]['text'] and card['collapsed'][0]['open'],
+          'Gen 1:1 #02: tapping "be fat" expands it in place')
+
+    member, card = open_lexicon(app, db, 1001002, 8)  # Gen 1:2 #09 וְרוּחַ, H7307G
+    check(card['links'] == ['Hide Lexicon'] and card['headword'] == strongs_headword(7307),
+          f"Gen 1:2 #09: one link, for the root רוּחַ, not the ו prefix ({card['links']}, {card['headword']})")
+    check(card['entries'] and card['entries'][0]['topSenses'] == [str(n) for n in range(1, 10)],
+          f"Gen 1:2 #09: BDB senses 1–9 render as an outline ({card['entries'][0]['topSenses'] if card['entries'] else None})")
+    check(card['entries'] and card['entries'][0]['abridged'], 'Gen 1:2 #09: a base entry shows the abridged note')
+
+    member, card = open_lexicon(app, db, 2034006, 13)  # Exo 34:6 #14 חֶסֶד, H2617A
+    check(card['entries'] and 'goodness' in card['entries'][0]['text'] and 'kindness' in card['entries'][0]['text'],
+          'Exo 34:6 #14: "goodness, kindness" entry first')
+    check(len(card['collapsed']) == 1 and 'shame' in card['collapsed'][0]['text'] and not card['collapsed'][0]['open'],
+          'Exo 34:6 #14: "shame, reproach" second and collapsed')
+
+    member, card = open_lexicon(app, db, 1001001, 6)  # Gen 1:1 #07 הָאָרֶץ, H0776G
+    check(card['headword'] == strongs_headword(776), f"Gen 1:1 #07: Lexicon for אֶרֶץ ({card['headword']})")
+    check(bool(card['kjv']), 'Gen 1:1 #07: KJV renderings labeled "KJV translates as"')
+
+    member, card = open_lexicon(app, db, 27002018, 4)  # Dan 2:18 #05 אֱלָהּ, H0426
+    check(card['strongsAramaic'] and card['entries'] and card['entries'][0]['aramaic'],
+          'Dan 2:18 #05: Aramaic label in both sections')
+    check(card['entries'] and 'god, God' in card['entries'][0]['text'], 'Dan 2:18 #05: the Aramaic BDB entry ("god, God")')
+
+    member = open_tier2(app, db, 1001011, 15)  # Gen 1:11 #16 בּוֹ, root H9033
+    check(member.locator(LEXICON_LINK).count() == 0, 'Gen 1:11 #16: no Lexicon link for a STEP-only root')
+
+    member, card = open_lexicon(app, db, 2013004, 4)  # Exo 13:4 #05 הָאָבִיב, H0024
+    statuses = {r[0] for r in lexicon.execute(
+        'SELECT b.status FROM lexicon_hebrew_links l JOIN lexicon_bdb_hebrew b USING (bdb_id) WHERE l.strongs_base = 24')}
+    check(statuses == {'done'} and card['entries'] and not any(e['abridged'] for e in card['entries']),
+          f'Exo 13:4 #05: a done entry has no abridged note ({statuses})')
+
+    member, card = open_lexicon(app, db, 2032020, 11)  # Exo 32:20 #12 וַיִּזֶר, H2219
+    check(card['placeholders'] == ['[Arabic]', '[Syriac]', '[Ethiopic]'],
+          f"untyped foreign words show in brackets ({card['placeholders']})")
+    neh = db.execute("SELECT verse_id, word_position FROM original_words WHERE strongs_number GLOB 'H0114*' "
+                     "ORDER BY verse_id, word_position LIMIT 1").fetchone()
+    member, card = open_lexicon(app, db, *neh)  # Neh 7:61 אַדּוֹן, H0114: "id. [a.be.ad]"
+    target = lexicon.execute("SELECT headword FROM lexicon_bdb_hebrew WHERE bdb_id = 'a.be.ad'").fetchone()[0]
+    check(card['entries'] and 'a.be.ad' not in card['entries'][0]['text'] and f'[{target}]' in card['entries'][0]['text'],
+          f"an entry pointing at another by id shows that entry's headword ({card['entries'][0]['text'] if card['entries'] else None})")
+    member = open_tier2(app, db, 1030011, 2)  # Gen 30:11 #03 בָּא//גָד: two roots
+    links = member.locator(LEXICON_LINK).all_inner_texts()
+    check(links == ['Show Lexicon (H0935G)', 'Show Lexicon (H1409)'], f'a two-root row gets a link per root ({links})')
+
+    app.navigate(43, 1)
+    app.select_verse(43001001)
+    p.click('#reference-tabs [data-tab="language"]')
+    p.wait_for_selector('.language-word-row .language-greek', timeout=30_000)
+    p.locator('.language-word-row').first.click()
+    p.locator('.language-card-more-btn').first.click()
+    p.locator('.language-card-lexicon-btn').first.click()
+    p.wait_for_selector('.language-card-lexicon .language-detail-lexicon')
+    greek = p.evaluate("""() => ({ heading: document.querySelector('.language-card-lexicon .language-detail-heading').textContent,
+        body: document.querySelector('.language-card-lexicon .language-detail-lexicon').textContent.length,
+        hebrew: !!document.querySelector('.language-lexicon-strongs') })""")
+    check(greek['heading'] == 'Lexicon (TBESG)' and greek['body'] > 100 and not greek['hebrew'], 'John 1:1: Greek tier 3 unchanged (TBESG)')
+
+
+def lexicon_rendering(app, lexicon):
+    """The renderer against hostile markup (Item 8's safety check) and against every stored string."""
+    p = app.page
+    res = p.evaluate("""async () => {
+        const m = await import('./js/hebrew-lexicon.js');
+        const host = document.createElement('div');
+        host.appendChild(m.renderHebrewLexiconMarkup('<script>window.__lexiconRan = 1</script><w>x</w>'));
+        host.appendChild(m.renderHebrewLexiconMarkup(
+            '<w onclick="window.__lexiconRan = 2">x</w><img src="x" onerror="window.__lexiconRan = 3"/>'
+            + '<script xmlns="http://www.w3.org/1999/xhtml">window.__lexiconRan = 4</script><ref r="Gen.1.1" onmouseover="1">Gn 1:1</ref>'));
+        document.body.appendChild(host);
+        await new Promise(r => setTimeout(r, 100));
+        const out = { blocked: host.querySelectorAll('script, img, iframe, a, object').length,
+            attributes: [...new Set([...host.querySelectorAll('*')].flatMap(e => [...e.attributes].map(a => a.name)))],
+            ran: window.__lexiconRan ?? null };
+        host.remove();
+        return out;
+    }""")
+    check(res['blocked'] == 0 and res['ran'] is None and not any(a.startswith('on') for a in res['attributes']),
+          f"renderHebrewLexiconMarkup: no script element, no event handlers ({res})")
+
+    strings = [row[0] for table, columns in (
+        ('lexicon_strongs_hebrew', ('source_markup', 'meaning_markup', 'usage_markup', 'note_markup')),
+        ('lexicon_bdb_hebrew', ('body_markup',))) for column in columns
+        for row in lexicon.execute(f"SELECT {column} FROM {table} WHERE {column} IS NOT NULL AND {column} != ''")]
+    res = p.evaluate("""async (strings) => {
+        const m = await import('./js/hebrew-lexicon.js');
+        const parser = new DOMParser();
+        const warnings = [];
+        const warn = console.warn;
+        console.warn = (...args) => warnings.push(String(args[0]));
+        let unparsed = 0;
+        try {
+            for (const s of strings) {
+                if (parser.parseFromString(`<root>${s}</root>`, 'application/xml').querySelector('parsererror')) unparsed++;
+                m.renderHebrewLexiconMarkup(s);
+            }
+        } finally { console.warn = warn; }
+        return { unparsed, warnings };
+    }""", strings)
+    check(res['unparsed'] == 0 and res['warnings'] == [],
+          f"every stored markup string ({len(strings)}) parses and renders from the allowed list ({res['unparsed']}, {res['warnings'][:3]})")
+
+
+def lexicon_glide(app, db):
+    """A Lexicon opened at the panel's bottom edge comes into view without the tapped link leaving the top."""
+    p = app.page
+    member = open_tier2(app, db, 1001001, 2)  # Gen 1:1 #03 אֱלֹהִים
+    p.evaluate("""() => { const t = document.getElementById('language-tab');
+        const link = document.querySelector('.language-card-tier2 > .language-card-lexicon-btn');
+        t.scrollTop += link.getBoundingClientRect().bottom - (t.getBoundingClientRect().bottom - 30); }""")
+    p.wait_for_timeout(200)
+    member.locator(LEXICON_LINK).click()
+    p.wait_for_function(LEXICON_SETTLED_JS, timeout=60_000)
+    p.wait_for_timeout(1200)
+    seen = p.evaluate("""() => { const t = document.getElementById('language-tab').getBoundingClientRect();
+        const link = document.querySelector('.language-card-tier2 > .language-card-lexicon-btn').getBoundingClientRect();
+        const tier3 = document.querySelector('.language-card-lexicon').getBoundingClientRect();
+        return { linkVisible: link.top >= t.top && link.bottom <= t.bottom,
+                 tier3Shown: Math.round(Math.min(tier3.bottom, t.bottom) - tier3.top) }; }""")
+    check(seen['linkVisible'] and seen['tier3Shown'] > 200,
+          f"a Lexicon opened at the panel's edge glides into view, the link still showing ({seen})")
+
+
+def lexicon_loading(browser):
+    """Item 4: opened on the first Lexicon tap, never at boot; exactly one download; friendly when missing."""
+    run = OfflineRun(browser)
+    p = run.page
+    db = sqlite3.connect(f"file:{LANGUAGE_DB_PATH}?mode=ro", uri=True)
+    held = []
+    p.route('**/data/lexicon-hebrew.db', lambda route: held.append(route))
+    run.boot()
+    member = open_tier2(run.app, db, 1001001, 1)
+    opened = lambda: p.evaluate('window.__emberTest.databaseSizes').count(LEXICON_DB_SIZE)
+    check(opened() == 0, 'boot and tier 2 do not open the lexicon')
+    member.locator(LEXICON_LINK).click()
+    p.wait_for_timeout(150)
+    check('Loading the Hebrew lexicon' in member.locator('.language-card-lexicon').inner_text(),
+          'a first tap shows the loading line at once')
+    for _ in range(2):
+        member.locator(LEXICON_LINK).click()
+        p.wait_for_timeout(100)
+    p.wait_for_timeout(2500)  # past the background download's start
+    check(len(held) == 1, f'quick taps plus the background download: one request ({len(held)})')
+    for route in held:
+        route.continue_()
+    p.wait_for_function(LEXICON_SETTLED_JS, timeout=30_000)
+    p.wait_for_selector('.language-lexicon-strongs', timeout=30_000)
+    check(len(run.lexicon_requests) == 1 and opened() == 1,
+          f'filled in after one download and one Database ({len(run.lexicon_requests)}, {opened()})')
+    run.check_no_errors('lexicon single download')
+    run.close()
+
+    run = OfflineRun(browser)
+    p = run.page
+    p.route('**/data/lexicon-hebrew.db', lambda route: route.abort())
+    run.boot()
+    member, card = open_lexicon(run.app, db, 1001001, 1)
+    check(LEXICON_UNAVAILABLE_TEXT in (card['message'] or ''), f"never downloaded and blocked: friendly message ({card['message']})")
+    check(card['tier2Lines'] > 0, 'never downloaded: tiers 1–2 still work')
+    p.unroute('**/data/lexicon-hebrew.db')
+    member.locator(LEXICON_LINK).click()
+    p.wait_for_timeout(100)
+    member.locator(LEXICON_LINK).click()
+    p.wait_for_selector('.language-lexicon-strongs', timeout=30_000)
+    check(True, 'the next tap recovers once the file can be fetched')
+    run.check_no_errors('lexicon never downloaded')
+    run.close()
+
+    run = OfflineRun(browser)
+    p = run.page
+    p.route('**/data/lexicon-hebrew.db', lambda route: route.abort())
+    run.boot()
+    run.wait_for_download(60_000)  # language.db, so the Language tab works offline
+    run.ctx.set_offline(True)
+    member, card = open_lexicon(run.app, db, 1001001, 1)
+    check(LEXICON_UNAVAILABLE_TEXT in (card['message'] or ''), 'offline, never downloaded: friendly message')
+    p.unroute('**/data/lexicon-hebrew.db')
+    run.ctx.set_offline(False)
+    p.wait_for_selector('.language-lexicon-strongs', timeout=30_000)
+    check(True, 'coming back online fills it in without a tap')
+    run.check_no_errors('lexicon offline')
+    run.close()
+    db.close()
+
+
+def scenario_lexicon(browser):
+    """Hebrew_Lexicon_Spec Item 8. The word checks share one profile; loading needs fresh ones."""
+    check(passes_header_check(LEXICON_DB_PATH), 'shipped lexicon-hebrew.db passes the real header check')
+    ctx = browser.new_context(viewport={'width': 1600, 'height': 1000})
+    app = App(ctx.new_page())
+    app.boot()
+    db = sqlite3.connect(f"file:{LANGUAGE_DB_PATH}?mode=ro", uri=True)
+    lexicon = sqlite3.connect(f"file:{LEXICON_DB_PATH}?mode=ro", uri=True)
+    lexicon_words(app, db, lexicon)
+    lexicon_rendering(app, lexicon)
+    lexicon_glide(app, db)
+    check(app.errors == [], f'lexicon words: no console errors {app.errors[:3]}')
+    ctx.close()
+    db.close()
+    lexicon.close()
+    lexicon_loading(browser)
     return FAILURES
 
 
@@ -1723,7 +2025,8 @@ def scenario_boots(browser):
     return FAILURES
 
 
-BROWSER_SCENARIOS = {'offline': scenario_offline, 'storage': scenario_storage, 'boots': scenario_boots}
+BROWSER_SCENARIOS = {'offline': scenario_offline, 'lexicon': scenario_lexicon,
+                     'storage': scenario_storage, 'boots': scenario_boots}
 
 
 def main():

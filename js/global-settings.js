@@ -63,7 +63,7 @@ const SECTIONS = [
         render(container) {
             const desc = document.createElement('p');
             desc.className = 'settings-section-desc';
-            desc.textContent = 'Ember bundles data from several sources. The six Bible translations and Nave’s Topical Bible are public domain. Two sources are licensed CC BY 4.0 and credited here as required:';
+            desc.textContent = 'Ember bundles data from several sources. The six Bible translations, Nave’s Topical Bible, and the Brown-Driver-Briggs (1906) and Strong’s (1890) Hebrew dictionaries are public domain. Three sources are licensed CC BY 4.0 and credited here as required:';
             container.appendChild(desc);
 
             const list = document.createElement('ul');
@@ -79,6 +79,13 @@ const SECTIONS = [
                     name: 'OpenBible.info',
                     url: 'https://www.openbible.info',
                     note: 'Cross-reference data powering the Related tab.'
+                },
+                {
+                    // One entry for both repositories Ember draws on
+                    // (HebrewLexicon and morphhb), which ask for the same credit.
+                    name: 'Open Scriptures Hebrew Bible Project',
+                    url: 'https://hb.openscriptures.org',
+                    note: 'Hebrew lexicon (Brown-Driver-Briggs and Strong’s Hebrew Dictionary) powering the Language tab’s Lexicon for Hebrew words. When a word has several BDB entries, their order comes from word frequencies in the OSHB text.'
                 }
             ]) {
                 const li = document.createElement('li');

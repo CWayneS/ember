@@ -367,3 +367,21 @@ Record: `STRESS_TEST_RESULTS.md`, "Long lists, fixed". This replaces §3's note 
 **Tests:** `tests/verify.py notes` gains `check_note_lists()`, `check_long_study()` and `check_save_after_leaving()`. `tests/stress.py` times queries in a task of their own, because a statement costs about 5x more there than directly in `page.evaluate`.
 
 **Left alone:** Info cards don't use `content-visibility`, because the Info tab rebuilds on every autosave and would jump while scrolled.
+
+## 14. ADDENDUM — 2026-11-10, Hebrew lexicon
+
+Record: `HEBREW_LEXICON_REPORT.md`. Spec: `Hebrew_Lexicon_Spec.md`. It supersedes this document's statements that Hebrew words have no Lexicon (tier 3).
+
+**`data/lexicon-hebrew.db`** (new, 4.2 MiB): Strong's, BDB, and the links between them with an OSHB-frequency `display_rank`, built by `scripts/build_lexicon_hebrew.py` from pinned, sha256-checked Open Scriptures sources. Byte-identical on rebuild.
+
+**`db.js`:** the lazy load path serves two read-only files, `LANGUAGE_DB` and `HEBREW_LEXICON_DB`, through `openReferenceDb()` / `loadReferenceBuffer()` / `downloadReferenceDbInBackground()`. `startLanguageBackgroundDownload()` is now `startReferenceDbDownloads()`, which starts both downloads. `getHebrewLexiconEntry()` is new, and so is `warnHebrewLexiconUnavailable()`.
+
+**`hebrew-lexicon.js`** (new): link roots (`hebrewLexiconRoots`), the safe markup renderer (`renderHebrewLexiconMarkup`, built from an allowed list of elements, never `innerHTML`), and the Strong's and BDB sections (`renderHebrewLexiconEntry`).
+
+**`language.js`:** Hebrew tier 2 ends with a Lexicon link per root below H9000. Tier 3 state is keyed `wordId:base`, and lower BDB entries `wordId:base:bdbId`; both clear with `openCardKey`. Tier 3 renders a loading line at once and fills in through a rebuild. Taps inside a Hebrew lexicon skip `scrollCardIntoViewIfNeeded()`, and newly opened content glides into view (`revealPendingHebrewLexicon`). That fallback now scrolls smoothly, unless the system asks for reduced motion.
+
+**`global-settings.js`:** Data & Attribution credits the Open Scriptures Hebrew Bible Project, and its lead sentence counts three CC BY 4.0 sources.
+
+**`sw.js`:** `hebrew-lexicon.js` is precached. `CACHE_NAME` is `ember-v17`.
+
+**Tests:** `tests/verify.py lexicon` is new. `smoke` now expects a Hebrew Lexicon button, and `offline`'s header check covers both shipped files.

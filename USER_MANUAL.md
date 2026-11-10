@@ -18,7 +18,7 @@ If you'd rather not install it, it works just as well in a browser tab.
 
 ### First launch
 
-The first time Ember loads, it downloads the core database and all six bundled translations (roughly 65–70 MB total) and saves them to your device. After that, everything runs locally. Original-language data for the Language tab (about 64 MB) downloads once, quietly in the background, a moment after that first launch finishes, so it doesn't slow the launch down. If you open the Language tab while it's still arriving, the tab says so and fills in when it's done. If you were offline for that moment, it downloads the next time you're connected, and until then the Language tab tells you it's waiting. Psalm titles that come from this data simply don't appear until it has arrived.
+The first time Ember loads, it downloads the core database and all six bundled translations (roughly 65–70 MB total) and saves them to your device. After that, everything runs locally. Original-language data for the Language tab (about 64 MB) and the Hebrew lexicon (about 4 MB) download once, quietly in the background, a moment after that first launch finishes, so they don't slow the launch down. If you open the Language tab while it's still arriving, the tab says so and fills in when it's done. If you were offline for that moment, it downloads the next time you're connected, and until then the Language tab tells you it's waiting. Psalm titles that come from this data simply don't appear until it has arrived.
 
 You'll land on Genesis 1 with empty study panels on the left. The loading screen disappears when the app is ready.
 
@@ -199,7 +199,16 @@ Shows the original Hebrew or Greek text for the selected verse (or verses, for a
 
 Tap any row to open a card beneath it with that word's original-language spelling, its English meaning in this verse, its Strong's number, and its grammar code — without leaving your place in the verse. Only one card is open at a time; tapping a different row (or the same one again) closes it.
 
-Tap **Click for more** on a word for its dictionary form (lemma), transliteration, and a plain-English breakdown of its grammar. Greek words also get a **Show Lexicon** button revealing the full dictionary entry. Hebrew words don't have this button yet — that source is still pending a rights clearance.
+Tap **Click for more** on a word for its dictionary form (lemma), transliteration, and a plain-English breakdown of its grammar. At the bottom, **Show Lexicon** opens the word's dictionary entry. If the entry opens below the bottom edge of the panel, the panel glides up to show it.
+
+**The Hebrew lexicon** shows two dictionaries, one under the other:
+
+- **Strong's** is the simpler one, and every Hebrew word has an entry. It gives the word's meaning, where it comes from (**Derivation**), and **KJV translates as**: the English words the King James Version uses for it. Those are translations, not definitions, so they show the range of ways the word was rendered.
+- **Brown-Driver-Briggs** (BDB) is the fuller scholarly dictionary, laid out as a numbered outline of the word's senses. The copy Ember uses is a volunteer transcription that is still in progress, so most entries are abridged: they carry BDB's definitions and outline, but not yet all of its references and word history. A short note under an entry says so. A few foreign words BDB prints in Arabic, Syriac or Ethiopic weren't typed in; those show as **[Arabic]** and so on.
+
+One Strong's number sometimes covers more than one BDB entry; אַתָּה ("you") covers five. The most common one in the Hebrew Bible is shown in full, and the others are listed below it as one line each; tap a line to open it. That order is only how often each entry occurs across the whole Bible. Neither dictionary says which entry applies in the verse you're reading, so Ember doesn't mark one.
+
+A word built from pieces has its Lexicon link for the word itself, not for its prefix or suffix (the anatomy already explains those). A few rows that hold two words have a link for each. The Hebrew lexicon downloads in the background like the rest of the Language tab's data; if you tap **Show Lexicon** before it has ever arrived and you're offline, the card says so and the rest of it keeps working.
 
 **Hebrew words are often built from pieces.** A single printed Hebrew word can carry a little word on the front ("and", "in", "the") and a pronoun on the end ("his", "them"): בְּרֵאשִׁית is "in" + "beginning", and וַיֹּאמֶר is "and" + "he said". For a word like this, **Click for more** shows its *anatomy*: one block per piece, in reading order, each with the piece's Hebrew, whether it's a **Prefix**, the **Word** itself, or a **Suffix**, what that piece means in this verse, and a plain-English breakdown of its grammar. If a piece's usual meaning differs from how it's used here, a small "General usage" line says so (בַּ is usually "in", but here "with the"). A few rows hold two written words at once; those show one group of pieces under each word.
 
@@ -269,7 +278,7 @@ Click the **☀/🌙** icon next to the search bar to toggle dark mode.
 Most panels have a **⚙** button in their header for panel-specific display options (like font size). The **⚙** next to the search bar opens global settings, covering:
 
 - **Backup & Restore** — export your entire notes/tags/studies/bookmarks database as a single file, or restore from a previously exported one. Restoring asks you to confirm first, since it replaces everything currently on your device. A line here also tells you whether your browser has agreed to keep Ember's data.
-- **Data & Attribution** — credits for the two externally-sourced, CC BY 4.0–licensed datasets Ember bundles (original-language word data and cross-reference data), each linked to its source.
+- **Data & Attribution** — credits for the three externally-sourced, CC BY 4.0–licensed datasets Ember bundles (original-language word data, cross-reference data, and the Hebrew lexicon), each linked to its source.
 
 ---
 
@@ -287,4 +296,4 @@ Your last reading position is also saved locally and restored each time you open
 
 ---
 
-*Planned for future updates: nested notes, shareable study templates, a Webster's dictionary lookup, and a fuller Greek lexicon.*
+*Planned for future updates: nested notes, shareable study templates, a Webster's dictionary lookup, a fuller Greek lexicon, and tappable references inside the Hebrew lexicon.*

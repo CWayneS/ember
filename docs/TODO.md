@@ -20,6 +20,9 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 |---|---|---|---|
 | **Speed up markup lookups** | `getMarkupsForChapter()` still uses the old one-sided overlap test. Psalm 119 renders in 93 ms at 40 years of data, so this can wait. | Small | `docs/BUILD_6.1_ACTUAL_STATE.md` §12 |
 
+| **Find the `notes` test crash** | The browser page sometimes dies at the start of the 300-note check (`check_long_study`), with "Target crashed". During the Hebrew lexicon build it happened in 2 of 6 runs on that code and 3 of 3 on the commit before it, which had no lexicon code; it passed at other times. The cause is unknown. | Small to find | `docs/HEBREW_LEXICON_REPORT.md`, "Test results" |
+| **Glide Greek's Lexicon into view** | A Hebrew Lexicon or BDB entry that opens below the panel's edge glides up into view. Greek's Show Lexicon still relies on the card-level fallback, which barely moves for a tall card, so the entry can open out of sight. The spec kept Greek unchanged, so this was left. | Small | `docs/HEBREW_LEXICON_REPORT.md`, "Scrolling" |
+
 **Not recommended on current numbers:** splitting user data into its own database (remedy 5) or replacing sql.js (remedy 6). The reasoning is in "My read now that 1 to 3 are done", under "Candidate remedies" in `docs/STRESS_TEST_RESULTS.md`. `PRAGMA locking_mode=EXCLUSIVE` was tested and not adopted; see "Long lists, fixed" in the same file.
 
 ## Documentation
@@ -29,6 +32,7 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 ## To check on Wayne's install
 
 - **Storage persistence.** Run `await navigator.storage.persisted()` in the installed app and in a normal Chrome tab, and note each result here. A real grant has never been tested, because headless Chromium always declines, so seeing Backup & Restore switch to its "has agreed" wording would be the first real confirmation. Background: `docs/OFFLINE_LANGUAGE_REPORT.md` §5.
+- **The Hebrew lexicon in your own Firefox profile.** It was checked in Playwright's Firefox (H7307, H2617, H1254, H2219, H0114). In your browser, open one Hebrew Lexicon offline after it has downloaded once.
 - **Long studies in Firefox.** `content-visibility` was only tested in Chromium. In a long study, check that typing then quickly scrolling away saves the note, that the tag autocomplete isn't cut off, and that Ctrl+F finds a note far down. Browsers without `content-visibility` just ignore it and lay out every block.
 
 ## Deferred by specs
@@ -38,12 +42,20 @@ From "Deferred / Related" in `docs/Offline_Language_And_Stress_Test_Spec.md`:
 - **OPFS → IndexedDB fallback test**, including where translations and `language.db` live without OPFS, and Safari's missing `createWritable()` on restore. See also `docs/BUILD_6.1_ACTUAL_STATE.md` §11 and `docs/OFFLINE_LANGUAGE_REPORT.md` §2.
 - **Readable export** (Markdown or HTML), for long-term readability, sharing and printing.
 
-From "Deferred to Follow-Up Specs" in `docs/Hebrew_Word_Anatomy_Spec.md`:
+From "Deferred to Follow-Up Specs" in `docs/Hebrew_Word_Anatomy_Spec.md` (the Hebrew lexicon it deferred has shipped):
 
-- **Hebrew lexicon (tier 3).** The spec names a candidate source.
-- **Root families**, after the lexicon.
 - **Showing non-Ketiv variants** (Aleppo, BHS, LXX). The data is already in `original_word_variants`.
 - **The 14 ghost rows** (Ketiv-only words), which need their own display design.
+
+From "Deferred to Follow-Up Specs" in `docs/Hebrew_Lexicon_Spec.md`:
+
+- **Tappable BDB references** (`<ref r="Exod.13.4">`) that open the verse in the reader. The references already carry the verse as `data-ref`.
+- **A BDB abbreviations key** for the scholarly shorthand ("Ges", "Kö", "Dl W").
+- **Root families**, from `LexicalIndex.xml`'s `<etym>` data.
+- **Stub entries as links** to the entries they point at. No Strong's number links to a stub today.
+- **TFLSJ** (fuller Greek lexicon), reusing the lexicon's loading pattern.
+- **Re-checking Open Scriptures' progress.** A rebuild needs the pinned commits and sha256 values updated in `scripts/build_lexicon_hebrew.py`, and its exact-count checks reviewed.
+- **A Help entry** explaining Strong's vs. BDB, with the Help rewrite below (Open Question 5).
 
 ## Before going public
 
