@@ -6,6 +6,8 @@
 // parsed as XML and rebuilt from the allowed list in renderElement below. No
 // attribute is copied except the ones that list names.
 
+import { HEBREW_VERSE_COUNTS, HEBREW_TO_ENGLISH_RUNS } from './hebrew-versification.js';
+
 const HEBREW_LETTER = /[֐-׿]/;
 
 const ABRIDGED_NOTE = 'Abridged in this edition: references and etymology aren’t fully transcribed yet.';
@@ -115,14 +117,9 @@ function renderElement(parent, element, context) {
             parent.appendChild(em);
             break;
         }
-        case 'ref': {
-            const ref = document.createElement('span');
-            const verse = element.getAttribute('r');
-            if (verse) ref.dataset.ref = verse;
-            ref.textContent = element.textContent;
-            parent.appendChild(ref);
+        case 'ref':
+            renderReference(parent, element);
             break;
-        }
         case 'foreign':
             renderForeign(parent, element, context);
             break;
@@ -206,6 +203,94 @@ function renderSense(parent, element, context) {
     appendChildren(body, element, context);
     sense.appendChild(body);
     parent.appendChild(sense);
+}
+
+// ---- Scripture references ---------------------------------------------------
+
+// OSIS book names, in Ember's book order (1 = Genesis … 66 = Revelation).
+const OSIS_BOOKS = [
+    'Gen', 'Exod', 'Lev', 'Num', 'Deut', 'Josh', 'Judg', 'Ruth', '1Sam', '2Sam',
+    '1Kgs', '2Kgs', '1Chr', '2Chr', 'Ezra', 'Neh', 'Esth', 'Job', 'Ps', 'Prov',
+    'Eccl', 'Song', 'Isa', 'Jer', 'Lam', 'Ezek', 'Dan', 'Hos', 'Joel', 'Amos',
+    'Obad', 'Jonah', 'Mic', 'Nah', 'Hab', 'Zeph', 'Hag', 'Zech', 'Mal', 'Matt',
+    'Mark', 'Luke', 'John', 'Acts', 'Rom', '1Cor', '2Cor', 'Gal', 'Eph', 'Phil',
+    'Col', '1Thess', '2Thess', '1Tim', '2Tim', 'Titus', 'Phlm', 'Heb', 'Jas', '1Pet',
+    '2Pet', '1John', '2John', '3John', 'Jude', 'Rev',
+];
+const OSIS_BOOK_IDS = new Map(OSIS_BOOKS.map((name, index) => [name.toLowerCase(), index + 1]));
+
+// Transcribers' slips in the `r` attribute, each checked against the printed
+// reference beside it. ("Jos.21.23" prints as Job, so it stays unlinked.)
+const BOOK_ALIASES = new Map(Object.entries({
+    ikgs: '1kgs', erz: 'ezra', ez: 'ezek', ho: 'hos', hosea: 'hos', is: 'isa',
+    jb: 'job', jugd: 'judg', zec: 'zech', zp: 'zeph',
+}));
+
+const OLD_TESTAMENT_BOOKS = 39;
+
+// Where a BDB reference opens in the reader: { book, chapter, verseId } in
+// Ember's English numbering (verseId null for a whole chapter), or null when
+// it doesn't name a verse that exists. BDB numbers Old Testament verses the
+// Hebrew way (Joel 4:6 is English Joel 3:6). The printed text must agree with
+// the attribute ("Ez 18:13" printed for r="Ezek.28.13" links nowhere): a link
+// to the wrong verse is worse than none.
+export function resolveBdbReference(osisRef, printed) {
+    const match = /^([1-3]?[A-Za-z]+)[.,]?(\d+)(?:[.,:](\d+))?(?:![a-z])?(?:-.*)?$/.exec(osisRef || '');
+    if (!match) return null;
+    const name = match[1].toLowerCase();
+    const book = OSIS_BOOK_IDS.get(BOOK_ALIASES.get(name) ?? name);
+    const chapter = Number(match[2]);
+    const verse = match[3] ? Number(match[3]) : null;
+    if (!book || !chapter || verse === 0 || !printedAgrees(printed, chapter, verse)) return null;
+
+    if (book > OLD_TESTAMENT_BOOKS) {
+        return { book, chapter, verseId: verse ? book * 1_000_000 + chapter * 1_000 + verse : null };
+    }
+    const chapterVerses = HEBREW_VERSE_COUNTS[book][chapter - 1];
+    if (!chapterVerses || (verse && verse > chapterVerses)) return null;
+    const english = hebrewToEnglish(book, chapter, verse ?? 1);
+    return {
+        book,
+        chapter: english.chapter,
+        verseId: verse ? book * 1_000_000 + english.chapter * 1_000 + english.verse : null,
+    };
+}
+
+function hebrewToEnglish(book, chapter, verse) {
+    for (const [runBook, runChapter, first, last, englishChapter, offset] of HEBREW_TO_ENGLISH_RUNS) {
+        if (runBook === book && runChapter === chapter && verse >= first && verse <= last) {
+            return { chapter: englishChapter, verse: verse + offset };
+        }
+    }
+    return { chapter, verse };
+}
+
+// The printed form's last "chapter:verse", or verse alone ("23:15", "18",
+// "1 Ch 9:8a", "Ex 3:12-15", "ψ 33"). Text it can't read is taken on trust.
+function printedAgrees(printed, chapter, verse) {
+    const match = /(?:(\d+):)?(\d+)\s*[a-z]?(?:\s*[-–]\s*\d+)?\s*$/.exec(printed || '');
+    if (!match) return true;
+    if (verse === null) return !match[1] && Number(match[2]) === chapter;
+    if (match[1] && Number(match[1]) !== chapter) return false;
+    return Number(match[2]) === verse;
+}
+
+// A reference that resolves is a button language.js listens for; the rest
+// stay plain text. Both keep BDB's own reference in data-ref.
+function renderReference(parent, element) {
+    const osisRef = element.getAttribute('r');
+    const target = resolveBdbReference(osisRef, element.textContent);
+    const ref = document.createElement(target ? 'button' : 'span');
+    if (osisRef) ref.dataset.ref = osisRef;
+    if (target) {
+        ref.type = 'button';
+        ref.className = 'language-lexicon-ref';
+        ref.dataset.book = target.book;
+        ref.dataset.chapter = target.chapter;
+        if (target.verseId) ref.dataset.verseId = target.verseId;
+    }
+    ref.textContent = element.textContent;
+    parent.appendChild(ref);
 }
 
 // ---- The lexicon view -------------------------------------------------------

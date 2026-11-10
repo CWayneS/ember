@@ -55,6 +55,7 @@ ember/
 │   ├── reference.js             # Reference panel (Info / Tags / Related / Language / Plans)
 │   ├── language.js              # Language tab — interlinear word study
 │   ├── hebrew-lexicon.js        # Hebrew tier 3: Strong's and BDB, rendered from an allowed list of elements
+│   ├── hebrew-versification.js  # Generated: Hebrew verse numbers onto English, for BDB's references
 │   ├── plans.js                 # Reading plans
 │   ├── study-templates.js       # Study templates
 │   ├── template-bar.js          # Template step navigation
@@ -86,6 +87,7 @@ ember/
 │   ├── build_crossrefs.py     # Ingests OpenBible cross-references into core.db
 │   ├── build_language.py      # Builds language.db from STEPBible-Data
 │   ├── build_lexicon_hebrew.py # Builds lexicon-hebrew.db from Open Scriptures (pinned, sha256-checked sources)
+│   ├── build_hebrew_versification.py # Generates js/hebrew-versification.js from TAHOT
 │   ├── gen_stress_data.py     # Generates 1/10/25/40-year user data for tests/stress.py (output gitignored)
 │   ├── analysis/              # Data investigation and checking scripts (not part of the app or build);
 │   │                           #   hebrew_anatomy/ holds the Hebrew rebuild's source fetch, rebuild check, and parity tests
@@ -143,6 +145,10 @@ python scripts/build_language.py --ship
 # Builds into data/lexicon-prep/output/; --ship also copies it to data/lexicon-hebrew.db.
 # The same sources always give a byte-identical file.
 python scripts/build_lexicon_hebrew.py --ship
+
+# Hebrew-to-English verse numbering for BDB's scripture references, from the same
+# pinned TAHOT files as language.db. Writes js/hebrew-versification.js.
+python scripts/build_hebrew_versification.py
 ```
 
 Verse IDs use the `BBCCCVVV` format: two-digit book + three-digit chapter + three-digit verse. Genesis 1:1 = `01001001`. Revelation 22:21 = `66022021`.

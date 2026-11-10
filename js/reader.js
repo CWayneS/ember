@@ -159,6 +159,36 @@ export function navigateTo(bookId, chapter, highlightVerseId = null) {
     renderPane(activePaneId, bookId, chapter, highlightVerseId);
 }
 
+// Brings a verse into view in the active pane and marks it briefly, without
+// selecting it: a selection would re-render the reference panel and take away
+// what the user tapped from (a BDB reference in the Language tab). A Psalm
+// title (verse 0) that this translation has no row for falls back to verse 1.
+// With no verseId, opens the chapter at its top.
+export function showVerse(bookId, chapter, verseId = null) {
+    const pane = panes[activePaneId];
+    if (pane.bookId !== bookId || pane.chapter !== chapter) {
+        renderPane(activePaneId, bookId, chapter);
+    } else if (!verseId) {
+        getContentEl(activePaneId).scrollTop = 0;
+    }
+    if (!verseId) return;
+
+    const textEl = getTextEl(activePaneId);
+    const target = textEl.querySelector(`[data-verse-id="${verseId}"]`)
+        ?? (verseId % 1000 === 0 ? textEl.querySelector(`[data-verse-id="${verseId + 1}"]`) : null);
+    if (!target) return;
+    target.scrollIntoView({ block: 'center' });
+    // A selected verse already has its outline (BDB often cites the verse being studied).
+    if (target.classList.contains('selected')) return;
+    target.classList.remove('shown');
+    void target.offsetWidth; // restarts the animation when the same verse is shown again
+    target.classList.add('shown');
+    // Selecting the verse mid-fade cancels the animation rather than ending it.
+    const done = () => target.classList.remove('shown');
+    target.addEventListener('animationend', done, { once: true });
+    target.addEventListener('animationcancel', done, { once: true });
+}
+
 export function getCurrentLocation() {
     return { book: panes[activePaneId].bookId, chapter: panes[activePaneId].chapter };
 }

@@ -821,6 +821,19 @@ body.theme-dark #theme-icon-moon { display: none;  }
     animation: verse-select-glow 0.4s ease-out forwards;
 }
 
+/* A verse brought into view without selecting it (a BDB reference): an
+   outline that fades, leaving the selection and markups as they were. */
+@keyframes verse-shown {
+    0%, 40% { outline-color: var(--accent); }
+    100%    { outline-color: transparent; }
+}
+
+.verse.shown:not(.selected) {
+    outline: 2px solid transparent;
+    outline-offset: 1px;
+    animation: verse-shown 1.6s ease-out;
+}
+
 /* ============================================================
    Markup visuals — gated by body.markup-mode-on.
    Classes are always on the verse elements (applied at render time);
@@ -2392,6 +2405,24 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
 
 .language-lexicon-grammar {
     color: var(--text-secondary);
+}
+
+/* A BDB scripture reference that opens its verse in the reader. Inline, in the
+   entry's own type, so the sense outline reads as before. */
+.language-lexicon-ref {
+    font: inherit;
+    color: var(--accent);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+}
+
+.language-lexicon-ref:hover {
+    color: var(--accent-hover);
+    text-decoration-style: solid;
 }
 
 /* A language's name standing in for a word the transcription didn't type. */

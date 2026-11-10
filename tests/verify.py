@@ -1647,6 +1647,62 @@ def lexicon_glide(app, db):
           f"a Lexicon opened at the panel's edge glides into view, the link still showing ({seen})")
 
 
+REFERENCE_TAP_JS = """(osisRef) => {
+    const ref = [...document.querySelectorAll('.language-lexicon-ref')].find(element => element.dataset.ref === osisRef);
+    if (!ref) return null;
+    ref.click();
+    const shown = document.querySelector('#reader-pane-a .verse.shown');
+    return { shownVerse: shown ? Number(shown.dataset.verseId) : null,
+             location: document.querySelector('#reader-pane-a .pane-location').textContent,
+             entryStillOpen: !!document.querySelector('#language-tab .language-lexicon-bdb-entry'),
+             languageTabActive: document.getElementById('language-tab').classList.contains('active'),
+             selectedInPane: document.querySelectorAll('#reader-pane-a .verse.selected').length };
+}"""
+
+
+def lexicon_references(app, db):
+    """A BDB scripture reference opens its verse, renumbered from Hebrew, and leaves the entry open."""
+    p = app.page
+    res = p.evaluate("""async () => {
+        const m = await import('./js/hebrew-lexicon.js');
+        const cases = [['Exod.9.31', 'Ex 9:31'], ['Ps.56.9', 'ψ 56:9'], ['Joel.4.6', 'Jo 4:6'], ['Mal.3.21', 'Mal 3:21'],
+            ['Ps.7.1', 'ψ 7:1'], ['Ps.33', 'ψ 33'], ['iKgs.7.30', '1 K 7:30'], ['Luke.1.42', 'Luke 1:42'],
+            ['Lev.26.89', 'Lv 26:89'], ['Ezek.28.13', 'Ez 18:13'], ['', 'Ne 8:4'], ['Jos.21.23', 'Jb 21:23']];
+        return cases.map(([r, printed]) => { const t = m.resolveBdbReference(r, printed);
+            return t ? (t.verseId ?? `${t.book}:${t.chapter}`) : null; });
+    }""")
+    expected = [2009031, 19056008, 29003006, 39004003, 19007000, '19:33', 11007030, 42001042, None, None, None, None]
+    check(res == expected, f'BDB references resolve, renumbered from Hebrew, and doubtful ones stay plain ({res})')
+
+    member, card = open_lexicon(app, db, 2013004, 4)  # Exo 13:4 #05 הָאָבִיב: Ex 9:31, numbered alike
+    p.wait_for_timeout(200)
+    res = p.evaluate(REFERENCE_TAP_JS, 'Exod.13.4')  # the verse being studied, already selected
+    check(res is not None and res['shownVerse'] is None and res['selectedInPane'] == 1,
+          f'tapping the selected verse\'s own reference adds no outline over the selection ({res})')
+    res = p.evaluate(REFERENCE_TAP_JS, 'Exod.9.31')
+    check(res is not None and res['shownVerse'] == 2009031 and res['location'] == 'Exodus 9',
+          f'tapping "Ex 9:31" opens Exodus 9 at verse 31 ({res})')
+    check(res is not None and res['entryStillOpen'] and res['languageTabActive'] and res['selectedInPane'] == 0,
+          'the tap selects nothing: the Language tab and its BDB entry stay as they were')
+
+    member, card = open_lexicon(app, db, 1005001, 1)  # Gen 5:1 #02 סֵפֶר: its second entry's ψ 56:9 is English Ps 56:8
+    member.locator('.language-lexicon-entry-btn').click()
+    p.wait_for_timeout(300)
+    res = p.evaluate(REFERENCE_TAP_JS, 'Ps.56.9')
+    check(res is not None and res['shownVerse'] == 19056008 and res['location'] == 'Psalms 56',
+          f'tapping "ψ 56:9" opens Psalm 56:8, its English number ({res})')
+    plain = p.evaluate("[...document.querySelectorAll('#language-tab [data-ref]')].filter(e => e.tagName !== 'BUTTON').length")
+    check(plain == 0, f'every reference in these entries is a link ({plain} plain)')
+
+    # Selecting the verse mid-fade cancels the animation; the class must still come off.
+    app.select_verse(19056008)
+    p.wait_for_timeout(100)
+    app.select_verse(19056009)
+    p.wait_for_timeout(200)  # well inside a replayed 1.6 s fade
+    shown = p.evaluate("document.querySelectorAll('#reader-pane-a .verse.shown').length")
+    check(shown == 0, f'selecting a verse mid-fade leaves no outline to replay later ({shown})')
+
+
 def lexicon_loading(browser):
     """Item 4: opened on the first Lexicon tap, never at boot; exactly one download; friendly when missing."""
     run = OfflineRun(browser)
@@ -1720,6 +1776,7 @@ def scenario_lexicon(browser):
     lexicon_words(app, db, lexicon)
     lexicon_rendering(app, lexicon)
     lexicon_glide(app, db)
+    lexicon_references(app, db)
     check(app.errors == [], f'lexicon words: no console errors {app.errors[:3]}')
     ctx.close()
     db.close()

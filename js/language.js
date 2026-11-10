@@ -22,6 +22,7 @@ import {
 } from './db.js';
 import { decodeMorphCode, splitHebrewWord } from './grammar-decode.js';
 import { hebrewLexiconRoots, renderHebrewLexiconEntry } from './hebrew-lexicon.js';
+import { showVerse } from './reader.js';
 
 const EMPTY_MSG        = 'Select a verse to see its original-language text.';
 const NO_DATA_MSG      = 'No original-language data for this verse yet.';
@@ -79,6 +80,14 @@ export function initLanguageTab() {
         if (hebrewLexiconFailed.size === 0) return;
         hebrewLexiconFailed.clear();
         rerenderHebrewLexicon();
+    });
+    // A BDB scripture reference opens its verse in the reader without
+    // selecting it, so this tab, and the entry being read, stay as they are.
+    document.getElementById('language-tab').addEventListener('click', (e) => {
+        const ref = e.target.closest('.language-lexicon-ref');
+        if (!ref) return;
+        const verseId = ref.dataset.verseId ? Number(ref.dataset.verseId) : null;
+        showVerse(Number(ref.dataset.book), Number(ref.dataset.chapter), verseId);
     });
 }
 

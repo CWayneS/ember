@@ -48,7 +48,6 @@ From "Deferred to Follow-Up Specs" in `docs/Hebrew_Word_Anatomy_Spec.md` (the He
 
 From "Deferred to Follow-Up Specs" in `docs/Hebrew_Lexicon_Spec.md`:
 
-- **Tappable BDB references** (`<ref r="Exod.13.4">`) that open the verse in the reader. The references already carry the verse as `data-ref`.
 - **A BDB abbreviations key** for the scholarly shorthand ("Ges", "Kö", "Dl W").
 - **Root families**, from `LexicalIndex.xml`'s `<etym>` data.
 - **Stub entries as links** to the entries they point at. No Strong's number links to a stub today.

@@ -196,9 +196,22 @@ Final run on the Checkpoint 3 code, every scenario:
 | 4. Long entries | Work; scrolling fixed and the glide added (§5) |
 | 5. Help entry | Deferred to the Help rewrite (`docs/TODO.md`) |
 
-## 9. Left for later
+## 9. Tappable BDB references (follow-up, 2026-11-10)
 
-- **Spec deferrals:** in `docs/TODO.md`, under "Deferred by specs": tappable BDB references (`data-ref` is already on every reference), an abbreviations key, root families, stub links, TFLSJ, and re-checking Open Scriptures' progress.
+The spec deferred these; they're now links. The decisions:
+
+- **Hebrew numbering.** BDB cites verses as the Hebrew Bible numbers them, and `r` follows BDB. The check: `r` has Hebrew-only references (`Joel.4.*`, `Mal.3.21`, `Ps.40.18`, `Ps.9.21`, `Ps.70.6`, `Ps.12.9`, `Ps.68.36`) and none that exist only in English numbering (`Joel.3.6`+, `Mal.4.*`). Opened as written, 372 of the 3,928 references that link (9%) would land on the wrong verse, mostly in titled Psalms.
+- **The map is a JS module, not a table.** A rebuilt reference database never reaches an install that already has one (`getCompleteOpfsFile` keeps any whole copy), and core.db's shipped tables don't update either. `scripts/build_hebrew_versification.py` reads the pinned TAHOT files (sha256-checked, the same ones as `language.db`), whose rows carry both numbers (`Mal.4.1(3.19)`), and writes `js/hebrew-versification.js`: Hebrew verse counts per chapter, and the 2,038 renumbered verses as 145 runs. The script checks that the runs reproduce the per-verse map exactly; the output is byte-identical on rebuild. `lexicon-hebrew.db` is unchanged.
+- **One Hebrew verse, two English ones.** In 59 places English splits a Hebrew verse, mostly a Psalm title plus the start of verse 1. The link opens the first numbered verse, not the title. Where the Hebrew verse is all title (Ps 51:1–2), it opens the title row (verse 0); translations without one (WEB, YLT, BSB) fall back to verse 1.
+- **Conservative resolving.** Ten book slips are read as the book printed beside them ("Ho", "Hosea", "Is", "Jb", "Zp", "Zec", "Ez", "Erz", "Jugd", "iKgs"; "1cHR" by ignoring case). `Jos.21.23` prints as "Jb 21:23", so it isn't guessed. The printed chapter:verse must agree with `r`; where it doesn't (5 references), the link would go to one of two places, so there's none. Verses that don't exist in Hebrew numbering stay plain. Result: 3,928 of 3,952 references link, 24 stay plain text.
+- **A tap doesn't select.** Selecting a verse re-renders the reference panel and switches it to the default tab, which would take away the entry being read. `showVerse()` in `reader.js` renders the chapter only if it differs, scrolls the verse to the middle and outlines it briefly (`.verse.shown`, the accent color, fading over 1.6 s). Wayne can overrule this; selecting would be a one-line change.
+- **Module boundary.** `hebrew-lexicon.js` still only builds DOM: a resolvable reference is a `<button class="language-lexicon-ref">` with `data-book`, `data-chapter` and `data-verse-id`; `language.js` handles the click by delegation on the Language tab.
+
+Tests: `lexicon` resolves twelve references (renumbered, aliased, chapter-only, New Testament, and four that must stay plain), taps "Ex 9:31" from Exo 13:4 and "ψ 56:9" (English Ps 56:8) from Gen 5:1's second entry, and checks the tab, the entry and the selection are unchanged.
+
+## 10. Left for later
+
+- **Spec deferrals:** in `docs/TODO.md`, under "Deferred by specs": an abbreviations key, root families, stub links, TFLSJ, and re-checking Open Scriptures' progress.
 - **Upstream updates need code edits:** an update means editing the pinned commits and sha256 constants, and reviewing the exact-count checks. That contradicts the spec's "no code change", but those checks are what make the stop conditions work.
 - **The `notes` crash:** the test's 300-note check sometimes crashes the browser page. It also happens on the commit before any lexicon code, and the cause is unknown (`docs/TODO.md`).
 - **Dev workflow:** after rebuilding the file, clear its OPFS copy (`lexicon-hebrew.db`) to see the change locally, as with `language.db`.
