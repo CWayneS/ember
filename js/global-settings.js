@@ -11,6 +11,7 @@
 
 import { bindPopover } from './popover-registry.js';
 import { exportBackup, isStoragePersisted } from './db.js';
+import { exportReadableCopy } from './readable-export.js';
 import { restoreFromBackup } from './backup.js';
 
 const STORAGE_AT_RISK_NOTE = 'Your browser may clear Ember’s data if this device runs low on storage. Export a backup regularly to keep your notes safe.';
@@ -29,7 +30,7 @@ const SECTIONS = [
         render(container) {
             const desc = document.createElement('p');
             desc.className = 'settings-section-desc';
-            desc.textContent = 'Export your data as a backup file, or restore from a previous backup.';
+            desc.textContent = 'Export your data as a backup file, or restore from a previous backup. A readable copy is a page of all your studies, with their verses quoted, to read, print or share; it can’t be restored.';
             container.appendChild(desc);
 
             storageNote = document.createElement('p');
@@ -46,6 +47,12 @@ const SECTIONS = [
             exportBtn.textContent = 'Export Backup';
             exportBtn.addEventListener('click', () => exportBackup());
 
+            const readableBtn = document.createElement('button');
+            readableBtn.type = 'button';
+            readableBtn.className = 'settings-action-btn';
+            readableBtn.textContent = 'Export Readable Copy';
+            readableBtn.addEventListener('click', () => exportReadableCopy({ button: readableBtn }));
+
             const restoreBtn = document.createElement('button');
             restoreBtn.type = 'button';
             restoreBtn.className = 'settings-action-btn danger';
@@ -53,6 +60,7 @@ const SECTIONS = [
             restoreBtn.addEventListener('click', () => restoreFromBackup());
 
             actions.appendChild(exportBtn);
+            actions.appendChild(readableBtn);
             actions.appendChild(restoreBtn);
             container.appendChild(actions);
         }

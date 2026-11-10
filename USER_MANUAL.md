@@ -160,6 +160,12 @@ Click a study to open it. If it's already open in a tab, you'll switch to that t
 
 The study title at the top of the document is editable — click it and type. The tab label updates as you type.
 
+### Exporting a study to read, print or share
+
+Click **Export** at the right end of the study's title line. Ember saves the study as a web page (an `.html` file) that opens in any browser, without Ember. Each note shows the verses it's attached to, quoted in the translation your reader is showing, then your note and its tags. From the browser you can print it or save it as a PDF. A note attached to more than 30 verses (a whole chapter, say) names the passage instead of quoting it.
+
+This is a copy for reading, not a backup: Ember can't restore from it. To export every study at once, use **Export Readable Copy** in Settings → Backup & Restore.
+
 ### Closing a study tab
 
 Click the **✕** on the tab. This doesn't delete the study — it just closes the tab. You can reopen it from All Studies.
@@ -279,7 +285,7 @@ Click the **☀/🌙** icon next to the search bar to toggle dark mode.
 
 Most panels have a **⚙** button in their header for panel-specific display options (like font size). The **⚙** next to the search bar opens global settings, covering:
 
-- **Backup & Restore** — export your entire notes/tags/studies/bookmarks database as a single file, or restore from a previously exported one. Restoring asks you to confirm first, since it replaces everything currently on your device. A line here also tells you whether your browser has agreed to keep Ember's data.
+- **Backup & Restore** — export your entire notes/tags/studies/bookmarks database as a single file, or restore from a previously exported one. **Export Readable Copy** saves all your studies as one web page to read, print or share, with a contents list at the top (see "Exporting a study"); with many years of notes it takes a few seconds, and the button says "Preparing…" meanwhile. Restoring asks you to confirm first, since it replaces everything currently on your device. A line here also tells you whether your browser has agreed to keep Ember's data.
 - **Data & Attribution** — credits for the three externally-sourced, CC BY 4.0–licensed datasets Ember bundles (original-language word data, cross-reference data, and the Hebrew lexicon), each linked to its source.
 
 ---
@@ -293,6 +299,8 @@ No account is required. There is no cloud sync — if you use Ember on more than
 **One important caveat:** if you clear your browser's site data for Ember without exporting a backup first, your notes and studies will be permanently deleted. The app will reset as if it's the first run.
 
 **Your browser can also clear this data by itself** if your device runs low on storage, unless it has agreed to keep it. Once you've written a note, Ember asks the browser to keep your data permanently. Chrome and Edge decide quietly, and tend to say yes for sites you use often or have installed; Firefox may ask you. Either way, export a backup regularly: it's the only thing that protects your notes if your device is lost or fails. Settings → Backup & Restore shows where you stand.
+
+A backup file is the only thing Ember can restore from. For a copy you can read anywhere, now or in fifty years, export a readable copy too: it's an ordinary web page with your notes and the verses they're about.
 
 Your last reading position is also saved locally and restored each time you open the app.
 

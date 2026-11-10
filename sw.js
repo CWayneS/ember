@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v20'; // bumped: Greek Lexicon glides into view (language.js changed)
+const CACHE_NAME = 'ember-v21'; // bumped: readable export (readable-export.js added; db.js, notes.js, global-settings.js, style.css changed)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:
@@ -31,6 +31,7 @@ const PRECACHE = [
     './js/grammar-decode.js',
     './js/hebrew-lexicon.js',
     './js/hebrew-versification.js',
+    './js/readable-export.js',
     './js/help.js',
     './js/language.js',
     './js/markups.js',

@@ -537,6 +537,16 @@ All five prefixes are functional:
 233e. Unlike ordinary writes, a restore does NOT fall back from OPFS to IndexedDB after a partial OPFS failure (quota exceeded mid-write, etc.) — it rejects outright. `loadFromStorage()` always checks OPFS first on the next boot, so falling back there would leave a truncated `core.db` in OPFS that the next boot reads instead of the good IndexedDB copy — exactly the half-restored state a destructive restore must never produce — db.js:restoreCoreDb
 233f. Any failure at any step (unreadable file, invalid file, failed write) shows a clear `alert()` and leaves the existing `core.db` untouched; no partial writes — backup.js:restoreFromBackup
 
+## Readable Export
+
+233g. Studies as one self-contained HTML page, to read, print or share without Ember (not restorable). Two entry points: **Export** at the end of a study's title line (that study; `.study-header` holds the title and the button) and **Export Readable Copy** in Backup & Restore (every study) — notes.js:renderStudyDocument, global-settings.js:SECTIONS, readable-export.js:exportReadableCopy
+233h. Pending autosaves are written first, so text typed under 800 ms before the click is in the file — notes.js:flushPendingSaves
+233i. The full export lists studies in All Studies order (`getStudies()`), each under its own heading, with a contents list linking `#study-<id>`, and ends with "Notes not in a study" if any note has a null or missing study; a one-study export is titled by the study. Notes keep `getNotesForStudy()` order (now `created_at, id`); an empty name shows as "Untitled Study" — readable-export.js:buildReadableExport, db.js:getNotesByStudy
+233j. Each note: its anchors as in the note's chips (`coalesceAnchors` + `formatReference`), each labeled with the translation ("Genesis 1:1–3 (KJV)") and quoted in the active reader pane's translation, one paragraph per chapter with superscript verse numbers; then the body (`white-space: pre-wrap`, `dir="auto"`); then "Tags: …". An anchor of more than 30 verses (`MAX_QUOTED_VERSES`) prints "N verses, not quoted."; empty Psalm-title rows are skipped. The header names the translation once — readable-export.js:buildNote/chapterCache, db.js:countVersesInRange
+233k. Built as a detached document (`document.implementation.createHTMLDocument`) filled with `textContent`, so note text stays text; `<meta charset="utf-8">`, inline print-friendly CSS (each study on a new page when printed), no script, nothing external. Saved as `text/html;charset=utf-8` through the shared `downloadFile()` helper (also used by Export Backup) — readable-export.js, db.js:downloadFile
+233l. File names: `ember-studies-YYYY-MM-DD.html`; `ember-study-<name>-YYYY-MM-DD.html`, keeping letters in any script and dropping `\ / : * ? " < > |` and control characters ("untitled-study" if nothing is left) — readable-export.js:exportFilename
+233m. Speed: each chapter is read once per export and notes come in one pass; at the 40-year stress profile (31,200 notes, 62,381 anchors) the full export takes 4.0 s on the main thread for a 79 MB file, one 2,000-note study 0.4 s. The button shows "Preparing…" (disabled) and gets a frame to paint it before the work starts — readable-export.js:exportReadableCopy
+
 ---
 
 ## Global Header

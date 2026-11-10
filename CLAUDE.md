@@ -39,6 +39,7 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - js/template-bar.js — Reading plan template bar
 - js/study-templates.js — Built-in study templates
 - js/backup.js — Restore-from-backup flow
+- js/readable-export.js — Studies as one self-contained HTML page (Export in a study, Export Readable Copy in Backup & Restore)
 - js/usfm.js — USFM book codes and reference resolution
 - js/help.js — Contextual help popovers
 - js/global-settings.js, reader-settings.js, notes-settings.js, reference-settings.js — Settings popovers

@@ -1561,16 +1561,38 @@ body.markup-mode-on .verse.markup-circle {
     color: var(--accent);
 }
 
+/* The study's title, with its Export button at the end of the same line. */
+.study-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border-light);
+}
+
 .study-title {
+    flex: 1;
+    min-width: 0;
     font-size: var(--size-base);
     font-weight: 600;
     color: var(--text-primary);
     outline: none;
     padding: 4px 0 8px;
-    margin-bottom: 12px;
-    border-bottom: 1px solid var(--border-light);
     white-space: nowrap;
     overflow: hidden;
+}
+
+.study-export-btn {
+    flex-shrink: 0;
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.study-export-btn:hover {
+    color: var(--accent);
+    background: var(--accent-light);
 }
 
 .study-title:empty::before {

@@ -15,6 +15,8 @@ Usage (from the repo root):
                                          #   a 300-note study: scrolling, find, autocomplete, in-place edits
    python3 tests/verify.py sw            # service worker installs and precaches every js/ file
    python3 tests/verify.py hebrew        # Hebrew word anatomy: TEHMC decode, pieces, affixes, Ketiv
+   python3 tests/verify.py export        # readable export: one study and all studies, verse quotes,
+                                         #   note text kept as text, unsaved typing included
    python3 tests/verify.py lexicon       # Hebrew lexicon: the spec's test words, safe rendering, every stored
                                          #   entry rendered, lazy open, offline message, single download
    python3 tests/verify.py offline       # language.db background download, offline use, failure and
@@ -32,7 +34,7 @@ user rows, which differ between runs.
 
 Requires: python3, playwright (pip install playwright && playwright install chromium).
 """
-import json, os, random, sqlite3, statistics, struct, subprocess, sys, time
+import json, os, random, re, sqlite3, statistics, struct, subprocess, sys, time
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -2126,6 +2128,112 @@ def scenario_storage(browser):
     return FAILURES
 
 
+# ---------------------------------------------------------------- export
+HOSTILE_BODY = '<script>window.__exportRan = 1</script> <img src=x onerror="window.__exportRan = 2"> Tom & Jerry\nsecond line'
+
+
+def read_download(p, click):
+    with p.expect_download() as download_info:
+        click()
+    download = download_info.value
+    with open(download.path(), encoding='utf-8') as f:
+        return download.suggested_filename, f.read()
+
+
+def parse_export(p, html):
+    """The exported page, parsed by the browser without running it."""
+    return p.evaluate("""(html) => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const text = el => el.textContent.replace(/\\s+/g, ' ').trim();
+        return {
+            scripts: doc.querySelectorAll('script').length,
+            images: doc.querySelectorAll('img').length,
+            handlers: [...doc.querySelectorAll('*')].flatMap(e => [...e.attributes].map(a => a.name)).filter(n => n.startsWith('on')),
+            external: [...doc.querySelectorAll('[src], link[href]')].length,
+            charset: doc.querySelector('meta[charset]')?.getAttribute('charset'),
+            meta: text(doc.querySelector('.meta')),
+            title: text(doc.querySelector('h1')),
+            studies: [...doc.querySelectorAll('section > h2')].map(text),
+            contents: [...doc.querySelectorAll('nav a')].map(a => a.getAttribute('href')),
+            notes: [...doc.querySelectorAll('.note')].map(note => ({
+                references: [...note.querySelectorAll('.reference')].map(text),
+                quotes: [...note.querySelectorAll('blockquote')].map(q => [...q.querySelectorAll('p')].map(text)),
+                notQuoted: [...note.querySelectorAll('.not-quoted')].map(text),
+                body: note.querySelector('.body')?.textContent ?? null,
+                tags: note.querySelector('.tags') ? text(note.querySelector('.tags')) : null,
+            })),
+        };
+    }""", html)
+
+
+def scenario_export(app):
+    """Readable export: one study from its view, all studies from Backup & Restore."""
+    p = app.page
+    studies = p.evaluate(f"""async () => {{
+        const db = await import('./js/db.js');
+        const first = db.createStudy('Creation & <Light>');
+        db.saveNote({HOSTILE_BODY!r}, [{{ verseStart: 1001001 }}], ['faith', 'beginnings'], first);
+        db.saveNote('across a chapter break', [{{ verseStart: 1001031, verseEnd: 1002002 }}], [], first);
+        db.saveNote('the first three chapters', [{{ verseStart: 1001001, verseEnd: 1003024 }}], [], first);
+        db.saveNote('to be typed into', [], [], first);
+        const second = db.createStudy('Second study');
+        db.saveNote('only in the full export', [{{ verseStart: 43001001 }}], [], second);
+        db.saveNote('a note outside any study', [], [], null);
+        return {{ first, second }};
+    }}""")
+    p.evaluate(f"import('./js/panels.js').then(panels => panels.openStudy({studies['first']}, 'Creation'))")
+    p.wait_for_selector('.study-export-btn')
+
+    # Typed just now, still waiting on its 800 ms autosave
+    last_body = '#notes-active-view .note-block:last-of-type .note-block-body'
+    p.click(last_body); p.keyboard.press('Control+End'); p.keyboard.type(' plus fresh typing')
+    filename, html = read_download(p, lambda: p.click('.study-export-btn'))
+    page = parse_export(p, html)
+    check(re.fullmatch(r'ember-study-Creation-&-Light-\d{4}-\d\d-\d\d\.html', filename) is not None,
+          f'one study: file named for the study, unsafe characters dropped ({filename})')
+    check(page['title'] == 'Creation & <Light>' and page['studies'] == [] and page['contents'] == [] and len(page['notes']) == 4
+          and not any(note['body'] == 'a note outside any study' for note in page['notes']),
+          f"one study: titled by it, only its notes, no contents list ({page['title']}, {page['studies']}, {len(page['notes'])})")
+    check(page['charset'] == 'utf-8' and page['scripts'] == 0 and page['images'] == 0 and page['handlers'] == [] and page['external'] == 0,
+          f"one study: self-contained, no script, no handlers ({page['scripts']}, {page['images']}, {page['handlers']}, {page['external']})")
+    check('King James Version (KJV)' in page['meta'], f"names the translation once in the header ({page['meta']})")
+    hostile, across, long, typed = page['notes']
+    check(hostile['body'] == HOSTILE_BODY, f"note text is kept as text, markup and line break included ({hostile['body']!r})")
+    check(p.evaluate('window.__exportRan ?? null') is None, 'nothing in the note ran')
+    check(hostile['references'] == ['Genesis 1:1 (KJV)'] and hostile['quotes'][0][0].startswith('1 In the beginning God created the heaven'),
+          f"Gen 1:1 quoted in KJV ({hostile['quotes']})")
+    check(hostile['tags'] == 'Tags: faith, beginnings', f"tags listed ({hostile['tags']})")
+    check(across['references'] == ['Genesis 1:31–2:2 (KJV)'] and len(across['quotes'][0]) == 2
+          and across['quotes'][0][0].startswith('31 ') and across['quotes'][0][1].startswith('1 ') and '2 And on the seventh day' in across['quotes'][0][1],
+          f"a cross-chapter anchor quotes both chapters ({across['quotes']})")
+    check(long['quotes'] == [] and long['notQuoted'] == ['80 verses, not quoted.'], f"a long anchor is named, not quoted ({long['notQuoted']})")
+    check(typed['body'] == 'to be typed into plus fresh typing', f"text typed just before exporting is in the file ({typed['body']!r})")
+    button = p.evaluate("(() => { const b = document.querySelector('.study-export-btn'); return [b.textContent, b.disabled]; })()")
+    check(button == ['Export', False], f'the button is back to "Export" once the file is made ({button})')
+
+    # Everything, after switching the reader to ASV
+    p.click('#reader-pane-a .pane-book-btn')
+    p.click('.translation-btn:has-text("ASV")')
+    p.keyboard.press('Escape')
+    p.click('#global-settings-btn')
+    filename, html = read_download(p, lambda: p.click('#global-settings-popover .settings-action-btn:has-text("Export Readable Copy")'))
+    p.keyboard.press('Escape')
+    page = parse_export(p, html)
+    check(re.fullmatch(r'ember-studies-\d{4}-\d\d-\d\d\.html', filename) is not None, f'all studies: file name ({filename})')
+    p.click('#notes-tabs [data-study-id="all"]')
+    listed = p.evaluate("[...document.querySelectorAll('.study-list-item .study-list-name')].map(e => e.textContent)")
+    check(page['studies'][:-1] == listed and sorted(listed) == ['Creation & <Light>', 'Second study'] and len(page['contents']) == 3,
+          f"all studies, in the All Studies list's order, with a contents list ({page['studies']}, {listed})")
+    loose = [note['body'] for note in page['notes'] if note['body'] == 'a note outside any study']
+    check(page['studies'][-1] == 'Notes not in a study' and loose == ['a note outside any study'],
+          f"a note outside any study ends the full export in its own section ({page['studies']})")
+    check('American Standard Version (ASV)' in page['meta'], f"the reader's translation, now ASV ({page['meta']})")
+    hostile = next(note for note in page['notes'] if note['body'] == HOSTILE_BODY)
+    check(hostile['references'] == ['Genesis 1:1 (ASV)'] and 'heavens' in hostile['quotes'][0][0],
+          f"Gen 1:1 quoted in ASV ({hostile['quotes'][0]})")
+    return FAILURES
+
+
 # ---------------------------------------------------------------- boots
 WARM_BOOTS = 5
 
@@ -2183,6 +2291,7 @@ def main():
             elif args[0] == 'indicators': failures = scenario_indicators(app)
             elif args[0] == 'notes':      failures = scenario_notes(app)
             elif args[0] == 'hebrew':     failures = scenario_hebrew(app)
+            elif args[0] == 'export':     failures = scenario_export(app)
             elif args[0] == 'dbsnapshot': failures = scenario_dbsnapshot(app, args[1])
             else: print('unknown scenario'); sys.exit(2)
             for e in app.errors:

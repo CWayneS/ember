@@ -30,6 +30,7 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 
 - **Storage persistence.** Run `await navigator.storage.persisted()` in the installed app and in a normal Chrome tab, and note each result here. A real grant has never been tested, because headless Chromium always declines, so seeing Backup & Restore switch to its "has agreed" wording would be the first real confirmation. Background: `docs/OFFLINE_LANGUAGE_REPORT.md` §5.
 - **The Hebrew lexicon in your own Firefox profile.** It was checked in Playwright's Firefox (H7307, H2617, H1254, H2219, H0114). In your browser, open one Hebrew Lexicon offline after it has downloaded once.
+- **Readable export in Firefox.** Checked in Chromium only. In your Firefox, export a study and Export Readable Copy, and open each file; with a large library, see that "Preparing…" shows while it works.
 - **Long studies in Firefox.** `content-visibility` was only tested in Chromium. In a long study, check that typing then quickly scrolling away saves the note, that the tag autocomplete isn't cut off, and that Ctrl+F finds a note far down. Browsers without `content-visibility` just ignore it and lay out every block.
 
 ## Deferred by specs
@@ -37,7 +38,6 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 From "Deferred / Related" in `docs/Offline_Language_And_Stress_Test_Spec.md`:
 
 - **OPFS → IndexedDB fallback test**, including where translations and `language.db` live without OPFS, and Safari's missing `createWritable()` on restore. See also `docs/BUILD_6.1_ACTUAL_STATE.md` §11 and `docs/OFFLINE_LANGUAGE_REPORT.md` §2.
-- **Readable export** (Markdown or HTML), for long-term readability, sharing and printing.
 
 From "Deferred to Follow-Up Specs" in `docs/Hebrew_Word_Anatomy_Spec.md` (the Hebrew lexicon it deferred has shipped):
 

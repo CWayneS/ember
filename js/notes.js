@@ -10,6 +10,7 @@ import { refreshVerseIndicators, navigateTo, getActivePaneTranslationId } from '
 import { openStudy, closeStudy, openTagView, renameStudyTab } from './panels.js';
 import { refreshReference }                         from './reference.js';
 import { setupTagInput }                            from './tags.js';
+import { exportReadableCopy }                       from './readable-export.js';
 
 let currentVerseIds = [];       // verses currently selected in the reader
 const pendingSaves  = new Map(); // noteId → { timer, text }, until written
@@ -27,7 +28,7 @@ export function initNotes() {
     document.addEventListener('study-changed', (e) => {
         // Before anything re-reads notes: a block rebuilt from older text
         // would show it, and typing there would overwrite the newer words.
-        for (const noteId of pendingSaves.keys()) writePendingSave(noteId);
+        flushPendingSaves();
 
         const { studyId } = e.detail;
         if (studyId === 'all') {
@@ -64,7 +65,19 @@ function renderStudyDocument(studyId) {
     title.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); title.blur(); }
     });
-    container.appendChild(title);
+
+    const exportBtn = document.createElement('button');
+    exportBtn.type = 'button';
+    exportBtn.className = 'study-export-btn';
+    exportBtn.textContent = 'Export';
+    exportBtn.title = 'Save this study as a page to read, print or share';
+    exportBtn.addEventListener('click', () => exportReadableCopy({ studyId, button: exportBtn }));
+
+    const header = document.createElement('div');
+    header.className = 'study-header';
+    header.appendChild(title);
+    header.appendChild(exportBtn);
+    container.appendChild(header);
 
     if (notes.length === 0) {
         const empty = document.createElement('p');
@@ -514,6 +527,12 @@ function scheduleSave(noteId, bodyEl) {
     pendingSaves.set(noteId, { timer, text });
 }
 
+// Writes every note still waiting on its autosave timer, so that what reads
+// the database next (another study, an export) sees the latest typing.
+export function flushPendingSaves() {
+    for (const noteId of [...pendingSaves.keys()]) writePendingSave(noteId);
+}
+
 function writePendingSave(noteId) {
     const { timer, text } = pendingSaves.get(noteId);
     clearTimeout(timer);
@@ -536,7 +555,7 @@ function refreshAfterWrite() {
 // Pure function — does not touch the database.
 // Two anchors are contiguous if they share the same book and chapter and their
 // verse ranges touch or overlap (second start <= first effective end + 1).
-function coalesceAnchors(anchors) {
+export function coalesceAnchors(anchors) {
     if (anchors.length === 0) return [];
 
     // Sort by verse_start — BBCCCVVV encoding means numeric sort = canonical order.

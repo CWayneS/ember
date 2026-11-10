@@ -56,6 +56,7 @@ ember/
 │   ├── language.js              # Language tab — interlinear word study
 │   ├── hebrew-lexicon.js        # Hebrew tier 3: Strong's and BDB, rendered from an allowed list of elements
 │   ├── hebrew-versification.js  # Generated: Hebrew verse numbers onto English, for BDB's references
+│   ├── readable-export.js       # Studies as a self-contained HTML page to read, print or share
 │   ├── plans.js                 # Reading plans
 │   ├── study-templates.js       # Study templates
 │   ├── template-bar.js          # Template step navigation
@@ -117,6 +118,7 @@ Ember has shipped through **Build 6**. Current functionality:
 - **Reading plans** — structured, progress-tracked plans through Scripture
 - **Study templates** — pre-built study structures (Inductive Study, Word Study, Passage Overview) that generate a filled-in study in one step
 - **Backup & restore** — full local data export/import
+- **Readable export** — one study or all of them as a self-contained web page, verses quoted, to read, print or share
 - **Full-text search** — across Scripture, notes, tags, and studies in one unified interface, with prefix shortcuts (`b:`, `n:`, `s:`, `t:`, `k:`)
 - **Offline-first persistence** — all data stored locally via OPFS (falling back to IndexedDB), no account or server required
 - **PWA** — installable, fully functional offline after first load

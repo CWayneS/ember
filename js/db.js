@@ -1042,13 +1042,18 @@ export function exportBackup() {
     const now = new Date();
     const pad = n => String(n).padStart(2, '0');
     const filename = `ember-backup-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.db`;
+    downloadFile(blob, filename);
+}
 
+// Saves a Blob through the browser's download flow. The URL is revoked a moment
+// later rather than at once, which some browsers need to start the download.
+export function downloadFile(blob, filename) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = filename;
     anchor.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // Minimal structural check for a candidate restore file: opens `bytes` as a
@@ -1233,6 +1238,18 @@ export function getChapter(translationId, bookId, chapter) {
          ORDER BY verse`,
         [bookId, chapter]
     );
+}
+
+// How many verses one translation has from startId to endId, across chapters
+// and books (the readable export names a long anchor's size rather than quote it).
+export function countVersesInRange(translationId, startId, endId) {
+    const tdb = _translationDbs.get(translationId) ?? _translationDbs.get(1);
+    if (!tdb) return 0;
+    const s = parseVerseId(startId);
+    const e = parseVerseId(endId);
+    return queryValue(tdb,
+        'SELECT COUNT(*) FROM verses WHERE (book, chapter, verse) BETWEEN (?, ?, ?) AND (?, ?, ?)',
+        [s.book, s.chapter, s.verse, e.book, e.chapter, e.verse], 0);
 }
 
 // True if the translation has any verse for (bookId, chapter). Used by the
@@ -1853,10 +1870,29 @@ export function getNotesForStudy(studyId) {
         `SELECT n.id, n.body, n.created_at, n.modified_at
          FROM notes n
          WHERE n.study_id = ?
-         ORDER BY n.created_at ASC`,
+         ORDER BY n.created_at ASC, n.id ASC`,
         [studyId]
     );
     return attachTagsAndAnchors(results);
+}
+
+// Every note, by study id, each study's notes in getNotesForStudy() order: one
+// pass instead of one per study (the readable export). Notes whose study is
+// missing (saveNote() allows a null one) are under null.
+export function getNotesByStudy() {
+    const notes = attachTagsAndAnchors(queryAll(db,
+        `SELECT n.id, n.body, n.created_at, n.modified_at,
+                CASE WHEN s.id IS NULL THEN NULL ELSE n.study_id END AS study_id
+         FROM notes n
+         LEFT JOIN studies s ON s.id = n.study_id
+         ORDER BY n.created_at ASC, n.id ASC`
+    ));
+    const byStudy = new Map();
+    for (const { study_id: studyId, ...note } of notes) {
+        if (!byStudy.has(studyId)) byStudy.set(studyId, []);
+        byStudy.get(studyId).push(note);
+    }
+    return byStudy;
 }
 
 // ============================================================
