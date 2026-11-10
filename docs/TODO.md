@@ -10,7 +10,6 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 
 | Decision | The question | Source |
 |---|---|---|
-| **Deleted bundled plans** | The seeders run on every online boot, so a bundled plan you delete comes back on the next one. Keep that, or make deletion stick? | `FEATURE_INVENTORY.md` item 216; `seedBundledPlans()` in `js/db.js` |
 | **Save frequency** | From about year 10 of data, autosave blocks typing on a CPU 4× slower than the test machine, mostly because it exports the whole database. Saving less often means fewer stutters, though each one stays as long and a crash could lose a little more text. | `docs/STRESS_TEST_RESULTS.md`, "Candidate remedies", remedy 4 |
 | **Stress thresholds** | The thresholds are the spec's proposed starting points, left for you to adjust once you'd seen real numbers. | `docs/STRESS_TEST_RESULTS.md`, intro and "Thresholds after the fixes" |
 
@@ -19,7 +18,7 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 | To-do | Why it matters | Size | Source |
 |---|---|---|---|
 | **Speed up markup lookups** | `getMarkupsForChapter()` still uses the old one-sided overlap test. Psalm 119 renders in 93 ms at 40 years of data, so this can wait. | Small | `docs/BUILD_6.1_ACTUAL_STATE.md` §12 |
-
+| **Getting a deleted bundled plan back** | Deleted bundled plans stay deleted (they're listed in `bundled_installs`). The only way back is importing the plan's JSON from `data/plans/`, which a user doesn't have. A "Restore bundled plans" action could take a plan off the list and seed it again. | Small | `seedBundledPlans()` in `js/db.js` |
 | **Find the `notes` test crash** | The browser page sometimes dies at the start of the 300-note check (`check_long_study`), with "Target crashed". During the Hebrew lexicon build it happened in 2 of 6 runs on that code and 3 of 3 on the commit before it, which had no lexicon code; it passed at other times. The cause is unknown. | Small to find | `docs/HEBREW_LEXICON_REPORT.md`, "Test results" |
 | **Glide Greek's Lexicon into view** | A Hebrew Lexicon or BDB entry that opens below the panel's edge glides up into view. Greek's Show Lexicon still relies on the card-level fallback, which barely moves for a tall card, so the entry can open out of sight. The spec kept Greek unchanged, so this was left. | Small | `docs/HEBREW_LEXICON_REPORT.md`, "Scrolling" |
 

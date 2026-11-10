@@ -222,7 +222,7 @@ The grammar descriptions for Hebrew verbs are deliberately careful. A Hebrew ver
 
 The Plans tab has two sub-tabs: **Reading Plans** and **Study Templates**. Neither depends on a verse selection.
 
-**Reading Plans** comes pre-loaded with three plans (M'Cheyne's one-year plan and two Bible-in-a-year plans — canonical and chronological order). Click a plan to open its detail view: a **Continue →** button, a day-by-day list (☑ completed, ▶ current, ○ upcoming — click any day to jump straight to it), and Restart/Delete at the bottom.
+**Reading Plans** comes pre-loaded with three plans (M'Cheyne's one-year plan and two Bible-in-a-year plans — canonical and chronological order). Click a plan to open its detail view: a **Continue →** button, a day-by-day list (☑ completed, ▶ current, ○ upcoming — click any day to jump straight to it), and Restart/Delete at the bottom. A bundled plan you delete stays deleted: Ember won't reinstall it the next time it starts.
 
 Opening a day activates a bar at the very top of the screen showing the plan's title and today's passage(s). Use **◀ Prev** / **Next ▶** to move between passages within the day, which roll over into **Prev Day** / **Next Day** at the ends. Click **✕** on the bar to close it — your progress is saved, and you can resume anytime from the Plans tab.
 

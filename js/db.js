@@ -102,13 +102,12 @@ export async function initDatabase() {
 
     createUserTables();
 
-    // Seed any bundled reading plan not installed yet (idempotent — skips any
-    // plan_id already present). Runs every online boot, so a newly bundled plan
-    // reaches existing installs.
+    // Seed any bundled reading plan this install has never installed (see
+    // bundled_installs). Runs every online boot, so a newly bundled plan
+    // reaches existing installs, and a deleted one stays deleted.
     await seedBundledPlans();
 
-    // Same for built-in study templates (idempotent — skips any template name
-    // already present).
+    // Same for built-in study templates, by name.
     await seedBundledTemplates();
 
     // Seed translation files into OPFS on first install; later loads only re-seed
@@ -600,7 +599,19 @@ function createUserTables() {
     // NULL = use created_at order. Will be populated when ordering is implemented.
     try { db.run('ALTER TABLE notes ADD COLUMN position REAL'); } catch (_) {}
 
+    // Which bundled plans (by plan_id) and templates (by name) this install has
+    // ever installed. The seeders skip anything listed here, so a bundled plan
+    // the user deleted stays deleted.
+    db.run(`
+        CREATE TABLE IF NOT EXISTS bundled_installs (
+            kind TEXT NOT NULL CHECK(kind IN ('plan','template')),
+            key  TEXT NOT NULL,
+            PRIMARY KEY (kind, key)
+        );
+    `);
+
     migratePlanTables();
+    recordBundledAlreadyPresent();
     ensureMetaTable();
     repairNotesSearchIndexOnce();
 }
@@ -795,8 +806,32 @@ function logSeedLoadFailure(message, e) {
     (e instanceof TypeError ? console.warn : console.error)(message, e);
 }
 
-// Seed the bundled reading plans from data/plans/ on every online boot. Idempotent:
-// a plan already present (matched by its stable plan_id) is left untouched.
+function isBundledInstalled(kind, key) {
+    return !!queryOne(db, 'SELECT 1 FROM bundled_installs WHERE kind = ? AND key = ?', [kind, key]);
+}
+
+// Not saved here: the seeders record before inserting, so insertPlan() and
+// insertTemplate() save the row along with what they install.
+function recordBundledInstalled(kind, key) {
+    db.run('INSERT OR IGNORE INTO bundled_installs (kind, key) VALUES (?, ?)', [kind, key]);
+}
+
+// Installs from before bundled_installs existed (and backups restored from
+// them) have no list yet. Every bundled plan or template they still hold has
+// been installed, so it goes on the list; one deleted before the upgrade isn't
+// known to the list, and comes back once. Runs every boot, offline too, so the
+// list is complete before the user can delete anything. Templates have no
+// source column, but every template is bundled until users can create them.
+function recordBundledAlreadyPresent() {
+    db.run(`INSERT OR IGNORE INTO bundled_installs (kind, key)
+            SELECT 'plan', plan_id FROM plans WHERE source = 'bundled'`);
+    db.run(`INSERT OR IGNORE INTO bundled_installs (kind, key)
+            SELECT 'template', name FROM study_templates`);
+}
+
+// Seed the bundled reading plans from data/plans/ on every online boot, so a
+// newly bundled plan reaches existing installs. A plan on the bundled_installs
+// list is skipped, even if the user has since deleted it.
 async function seedBundledPlans() {
     if (navigator.onLine === false) return;
     for (const filename of BUNDLED_PLAN_FILES) {
@@ -811,12 +846,16 @@ async function seedBundledPlans() {
         }
 
         const meta = plan.plan_metadata;
+        if (isBundledInstalled('plan', meta.id)) continue;
         let result;
         try {
+            recordBundledInstalled('plan', meta.id);
             result = insertPlan(meta, plan.days, 'bundled');
         } catch (e) {
-            if (e.code === 'DUPLICATE_PLAN_ID') continue; // already seeded
+            // Already present (the user imported this file): it stays listed.
+            if (e.code === 'DUPLICATE_PLAN_ID') continue;
             console.error(`seedBundledPlans: failed to seed ${filename}:`, e);
+            db.run("DELETE FROM bundled_installs WHERE kind = 'plan' AND key = ?", [meta.id]);
             continue;
         }
 
@@ -857,7 +896,7 @@ function insertTemplate(meta, steps) {
 }
 
 // Seed the built-in study templates from data/templates/ on every online boot.
-// Idempotent: a template already present (matched by its name) is left untouched.
+// Like the plans, a template on the bundled_installs list (by name) is skipped.
 async function seedBundledTemplates() {
     if (navigator.onLine === false) return;
     for (const filename of BUNDLED_TEMPLATE_FILES) {
@@ -872,11 +911,14 @@ async function seedBundledTemplates() {
         }
 
         const meta = template.template_metadata;
+        if (isBundledInstalled('template', meta.name)) continue;
         try {
+            recordBundledInstalled('template', meta.name);
             insertTemplate(meta, template.steps);
         } catch (e) {
-            if (e.code === 'DUPLICATE_TEMPLATE_NAME') continue; // already seeded
+            if (e.code === 'DUPLICATE_TEMPLATE_NAME') continue; // already present
             console.error(`seedBundledTemplates: failed to seed ${filename}:`, e);
+            db.run("DELETE FROM bundled_installs WHERE kind = 'template' AND key = ?", [meta.name]);
             continue;
         }
 

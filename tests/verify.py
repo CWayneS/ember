@@ -1783,6 +1783,60 @@ def storage_search_index(browser):
     run.close()
 
 
+BUNDLED_STATE_JS = """() => {
+    const core = window.__emberTest.databases[0];
+    const column = sql => (core.exec(sql)[0]?.values ?? []).map(row => row[0]);
+    return {
+        plans: column("SELECT plan_id FROM plans ORDER BY plan_id"),
+        templates: column("SELECT name FROM study_templates ORDER BY name"),
+        listed: column("SELECT kind || ':' || key FROM bundled_installs ORDER BY 1"),
+    };
+}"""
+
+
+def storage_bundled_installs(browser):
+    """A deleted bundled plan or template stays deleted: the seeders skip anything
+    on the bundled_installs list. An install from before the list fills it from
+    what it still holds."""
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    state = p.evaluate(BUNDLED_STATE_JS)
+    check(len(state['plans']) == 3 and len(state['templates']) == 3, f'fresh install: three plans, three templates ({state})')
+    check(len(state['listed']) == 6, f'fresh install: all six listed ({state["listed"]})')
+
+    p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        const core = window.__emberTest.databases[0];
+        db.deletePlan(db.getPlans().find(plan => plan.plan_id === 'mcheyne-1year').id);
+        const templateId = core.exec("SELECT id FROM study_templates WHERE name = 'Word Study'")[0].values[0][0];
+        core.run('DELETE FROM template_steps WHERE template_id = ?', [templateId]);
+        core.run('DELETE FROM study_templates WHERE id = ?', [templateId]);
+        db.setState('force_a_save', '1');
+    }""")
+    p.wait_for_timeout(500)
+    run.reload()
+    state = p.evaluate(BUNDLED_STATE_JS)
+    check('mcheyne-1year' not in state['plans'] and len(state['plans']) == 2, f'deleted plan stays deleted after an online boot ({state["plans"]})')
+    check('Word Study' not in state['templates'] and len(state['templates']) == 2, f'deleted template stays deleted ({state["templates"]})')
+    check(len(state['listed']) == 6, 'both are still listed')
+
+    # An install from before the list: it fills from the two plans and two templates still present,
+    # and the deleted ones, unknown to it, come back this once.
+    p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        window.__emberTest.databases[0].run('DROP TABLE bundled_installs');
+        db.setState('force_a_save', '1');
+    }""")
+    p.wait_for_timeout(500)
+    run.reload()
+    state = p.evaluate(BUNDLED_STATE_JS)
+    check(len(state['plans']) == 3 and len(state['templates']) == 3 and len(state['listed']) == 6,
+          f'pre-list install: filled from what it holds, the missing ones return once ({state})')
+    run.check_no_errors('bundled installs')
+    run.close()
+
+
 # Counts persist() calls, and lets a run pretend the browser has granted persistence.
 PERSIST_HOOK_JS = """
 window.__persistCalls = 0;
@@ -1993,6 +2047,7 @@ def storage_anchor_lookups(browser):
 
 def scenario_storage(browser):
     storage_search_index(browser)
+    storage_bundled_installs(browser)
     storage_anchor_lookups(browser)
     storage_worker_hands_back(browser)
     storage_core_db_files(browser)

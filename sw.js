@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v17'; // bumped: Hebrew lexicon (hebrew-lexicon.js added; language.js, db.js, app.js, global-settings.js, style.css changed)
+const CACHE_NAME = 'ember-v18'; // bumped: deleted bundled plans stay deleted (db.js changed)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:
