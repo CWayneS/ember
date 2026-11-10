@@ -1627,10 +1627,10 @@ def lexicon_rendering(app, lexicon):
           f"every stored markup string ({len(strings)}) parses and renders from the allowed list ({res['unparsed']}, {res['warnings'][:3]})")
 
 
-def lexicon_glide(app, db):
+def lexicon_glide(app, db, verse_id=1001001, word_position=2, label='Hebrew (Gen 1:1 #03 אֱלֹהִים)'):
     """A Lexicon opened at the panel's bottom edge comes into view without the tapped link leaving the top."""
     p = app.page
-    member = open_tier2(app, db, 1001001, 2)  # Gen 1:1 #03 אֱלֹהִים
+    member = open_tier2(app, db, verse_id, word_position)
     p.evaluate("""() => { const t = document.getElementById('language-tab');
         const link = document.querySelector('.language-card-tier2 > .language-card-lexicon-btn');
         t.scrollTop += link.getBoundingClientRect().bottom - (t.getBoundingClientRect().bottom - 30); }""")
@@ -1644,7 +1644,7 @@ def lexicon_glide(app, db):
         return { linkVisible: link.top >= t.top && link.bottom <= t.bottom,
                  tier3Shown: Math.round(Math.min(tier3.bottom, t.bottom) - tier3.top) }; }""")
     check(seen['linkVisible'] and seen['tier3Shown'] > 200,
-          f"a Lexicon opened at the panel's edge glides into view, the link still showing ({seen})")
+          f"{label}: a Lexicon opened at the panel's edge glides into view, the link still showing ({seen})")
 
 
 REFERENCE_TAP_JS = """(osisRef) => {
@@ -1776,6 +1776,7 @@ def scenario_lexicon(browser):
     lexicon_words(app, db, lexicon)
     lexicon_rendering(app, lexicon)
     lexicon_glide(app, db)
+    lexicon_glide(app, db, 43001001, 11, 'Greek (John 1:1 #12 θεόν)')
     lexicon_references(app, db)
     check(app.errors == [], f'lexicon words: no console errors {app.errors[:3]}')
     ctx.close()

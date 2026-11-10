@@ -79,7 +79,7 @@ export function initLanguageTab() {
     window.addEventListener('online', () => {
         if (hebrewLexiconFailed.size === 0) return;
         hebrewLexiconFailed.clear();
-        rerenderHebrewLexicon();
+        rerenderLexicon();
     });
     // A BDB scripture reference opens its verse in the reader without
     // selecting it, so this tab, and the entry being read, stay as they are.
@@ -180,10 +180,12 @@ async function rerenderInterlinear(opts = {}) {
     await renderInterlinear(container, lastInterlinearWords, { preserveScroll: true, ...opts });
 }
 
-// For changes inside a Hebrew lexicon view. With tier 3 open the card is usually
-// taller than the panel, and the card-visibility fallback would then pull its
-// bottom edge into line, moving what was just tapped out from under the pointer.
-function rerenderHebrewLexicon() {
+// For opening or closing a Lexicon (Greek or Hebrew) and changes inside a Hebrew
+// one. With tier 3 open the card is usually taller than the panel, and the
+// card-visibility fallback would then pull its bottom edge into line, moving
+// what was just tapped out from under the pointer. revealPendingLexicon()
+// brings a newly opened Lexicon into view instead.
+function rerenderLexicon() {
     return rerenderInterlinear({ keepCardInPlace: true });
 }
 
@@ -227,7 +229,7 @@ async function renderInterlinear(container, words, opts = {}) {
         const card = container.querySelector('.language-word-card');
         if (card) scrollCardIntoViewIfNeeded(container, card);
     }
-    revealPendingHebrewLexicon(container);
+    revealPendingLexicon(container);
 }
 
 // Fallback only — in-place expansion is what keeps the card visible in the
@@ -503,8 +505,9 @@ async function renderTier2(word, isHebrew, tier3Open) {
                 openTier3Ids.delete(word.id);
             } else {
                 openTier3Ids.add(word.id);
+                pendingReveal = { lexiconKey: greekLexiconKey(word), bdbId: null };
             }
-            await rerenderInterlinear();
+            await rerenderLexicon();
         });
         tier2.appendChild(lexBtn);
 
@@ -693,9 +696,14 @@ async function renderMorphDecodeBody(parts) {
     return body;
 }
 
+function greekLexiconKey(word) {
+    return `greek:${word.id}`;
+}
+
 async function renderTier3(word) {
     const tier3 = document.createElement('div');
     tier3.className = 'language-card-lexicon';
+    tier3.dataset.lexiconKey = greekLexiconKey(word);
 
     let lex = null;
     try {
@@ -763,7 +771,7 @@ function appendHebrewLexiconLink(tier2, word, root, namesRoot) {
             hebrewLexiconFailed.delete(root.base);
             pendingReveal = { lexiconKey: key, bdbId: null };
         }
-        await rerenderHebrewLexicon();
+        await rerenderLexicon();
     });
     tier2.appendChild(button);
     if (open) tier2.appendChild(renderHebrewTier3(word, root));
@@ -792,7 +800,7 @@ function renderHebrewTier3(word, root) {
                     openBdbEntries.add(key);
                     pendingReveal = { lexiconKey: hebrewLexiconKey(word, root), bdbId };
                 }
-                await rerenderHebrewLexicon();
+                await rerenderLexicon();
             },
         }));
     }
@@ -805,7 +813,7 @@ function renderHebrewTier3(word, root) {
 // fills it comes back here.
 const REVEAL_MARGIN = 12;
 
-function revealPendingHebrewLexicon(container) {
+function revealPendingLexicon(container) {
     if (!pendingReveal) return;
     const tier3 = [...container.querySelectorAll('.language-card-lexicon')]
         .find(element => element.dataset.lexiconKey === pendingReveal.lexiconKey);
@@ -843,7 +851,7 @@ async function lookUpHebrewLexiconEntry(root) {
         hebrewLexiconFailed.add(root.base);
     }
     hebrewLexiconLookups.delete(root.base);
-    if (openHebrewLexicons.size > 0) await rerenderHebrewLexicon();
+    if (openHebrewLexicons.size > 0) await rerenderLexicon();
 }
 
 function appendDetailField(container, label, value) {
