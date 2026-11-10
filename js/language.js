@@ -17,15 +17,19 @@
 
 import {
     formatReference, getOriginalWordsForVerses, getGreekLexiconEntry,
-    getPiecesForWords, getVariantsForWords, getHebrewAffixes,
-    isLanguageDownloading, warnLanguageUnavailable,
+    getHebrewLexiconEntry, getPiecesForWords, getVariantsForWords, getHebrewAffixes,
+    isLanguageDownloading, warnLanguageUnavailable, warnHebrewLexiconUnavailable,
 } from './db.js';
 import { decodeMorphCode, splitHebrewWord } from './grammar-decode.js';
+import { hebrewLexiconRoots, renderHebrewLexiconEntry } from './hebrew-lexicon.js';
 
 const EMPTY_MSG        = 'Select a verse to see its original-language text.';
 const NO_DATA_MSG      = 'No original-language data for this verse yet.';
 const DOWNLOADING_MSG  = 'Downloading original-language data…';
 const UNAVAILABLE_MSG  = 'Original-language data downloads the first time Ember is online. Connect once and it stays on this device for good.';
+const HEBREW_LEXICON_LOADING_MSG     = 'Loading the Hebrew lexicon…';
+const HEBREW_LEXICON_UNAVAILABLE_MSG = 'The Hebrew lexicon downloads the first time Ember is online. Connect once and it stays on this device for good.';
+const HEBREW_LEXICON_NO_ENTRY_MSG    = 'No lexicon entry for this word.';
 
 let currentVerseIds      = [];   // last selection this tab was asked to show
 let lastInterlinearWords = null; // cached render input, for re-renders on tap
@@ -46,6 +50,17 @@ let openTier2Ids   = new Set();
 let openTier3Ids   = new Set();
 let renderGeneration = 0; // staleness guard for overlapping async rebuilds
 
+// Hebrew tier 3 (Hebrew_Lexicon_Spec). A word can have two roots, each with its
+// own link, so these are keyed `wordId:base` rather than by word id. A rebuild
+// never waits on the lexicon: a first tap may have to download the file, so tier 3
+// shows a line at once and fills in when the entry arrives. Same invariant as above.
+let openHebrewLexicons   = new Set(); // `wordId:base`
+let openBdbEntries       = new Set(); // `wordId:base:bdbId`, lower homonym entries
+let hebrewLexiconEntries = new Map(); // base -> getHebrewLexiconEntry() result
+let hebrewLexiconFailed  = new Set(); // bases whose lookup failed; retried on the next tap
+let hebrewLexiconLookups = new Set(); // bases with a lookup in flight
+let pendingReveal        = null;      // { lexiconKey, bdbId }: just opened, to glide into view once shown
+
 // A selection this tab still owes a render: made while the tab was hidden, or
 // whose load failed. language.db stays closed until the tab is actually looked
 // at, so a selection on another tab costs nothing.
@@ -59,6 +74,11 @@ export function initLanguageTab() {
         } else if (renderPending && isLanguageTabActive()) {
             renderCurrentSelection();
         }
+    });
+    window.addEventListener('online', () => {
+        if (hebrewLexiconFailed.size === 0) return;
+        hebrewLexiconFailed.clear();
+        rerenderHebrewLexicon();
     });
 }
 
@@ -78,6 +98,7 @@ export async function renderLanguageTab(verseIds) {
     openCardKey = null;
     openTier2Ids.clear();
     openTier3Ids.clear();
+    closeHebrewLexicons();
     renderGeneration++; // a rebuild still in flight belongs to the old selection
     lastInterlinearWords = null;
     wordsLoading = false;
@@ -144,10 +165,17 @@ async function renderCurrentSelection() {
 // Re-runs the interlinear rebuild against the last-loaded words, preserving
 // scroll position — used by every tap (row, "Click for more", "Lexicon")
 // that only changes disclosure state, not the underlying verse selection.
-async function rerenderInterlinear() {
+async function rerenderInterlinear(opts = {}) {
     const container = document.getElementById('language-tab');
     if (!lastInterlinearWords) return;
-    await renderInterlinear(container, lastInterlinearWords, { preserveScroll: true });
+    await renderInterlinear(container, lastInterlinearWords, { preserveScroll: true, ...opts });
+}
+
+// For changes inside a Hebrew lexicon view. With tier 3 open the card is usually
+// taller than the panel, and the card-visibility fallback would then pull its
+// bottom edge into line, moving what was just tapped out from under the pointer.
+function rerenderHebrewLexicon() {
+    return rerenderInterlinear({ keepCardInPlace: true });
 }
 
 // ============================================================
@@ -186,10 +214,11 @@ async function renderInterlinear(container, words, opts = {}) {
     container.appendChild(wrap);
     container.scrollTop = scrollTop;
 
-    if (openCardKey) {
+    if (openCardKey && !opts.keepCardInPlace) {
         const card = container.querySelector('.language-word-card');
         if (card) scrollCardIntoViewIfNeeded(container, card);
     }
+    revealPendingHebrewLexicon(container);
 }
 
 // Fallback only — in-place expansion is what keeps the card visible in the
@@ -199,8 +228,14 @@ function scrollCardIntoViewIfNeeded(container, card) {
     const cardRect = card.getBoundingClientRect();
     const fullyVisible = cardRect.top >= containerRect.top && cardRect.bottom <= containerRect.bottom;
     if (!fullyVisible) {
-        card.scrollIntoView({ block: 'nearest' });
+        card.scrollIntoView({ block: 'nearest', behavior: scrollBehavior() });
     }
+}
+
+// Scrolling glides, so the eye can follow the page instead of it seeming to
+// jump somewhere else; instant when the system asks for reduced motion.
+function scrollBehavior() {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 }
 
 async function renderVerseBlock(verseId, verseWords) {
@@ -283,6 +318,7 @@ function renderWordRow(members, isHebrew, rowKey) {
         openCardKey = (openCardKey === rowKey) ? null : rowKey;
         openTier2Ids.clear();
         openTier3Ids.clear();
+        closeHebrewLexicons();
         await rerenderInterlinear();
     };
     row.addEventListener('click', toggle);
@@ -381,6 +417,7 @@ async function renderCardMember(word, isHebrew) {
         if (openTier2Ids.has(word.id)) {
             openTier2Ids.delete(word.id);
             openTier3Ids.delete(word.id);
+            closeHebrewLexiconsOf(word);
         } else {
             openTier2Ids.add(word.id);
         }
@@ -439,10 +476,14 @@ async function renderTier2(word, isHebrew, tier3Open) {
     appendDetailField(tier2, 'General usage', word.gloss_dictionary);
 
     // Greek: TBESG lexicon entry, gated behind an explicit "Lexicon" tap.
-    // Hebrew: no Lexicon link — TBESH's Meaning field carries its own
-    // unresolved rights-holder restriction (Build_6_Spec.md Item 1); a
-    // documented gap, not a bug.
-    if (!isHebrew && word.strongs_number) {
+    // Hebrew: Strong's and BDB from their own file, one link per root
+    // (Hebrew_Lexicon_Spec; TBESH stays out, see Build_6_Spec.md Item 1).
+    if (isHebrew) {
+        const roots = hebrewLexiconRoots(word, lastPieces.get(word.id));
+        for (const root of roots) {
+            appendHebrewLexiconLink(tier2, word, root, roots.length > 1);
+        }
+    } else if (word.strongs_number) {
         const lexBtn = document.createElement('button');
         lexBtn.type = 'button';
         lexBtn.className = 'language-card-lexicon-btn';
@@ -671,6 +712,129 @@ async function renderTier3(word) {
     tier3.appendChild(body);
 
     return tier3;
+}
+
+// ---- Hebrew tier 3 (Hebrew_Lexicon_Spec) ------------------------------------
+
+function hebrewLexiconKey(word, root) {
+    return `${word.id}:${root.base}`;
+}
+
+function closeHebrewLexicons() {
+    pendingReveal = null;
+    openHebrewLexicons.clear();
+    openBdbEntries.clear();
+    hebrewLexiconEntries.clear();
+    hebrewLexiconFailed.clear();
+}
+
+function closeHebrewLexiconsOf(word) {
+    const prefix = `${word.id}:`;
+    for (const keys of [openHebrewLexicons, openBdbEntries]) {
+        for (const key of keys) {
+            if (key.startsWith(prefix)) keys.delete(key);
+        }
+    }
+}
+
+// A word with two roots says which root each link opens.
+function appendHebrewLexiconLink(tier2, word, root, namesRoot) {
+    const key = hebrewLexiconKey(word, root);
+    const open = openHebrewLexicons.has(key);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'language-card-lexicon-btn';
+    button.classList.toggle('open', open);
+    button.textContent = `${open ? 'Hide' : 'Show'} Lexicon${namesRoot ? ` (${root.strongs})` : ''}`;
+    button.addEventListener('click', async () => {
+        if (openHebrewLexicons.has(key)) {
+            openHebrewLexicons.delete(key);
+        } else {
+            openHebrewLexicons.add(key);
+            hebrewLexiconFailed.delete(root.base);
+            pendingReveal = { lexiconKey: key, bdbId: null };
+        }
+        await rerenderHebrewLexicon();
+    });
+    tier2.appendChild(button);
+    if (open) tier2.appendChild(renderHebrewTier3(word, root));
+}
+
+function renderHebrewTier3(word, root) {
+    const tier3 = document.createElement('div');
+    tier3.className = 'language-card-lexicon';
+    tier3.dataset.lexiconKey = hebrewLexiconKey(word, root);
+
+    if (hebrewLexiconFailed.has(root.base)) {
+        tier3.appendChild(hebrewLexiconMessage(HEBREW_LEXICON_UNAVAILABLE_MSG));
+    } else if (!hebrewLexiconEntries.has(root.base)) {
+        tier3.appendChild(hebrewLexiconMessage(HEBREW_LEXICON_LOADING_MSG));
+        tier3.dataset.loading = 'true';
+        lookUpHebrewLexiconEntry(root);
+    } else if (hebrewLexiconEntries.get(root.base) === null) {
+        tier3.appendChild(hebrewLexiconMessage(HEBREW_LEXICON_NO_ENTRY_MSG));
+    } else {
+        const keyOf = bdbId => `${hebrewLexiconKey(word, root)}:${bdbId}`;
+        tier3.appendChild(renderHebrewLexiconEntry(hebrewLexiconEntries.get(root.base), {
+            isOpen: bdbId => openBdbEntries.has(keyOf(bdbId)),
+            toggle: async bdbId => {
+                const key = keyOf(bdbId);
+                if (!openBdbEntries.delete(key)) {
+                    openBdbEntries.add(key);
+                    pendingReveal = { lexiconKey: hebrewLexiconKey(word, root), bdbId };
+                }
+                await rerenderHebrewLexicon();
+            },
+        }));
+    }
+    return tier3;
+}
+
+// A Lexicon or BDB entry just opened below the panel's bottom edge glides up
+// into view, but never so far that the link just tapped (the element above it)
+// leaves the top. Waits while the entry is still loading: the rebuild that
+// fills it comes back here.
+const REVEAL_MARGIN = 12;
+
+function revealPendingHebrewLexicon(container) {
+    if (!pendingReveal) return;
+    const tier3 = [...container.querySelectorAll('.language-card-lexicon')]
+        .find(element => element.dataset.lexiconKey === pendingReveal.lexiconKey);
+    if (tier3?.dataset.loading) return;
+    const target = tier3 && pendingReveal.bdbId
+        ? [...tier3.querySelectorAll('.language-lexicon-bdb-entry')]
+            .find(element => element.dataset.bdbId === pendingReveal.bdbId)
+        : tier3;
+    pendingReveal = null;
+    if (!target) return;
+
+    const panel = container.getBoundingClientRect();
+    const hiddenBelow = target.getBoundingClientRect().bottom - panel.bottom + REVEAL_MARGIN;
+    if (hiddenBelow <= 0) return;
+    const tapped = target.previousElementSibling || target;
+    const roomAbove = tapped.getBoundingClientRect().top - panel.top - REVEAL_MARGIN;
+    const distance = Math.min(hiddenBelow, roomAbove);
+    if (distance > 0) container.scrollBy({ top: distance, behavior: scrollBehavior() });
+}
+
+function hebrewLexiconMessage(text) {
+    const message = document.createElement('div');
+    message.className = 'language-lexicon-quiet';
+    message.textContent = text;
+    return message;
+}
+
+async function lookUpHebrewLexiconEntry(root) {
+    if (hebrewLexiconLookups.has(root.base)) return;
+    hebrewLexiconLookups.add(root.base);
+    try {
+        hebrewLexiconEntries.set(root.base, await getHebrewLexiconEntry(root.strongs));
+    } catch (e) {
+        warnHebrewLexiconUnavailable(e);
+        hebrewLexiconFailed.add(root.base);
+    }
+    hebrewLexiconLookups.delete(root.base);
+    if (openHebrewLexicons.size > 0) await rerenderHebrewLexicon();
 }
 
 function appendDetailField(container, label, value) {

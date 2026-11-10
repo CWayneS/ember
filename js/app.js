@@ -1,6 +1,6 @@
 // app.js — Entry point
 
-import { initDatabase, requestPersistentStorageIfDue, startLanguageBackgroundDownload } from './db.js';
+import { initDatabase, requestPersistentStorageIfDue, startReferenceDbDownloads } from './db.js';
 
 import { initReader } from './reader.js';
 
@@ -66,7 +66,7 @@ async function init() {
         // Hide loading screen
         document.getElementById('loading').classList.add('hidden');
 
-        startLanguageBackgroundDownload();
+        startReferenceDbDownloads();
         requestPersistentStorageIfDue();
 
         // Register service worker for production only.

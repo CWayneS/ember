@@ -46,7 +46,7 @@ function getStorageWorker() {
 // ============================================================
 //
 // `database` is whichever handle the query targets: the core `db`, a
-// translation handle from _translationDbs, or the lazily-opened language.db.
+// translation handle from _translationDbs, or a lazily-opened reference DB.
 // Rows come back as objects keyed by column name (SQL aliases apply), so a
 // query's SELECT list is also its result shape.
 
@@ -224,63 +224,87 @@ async function loadTranslationBuffer(filename) {
 }
 
 // ============================================================
-// Language DB — TAHOT/TAGNT/TBESG (Build 6), lazy-loaded
+// Reference DBs, lazy-loaded: language.db (TAHOT/TAGNT/TBESG, Build 6) and
+// lexicon-hebrew.db (Hebrew_Lexicon_Spec)
 // ============================================================
 //
 // Unlike translations (opened eagerly for all 6 at init — small files, always
-// needed), language.db is ~64MB of read-only reference data most sessions may
-// never open. Getting it onto the device and opening it are separate steps:
-// startLanguageBackgroundDownload() streams the file into OPFS shortly after
+// needed), these are read-only reference data most sessions may never open
+// (~64 MB and ~4 MB). Getting one onto the device and opening it are separate
+// steps: startReferenceDbDownloads() streams each file into OPFS shortly after
 // launch, so it is there before the user next goes offline, but nothing loads
-// it into memory until the Language tab or a titled Psalm first needs it. Once
-// opened, the handle is cached for the rest of the session. It is never part
-// of the db.export()/saveToStorage() write cycle — it's read-only reference
-// data, not part of core.db.
+// it into memory until something first needs it: the Language tab or a titled
+// Psalm for language.db, a Lexicon tap on a Hebrew word for lexicon-hebrew.db.
+// Once opened, the handle is cached for the rest of the session. Neither is
+// ever part of the db.export()/saveToStorage() write cycle.
 
-const LANGUAGE_DB_FILE = 'language.db';
-const LANGUAGE_DB_URL  = './data/language.db';
-const LANGUAGE_DOWNLOAD_DELAY_MS = 2000; // keeps it clear of first render
+const REFERENCE_DOWNLOAD_DELAY_MS = 2000; // keeps it clear of first render
 const SQLITE_MAGIC = 'SQLite format 3\0';
 
-let _languageDb        = null;
-let _languageDbPromise = null;
-let _languageWarned    = false;
+const LANGUAGE_DB = {
+    file: 'language.db',
+    url: './data/language.db',
+    downloadStartedEvent: 'language-download-started',
+    unavailableWarning: 'Original-language data is not available yet:',
+    database: null, opening: null, warned: false,
+};
+
+const HEBREW_LEXICON_DB = {
+    file: 'lexicon-hebrew.db',
+    url: './data/lexicon-hebrew.db',
+    downloadStartedEvent: null,
+    unavailableWarning: 'The Hebrew lexicon is not available yet:',
+    database: null, opening: null, warned: false,
+};
 
 function getLanguageDb() {
-    if (_languageDb) return Promise.resolve(_languageDb);
-    if (_languageDbPromise) return _languageDbPromise;
-
-    _languageDbPromise = (async () => {
-        const buffer = await loadLanguageBuffer();
-        _languageDb = new _SQL.Database(new Uint8Array(buffer));
-        return _languageDb;
-    })().catch(e => {
-        // Not cached: the next use tries again, so the tab recovers without a
-        // reload once the network is back.
-        _languageDbPromise = null;
-        throw e;
-    });
-    return _languageDbPromise;
+    return openReferenceDb(LANGUAGE_DB);
 }
 
-// Being offline with no language.db yet is an expected state with its own
-// message in the Language tab, not an error — one warning per session is
-// enough, however many selections and Psalm titles run into it.
+function openReferenceDb(source) {
+    if (source.database) return Promise.resolve(source.database);
+    if (source.opening) return source.opening;
+
+    source.opening = (async () => {
+        const buffer = await loadReferenceBuffer(source);
+        source.database = new _SQL.Database(new Uint8Array(buffer));
+        return source.database;
+    })().catch(e => {
+        // Not cached: the next use tries again, so it recovers without a
+        // reload once the network is back.
+        source.opening = null;
+        throw e;
+    });
+    return source.opening;
+}
+
+// Being offline with a file not downloaded yet is an expected state with its
+// own message in the Language tab, not an error — one warning per file per
+// session is enough, however many selections, Psalm titles and Lexicon taps
+// run into it.
+function warnReferenceDbUnavailable(source, e) {
+    if (source.warned) return;
+    source.warned = true;
+    console.warn(source.unavailableWarning, e.message);
+}
+
 export function warnLanguageUnavailable(e) {
-    if (_languageWarned) return;
-    _languageWarned = true;
-    console.warn('Original-language data is not available yet:', e.message);
+    warnReferenceDbUnavailable(LANGUAGE_DB, e);
+}
+
+export function warnHebrewLexiconUnavailable(e) {
+    warnReferenceDbUnavailable(HEBREW_LEXICON_DB, e);
 }
 
 export function isLanguageDownloading() {
-    return _opfsDownloads.has(LANGUAGE_DB_FILE);
+    return _opfsDownloads.has(LANGUAGE_DB.file);
 }
 
 // OPFS is the primary store; a download into OPFS is how it gets there, shared
 // with the background step so there is only ever one. A plain fetch into memory
 // remains for browsers that can't write OPFS, and for a write that fails (quota).
-async function loadLanguageBuffer() {
-    const file = await getCompleteOpfsFile(LANGUAGE_DB_FILE);
+async function loadReferenceBuffer(source) {
+    const file = await getCompleteOpfsFile(source.file);
     if (file) return await file.arrayBuffer();
 
     // `false` is reliable; `true` only means "maybe", so that case just tries.
@@ -288,47 +312,52 @@ async function loadLanguageBuffer() {
 
     if (canDownloadToOpfs()) {
         try {
-            await downloadLanguageDb();
-            const downloaded = await getCompleteOpfsFile(LANGUAGE_DB_FILE);
+            await downloadReferenceDb(source);
+            const downloaded = await getCompleteOpfsFile(source.file);
             if (downloaded) return await downloaded.arrayBuffer();
         } catch (e) {
             // File system calls reject with a DOMException; anything else is
             // the network or the response itself, which a second fetch won't fix.
             if (!(e instanceof DOMException)) throw e;
-            console.warn('loadLanguageBuffer: could not store language.db, keeping it in memory for this session:', e);
+            console.warn(`loadReferenceBuffer: could not store ${source.file}, keeping it in memory for this session:`, e);
         }
     }
 
-    const response = await fetch(LANGUAGE_DB_URL);
-    if (!response.ok) throw new Error(`HTTP ${response.status} fetching language.db`);
+    const response = await fetch(source.url);
+    if (!response.ok) throw new Error(`HTTP ${response.status} fetching ${source.file}`);
     return await response.arrayBuffer();
 }
 
-// Called once the app is live. Only ever puts the file on disk — it must not
+// Called once the app is live. Only ever puts the files on disk — it must not
 // create a Database, which would cost every session the memory the lazy open
-// exists to save. If it can't finish now it tries again the next time the
-// browser reports coming online; getLanguageDb() also retries on its next use.
-export function startLanguageBackgroundDownload() {
-    setTimeout(downloadLanguageDbInBackground, LANGUAGE_DOWNLOAD_DELAY_MS);
+// exists to save. If one can't finish now it tries again the next time the
+// browser reports coming online; openReferenceDb() also retries on its next use.
+export function startReferenceDbDownloads() {
+    setTimeout(() => {
+        downloadReferenceDbInBackground(LANGUAGE_DB);
+        downloadReferenceDbInBackground(HEBREW_LEXICON_DB);
+    }, REFERENCE_DOWNLOAD_DELAY_MS);
 }
 
-async function downloadLanguageDbInBackground() {
-    if (_languageDb || !canDownloadToOpfs()) return;
-    if (await getCompleteOpfsFile(LANGUAGE_DB_FILE)) return;
+async function downloadReferenceDbInBackground(source) {
+    if (source.database || !canDownloadToOpfs()) return;
+    if (await getCompleteOpfsFile(source.file)) return;
 
     try {
         if (navigator.onLine === false) throw new Error('the browser is offline');
-        await downloadLanguageDb();
+        await downloadReferenceDb(source);
     } catch (e) {
-        warnLanguageUnavailable(e);
-        window.addEventListener('online', downloadLanguageDbInBackground, { once: true });
+        warnReferenceDbUnavailable(source, e);
+        window.addEventListener('online', () => downloadReferenceDbInBackground(source), { once: true });
     }
 }
 
-function downloadLanguageDb() {
-    const alreadyDownloading = isLanguageDownloading();
-    const download = downloadToOpfs(LANGUAGE_DB_FILE, LANGUAGE_DB_URL);
-    if (!alreadyDownloading) document.dispatchEvent(new CustomEvent('language-download-started'));
+function downloadReferenceDb(source) {
+    const alreadyDownloading = _opfsDownloads.has(source.file);
+    const download = downloadToOpfs(source.file, source.url);
+    if (!alreadyDownloading && source.downloadStartedEvent) {
+        document.dispatchEvent(new CustomEvent(source.downloadStartedEvent));
+    }
     return download;
 }
 
@@ -1893,8 +1922,7 @@ export async function getOriginalWordsForVerses(verseIds) {
 }
 
 // TBESG entry for a Greek word's exact (disambiguated) Strong's number. Hebrew
-// has no lexicon table — see Build_6_Spec.md Item 1's TBESH resolution. A
-// small number of Greek codes (~0.2%) have no TBESG match due to a disambig-
+// has its own file — see getHebrewLexiconEntry below. A small number of Greek codes (~0.2%) have no TBESG match due to a disambig-
 // uation-suffix mismatch between TAGNT and TBESG in the source data itself;
 // callers should treat a null return as "no lexicon entry available", not
 // an error.
@@ -1906,6 +1934,56 @@ export async function getGreekLexiconEntry(strongsNumber) {
          FROM step_lexicon_greek WHERE strongs_number = ?`,
         [strongsNumber]
     );
+}
+
+// Strong's and BDB for one Hebrew or Aramaic Strong's number: { strongs, bdb,
+// bdbHeadwords }. Takes the STEP form
+// (H0776G) and looks up its base number; BDB entries come back in display_rank
+// order, most frequent in the OSHB text first (scripts/build_lexicon_hebrew.py).
+// null for STEP-only numbers (>= 9000), without opening the file, and for a
+// number with no rows. Rejects when the file can't be had right now.
+export async function getHebrewLexiconEntry(strongsNumber) {
+    const match = /^H(\d+)/.exec(strongsNumber || '');
+    if (!match) return null;
+    const strongsBase = Number(match[1]);
+    if (strongsBase >= 9000) return null;
+
+    const lexiconDb = await openReferenceDb(HEBREW_LEXICON_DB);
+    const strongs = queryOne(lexiconDb,
+        `SELECT headword, transliteration, part_of_speech AS partOfSpeech, language,
+                source_markup AS sourceMarkup, meaning_markup AS meaningMarkup,
+                usage_markup AS usageMarkup, note_markup AS noteMarkup
+         FROM lexicon_strongs_hebrew WHERE strongs_base = ?`,
+        [strongsBase]
+    );
+    const bdb = queryAll(lexiconDb,
+        `SELECT b.bdb_id AS bdbId, b.headword, b.language, b.status,
+                b.body_markup AS bodyMarkup, l.oshb_occurrences AS occurrences
+         FROM lexicon_hebrew_links l
+         JOIN lexicon_bdb_hebrew b ON b.bdb_id = l.bdb_id
+         WHERE l.strongs_base = ?
+         ORDER BY l.display_rank ASC`,
+        [strongsBase]
+    );
+    if (!strongs && bdb.length === 0) return null;
+
+    // Entries whose headword wasn't transcribed point at another entry by its
+    // id (<w src="a.be.ad">a.be.ad</w>); the renderer shows that entry's
+    // headword. bdbId -> { headword, language }.
+    const pointedAt = new Set();
+    for (const entry of bdb) {
+        for (const match of entry.bodyMarkup.matchAll(/<w src="([^"]+)">\1<\/w>/g)) pointedAt.add(match[1]);
+    }
+    const bdbHeadwords = new Map();
+    if (pointedAt.size > 0) {
+        const ids = [...pointedAt];
+        for (const row of queryAll(lexiconDb,
+            `SELECT bdb_id, headword, language FROM lexicon_bdb_hebrew
+             WHERE bdb_id IN (${ids.map(() => '?').join(',')}) AND headword IS NOT NULL`, ids)) {
+            bdbHeadwords.set(row.bdb_id, { headword: row.headword, language: row.language });
+        }
+    }
+    return { strongs, bdb, bdbHeadwords };
 }
 
 // TEGMC grammatical categories for one raw Greek morphology-code fragment

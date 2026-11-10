@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v16'; // bumped: pending saves are written when the study view changes (notes.js changed)
+const CACHE_NAME = 'ember-v17'; // bumped: Hebrew lexicon (hebrew-lexicon.js added; language.js, db.js, app.js, style.css changed)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:
@@ -10,9 +10,10 @@ const CACHE_NAME = 'ember-v16'; // bumped: pending saves are written when the st
 // (tests/verify.py sw checks the list against js/ on disk).
 //
 // core.db is NOT included here — it is large (23 MB) and already persisted
-// in OPFS/IndexedDB by db.js on first load. The translation .db files and
-// data/language.db (~64 MB) are the same story — seeded into OPFS by db.js
-// (during first boot / in the background just after it) and served from there.
+// in OPFS/IndexedDB by db.js on first load. The translation .db files,
+// data/language.db (~64 MB) and data/lexicon-hebrew.db (~4 MB) are the same
+// story — seeded into OPFS by db.js (during first boot / in the background just
+// after it) and served from there.
 // The bundled plan/template JSON is fetched on every online boot so a newly
 // bundled plan reaches existing installs, but anything it holds is already in
 // core.db after the first boot, so offline boots simply skip it.
@@ -28,6 +29,7 @@ const PRECACHE = [
     './js/dialogs.js',
     './js/global-settings.js',
     './js/grammar-decode.js',
+    './js/hebrew-lexicon.js',
     './js/help.js',
     './js/language.js',
     './js/markups.js',
@@ -87,7 +89,7 @@ self.addEventListener('activate', (event) => {
 // ============================================================
 //
 // Everything under data/ (core.db, the translation .db files, language.db,
-// the bundled plan/template JSON) is either fetched by db.js at most once per
+// lexicon-hebrew.db, the bundled plan/template JSON) is either fetched by db.js at most once per
 // install and then persisted in OPFS/IndexedDB, or only read while seeding
 // core.db. Copying those responses into Cache Storage as well would store
 // a second ~64 MB language.db (and any translation fetched after the worker

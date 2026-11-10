@@ -2359,6 +2359,93 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     padding-left: 12px;
 }
 
+/* Hebrew tier 3 (Hebrew_Lexicon_Spec): Strong's, then Brown-Driver-Briggs, in
+   the same type and colors as Greek's tier 3 and tier 2's fields. */
+.language-lexicon-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+}
+
+.language-lexicon-hebrew {
+    font-family: var(--font-hebrew);
+    font-size: 1.15em;
+}
+
+.language-lexicon-headword {
+    font-size: var(--size-large);
+    color: var(--text-primary);
+}
+
+.language-lexicon-def {
+    font-weight: 600;
+}
+
+.language-lexicon-grammar,
+.language-lexicon-foreign {
+    font-style: italic;
+}
+
+.language-lexicon-grammar {
+    color: var(--text-secondary);
+}
+
+/* A language's name standing in for a word the transcription didn't type. */
+.language-lexicon-placeholder {
+    color: var(--text-secondary);
+}
+
+.language-lexicon-inline-note {
+    font-size: var(--size-xs);
+    font-style: italic;
+    color: var(--text-muted);
+}
+
+.language-lexicon-quiet {
+    font-family: var(--font-reading);
+    font-size: var(--size-xs);
+    font-style: italic;
+    color: var(--text-muted);
+    padding: 3px 0;
+}
+
+.language-lexicon-sense {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+/* A nested sense sits inside its parent's body, so each level indents once. */
+.language-lexicon-sense .language-lexicon-sense {
+    margin-left: 4px;
+}
+
+.language-lexicon-sense-label {
+    flex-shrink: 0;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.language-lexicon-sense-body {
+    flex: 1;
+    min-width: 0;
+}
+
+/* A lower homonym entry's one line; its chevron and color come from the button
+   rule above. */
+.language-lexicon-entry-btn {
+    width: 100%;
+    margin-top: 6px;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* ============================================================
    Book / Chapter Selector Overlay
    ============================================================ */
