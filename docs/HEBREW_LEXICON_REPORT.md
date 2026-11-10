@@ -182,7 +182,7 @@ Final run on the Checkpoint 3 code, every scenario:
 
 - **Before the Checkpoint 2 commit:** all scenarios passed, except the old `smoke` check that Hebrew has no Lexicon button, which this checkpoint flips.
 - **`dbcompare` across the `db.js` change:** all 36 keys matched apart from `created_at` timestamps.
-- **`notes` crash:** during Checkpoint 2, `notes` crashed the browser page in 2 of 6 runs. The same crash happened in 3 of 3 runs on the commit before any lexicon code (§9).
+- **`notes` crash:** during Checkpoint 2, `notes` crashed the browser page in 2 of 6 runs. The same crash happened in 3 of 3 runs on the commit before any lexicon code. The cause was later found in the test itself (§10).
 
 ---
 
@@ -213,5 +213,5 @@ Tests: `lexicon` resolves twelve references (renumbered, aliased, chapter-only, 
 
 - **Spec deferrals:** in `docs/TODO.md`, under "Deferred by specs": an abbreviations key, root families, stub links, TFLSJ, and re-checking Open Scriptures' progress.
 - **Upstream updates need code edits:** an update means editing the pinned commits and sha256 constants, and reviewing the exact-count checks. That contradicts the spec's "no code change", but those checks are what make the stop conditions work.
-- **The `notes` crash:** the test's 300-note check sometimes crashes the browser page. It also happens on the commit before any lexicon code, and the cause is unknown (`docs/TODO.md`).
+- **The `notes` crash (found 2026-11-10):** the test's 300-note check saved 300 notes in one loop, and each save exported the whole 24 MB database for the storage worker. The page's memory peaked at 9.3 GB on a 16 GB machine, so whether it crashed depended on what else was running. No user can save that fast: real bulk writes (a template study, the seeders) already save once. The test now has those 300 saves write a placeholder and makes one real save after: peak 350 MB, and the check takes 230 ms instead of 9.6 s. Under a 5 GB memory cap the old test was killed out of memory and the new one passes.
 - **Dev workflow:** after rebuilding the file, clear its OPFS copy (`lexicon-hebrew.db`) to see the change locally, as with `language.db`.

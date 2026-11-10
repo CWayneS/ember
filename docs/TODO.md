@@ -19,7 +19,6 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 |---|---|---|---|
 | **Speed up markup lookups** | `getMarkupsForChapter()` still uses the old one-sided overlap test. Psalm 119 renders in 93 ms at 40 years of data, so this can wait. | Small | `docs/BUILD_6.1_ACTUAL_STATE.md` §12 |
 | **Getting a deleted bundled plan back** | Deleted bundled plans stay deleted (they're listed in `bundled_installs`). The only way back is importing the plan's JSON from `data/plans/`, which a user doesn't have. A "Restore bundled plans" action could take a plan off the list and seed it again. | Small | `seedBundledPlans()` in `js/db.js` |
-| **Find the `notes` test crash** | The browser page sometimes dies at the start of the 300-note check (`check_long_study`), with "Target crashed". During the Hebrew lexicon build it happened in 2 of 6 runs on that code and 3 of 3 on the commit before it, which had no lexicon code; it passed at other times. The cause is unknown. | Small to find | `docs/HEBREW_LEXICON_REPORT.md`, "Test results" |
 
 **Not recommended on current numbers:** splitting user data into its own database (remedy 5) or replacing sql.js (remedy 6). The reasoning is in "My read now that 1 to 3 are done", under "Candidate remedies" in `docs/STRESS_TEST_RESULTS.md`. `PRAGMA locking_mode=EXCLUSIVE` was tested and not adopted; see "Long lists, fixed" in the same file.
 

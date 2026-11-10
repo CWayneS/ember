@@ -563,11 +563,24 @@ def check_long_study(p):
         const panels = await import('./js/panels.js');
         document.querySelector('#notes-tab-add').click();
         const studyId = panels.getActiveStudyId();
-        for (let i = 0; i < {LONG_STUDY_NOTES}; i++) {{
-            // Heights vary, so they differ from the estimate the browser starts from.
-            const body = i === {LONG_STUDY_NOTES - 20} ? 'needle-far-down' : `long study note ${{i}} ` + 'word '.repeat(i % 7 * 40);
-            db.saveNote(body, [{{ verseStart: 1001001 + (i % 30), verseEnd: null }}], i % 3 ? [] : [`long-study-tag-${{i % 8}}`], studyId);
+        // Every saveNote() exports the whole database (about 24 MB) for the storage
+        // worker. 300 in one loop held 9 GB at once and sometimes crashed the page
+        // ("Target crashed"); no user can save that fast. So the loop's saves each
+        // write a placeholder, and one real save follows. initSqlJs() hands back
+        // the app's own module, so this is the prototype its Database uses.
+        const prototype = (await window.initSqlJs({{ locateFile: file => `./js/vendor/${{file}}` }})).Database.prototype;
+        const realExport = prototype.export;
+        prototype.export = () => new Uint8Array(0);
+        try {{
+            for (let i = 0; i < {LONG_STUDY_NOTES}; i++) {{
+                // Heights vary, so they differ from the estimate the browser starts from.
+                const body = i === {LONG_STUDY_NOTES - 20} ? 'needle-far-down' : `long study note ${{i}} ` + 'word '.repeat(i % 7 * 40);
+                db.saveNote(body, [{{ verseStart: 1001001 + (i % 30), verseEnd: null }}], i % 3 ? [] : [`long-study-tag-${{i % 8}}`], studyId);
+            }}
+        }} finally {{
+            prototype.export = realExport;
         }}
+        db.setState('long_study_seeded', '1');  // the one real save
         document.querySelector('#notes-tabs [data-study-id="all"]').click();
         panels.openStudy(studyId, 'Long study');
         return studyId;
