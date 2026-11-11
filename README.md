@@ -56,6 +56,7 @@ ember/
 │   ├── language.js              # Language tab — interlinear word study
 │   ├── hebrew-lexicon.js        # Hebrew tier 3: Strong's and BDB, rendered from an allowed list of elements
 │   ├── greek-lexicon.js         # Greek tier 3: the TBESG entry as an outline, New Testament references as links
+│   ├── manuscript-variants.js   # Hebrew word card: Ketiv, other manuscripts' readings, words not in the Hebrew
 │   ├── hebrew-versification.js  # Generated: Hebrew verse numbers onto English, for BDB's references
 │   ├── readable-export.js       # Studies as a self-contained HTML page to read, print or share
 │   ├── plans.js                 # Reading plans

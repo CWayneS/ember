@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v24'; // bumped: the Language tab's verse heading leads back to the verse (language.js, reader.js, selection.js, style.css changed)
+const CACHE_NAME = 'ember-v25'; // bumped: manuscript variants in the Hebrew word card (manuscript-variants.js added; language.js, style.css changed)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:
@@ -35,6 +35,7 @@ const PRECACHE = [
     './js/readable-export.js',
     './js/help.js',
     './js/language.js',
+    './js/manuscript-variants.js',
     './js/markups.js',
     './js/notes.js',
     './js/notes-settings.js',

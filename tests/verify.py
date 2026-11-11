@@ -885,11 +885,69 @@ READ_MEMBER_JS = """(member) => {
         subwords: [...member.querySelectorAll('.language-anatomy-subword-heading')].map(text),
         plainLines: t2 ? [...t2.querySelectorAll('.language-morph-decode-body .language-morph-decode-line')].map(text) : [],
         ketiv: field('Written (Ketiv)'),
+        readings: [...member.querySelectorAll('.language-manuscripts .language-detail-field')]
+            .map(f => [text(f.querySelector('.language-detail-label')), text(f.querySelector('.language-detail-value')),
+                       text(f.querySelector('.language-manuscript-gloss'))]),
+        added: text(member.querySelector('.language-manuscript-added')),
         ketivNote: text(member.querySelector('.language-ketiv-note')),
         general: field('General usage'),
         lexiconButton: !!member.querySelector('.language-card-lexicon-btn'),
     };
 }"""
+
+
+ROW_MARKS_JS = """(verseId) => [...document.querySelectorAll('.language-verse-block')]
+    .find(b => Number(b.querySelector('.language-verse-heading').dataset.verseId) === verseId)
+    .querySelectorAll('.language-word-row').values().map(row => ({
+        mark: !!row.querySelector('.language-word-mark'),
+        added: !!row.querySelector('.language-word-added') })).toArray()"""
+
+
+def manuscript_variants(app, db):
+    """Other sources' readings, words not in the Hebrew manuscripts, and the row mark."""
+    p = app.page
+    reading = lambda verse, position: db.execute(
+        'SELECT v.meaning_variants FROM original_word_variants v JOIN original_words w ON w.id = v.word_id '
+        'WHERE w.verse_id = ? AND w.word_position = ?', (verse, position)).fetchone()[0]
+
+    card = read_word_card(app, db, 19022016, 6)  # Psa 22:16 #07 כָּאֲרִי, Dead Sea Scrolls כָּאֲרוּ
+    hebrew = re.search(r'\(([^)]*)\)', reading(19022016, 6))[1]
+    check(card['readings'] == [['Dead Sea Scrolls', hebrew, '“they dug”']],
+          f"Psa 22:16 #07: the Dead Sea Scrolls reading, its Hebrew and gloss ({card['readings']})")
+    marks = p.evaluate(ROW_MARKS_JS, 19022016)
+    check(marks[6]['mark'] and not marks[6]['added'] and sum(m['mark'] for m in marks) == 1,
+          f"Psa 22:16: only that word's row is marked ({[i for i, m in enumerate(marks) if m['mark']]})")
+
+    card = read_word_card(app, db, 1018022, 5)  # Gen 18:22 #06, the scribes' "Yahweh"
+    check(len(card['readings']) == 1 and card['readings'][0][0] == 'Scribal tradition' and card['readings'][0][2] == '“and Yahweh”',
+          f"Gen 18:22 #06: the scribal tradition's reading ({card['readings']})")
+
+    card = read_word_card(app, db, 4007059, 16)  # Num 7:59 #17 Pedahzur: two readings
+    check([r[0] for r in card['readings']] == ['Aleppo Codex, Ben Chaim edition', 'BHS'], f"Num 7:59 #17: one line per source ({card['readings']})")
+
+    card = read_word_card(app, db, 16002013, 16)  # Neh 2:13 #17: a Ketiv and BHS's reading
+    check(card['ketiv'] and [r[0] for r in card['readings']] == ['Written (Ketiv)', 'BHS'],
+          f"Neh 2:13 #17: the Ketiv line and BHS's reading together ({card['readings']})")
+
+    card = read_word_card(app, db, 1004008, 5)  # Gen 4:8 #06 נֵלְכָה, from the Septuagint
+    check((card['added'] or '').startswith('Not in the Hebrew manuscripts: supplied from the Greek Septuagint') and not card['readings'],
+          f"Gen 4:8 #06: supplied from the Septuagint ({card['added']})")
+    marks = p.evaluate(ROW_MARKS_JS, 1004008)
+    lxx = [i for i, m in enumerate(marks) if m['added']]
+    check(lxx == [5, 6] and all(marks[i]['mark'] for i in lxx), f"Gen 4:8: the two supplied words are marked and in italics ({lxx})")
+
+    card = read_word_card(app, db, 6021036, 0)  # Josh 21:36 #01, restored
+    check('1 Chronicles 6:63–64' in (card['added'] or ''), f"Josh 21:36: restored from 1 Chronicles ({card['added']})")
+
+    card = read_word_card(app, db, 1002008, 4)  # Gen 2:8 #05: spelling variants only (Aleppo, BHS, Ben Chaim)
+    check(not card['readings'] and not card['added'] and not p.evaluate(ROW_MARKS_JS, 1002008)[4]['mark'],
+          'Gen 2:8 #05: a spelling-only difference has no note and no mark')
+
+    card = read_word_card(app, db, 27004032, 21)  # Dan 4:32 #22: its Ketiv repeats the printed word
+    check(not card['ketiv'] and not p.evaluate(ROW_MARKS_JS, 27004032)[21]['mark'], 'Dan 4:32 #22: no Ketiv line, no mark')
+
+    card = read_word_card(app, db, 1008017, 13)  # Gen 8:17 #14: a Ketiv is marked too
+    check(p.evaluate(ROW_MARKS_JS, 1008017)[13]['mark'], 'Gen 8:17 #14: a Ketiv word is marked')
 
 
 def word_surface(db, verse_id, word_position):
@@ -1023,6 +1081,8 @@ def scenario_hebrew(app):
         card = read_word_card(app, db, verse, position)
         check(card['ketiv'] == expected and (card['ketivNote'] or '').startswith(note),
               f"{'Gen 8:17' if verse == 1008017 else 'Gen 9:21'}: Ketiv line, {kind} note ({card['ketiv']}, {card['ketivNote']})")
+
+    manuscript_variants(app, db)
 
     card = read_word_card(app, db, 12019037, 7)
     check(len(card['subwords']) == 2 and len(card['pieces']) == 4,

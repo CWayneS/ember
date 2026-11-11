@@ -129,13 +129,29 @@ The header says column 12 carries "an English gloss, and its sub-meaning after �
 
 לְבַד "alone" + suffix (87 occurrences: Gen 2:18, Exo 18:14, Deu 4:35, Job 1:15, …) writes its pronoun suffix in the subject form (`Ss3m` "he") or, three times, the possessive (`Pp3m`/`Pp3f`), where every other word has the object form (`Os3m` "him"). It is consistent within the word.
 
+### 19. A transliteration copied from the printed word — *probably a slip*
+
+Pro 8:16 #07 (`L(H)`), column 7: `H= Tze.dek (אָֽרֶץ\׃) "[the] earth" (H0776G\H9016=HNcfsa)`. The Hebrew and gloss are Ben Chaim's reading, "earth", but the transliteration `Tze.dek` is the printed word צֶדֶק ("righteousness"); it should be about `'A.retz`.
+
+### 20. A Hebrew vowel point inside a transliteration — *probably a slip*
+
+Gen 14:17 #09 (`LBH(A)`), column 7: `A= Kedorla.'ֹo.mer (…)`. The transliteration carries a Hebrew holam (U+05B9) after the apostrophe.
+
+### 21. A reading whose Hebrew lacks the word its gloss has — *probably a slip*
+
+Gen 18:22 #06 (`L(S)`), column 7: `S= Yah.weh (יְ/הוָה\׃) "and/ Yahweh" (H9002/H3068G\H9016=HC/Npt)`. The gloss and the Strong's numbers include "and" (H9002, וְ), but the Hebrew doesn't; the `/` falls inside the divine name instead (יְ/הוָה), and the verse-end mark ׃ is on a word in the middle of the verse.
+
+### 22. A Ketiv identical to the printed word — *probably a slip*
+
+Dan 4:32 (Heb 4:29) #22 (`Q(k)`), column 8: `L= עִלָּי/אָ֙ ¦ ;K= עִלָּיָ/א֙`. The Ketiv is the printed word, character for character, while the `L=` form differs. It is the only one of the 1,309 Ketiv forms like this (`docs/HEBREW_ANATOMY_DATA_REPORT.md`, D5). Ember skips its Ketiv line.
+
 ---
 
 ## Open Scriptures HebrewLexicon: BrownDriverBriggs.xml
 
 The `r` attribute of `<ref>` elements in BDB entries, against the reference printed beside it. Entry ids are BDB ids. `r` follows BDB's Hebrew verse numbering, which is right and intended (Joel 4:6, Mal 3:21); the items below are the exceptions. 3,928 of the 3,952 references are fine.
 
-### 19. Book names outside OSIS — *probably slips*
+### 23. Book names outside OSIS — *probably slips*
 
 | `r` | Printed | Entry | Meant |
 |---|---|---|---|
@@ -152,11 +168,11 @@ The `r` attribute of `<ref>` elements in BDB entries, against the reference prin
 | `Zp.2.2` | Zp 2:2 | m.ba.ab | `Zeph` |
 | `Jos.21.23` | **Jb** 21:23 | v.dg.ae | `Job` (the printed book is Job) |
 
-### 20. Separators — *probably slips*
+### 24. Separators — *probably slips*
 
 `Exod24.17` (b.ab.aa, no dot after the book), `Ezra,6,15` (xv.am.aa, commas), `Job.37:23` (u.ag.ab, colon), `Ezra.814` (g.ad.ae, printed Ezr 8:14: the dot between 8 and 14 is missing).
 
-### 21. `r` disagrees with the printed reference — *probably slips*
+### 25. `r` disagrees with the printed reference — *probably slips*
 
 | `r` | Printed | Entry |
 |---|---|---|
@@ -166,11 +182,11 @@ The `r` attribute of `<ref>` elements in BDB entries, against the reference prin
 | `Josh.22.24` | Jos 22:22 | m.dj.ab |
 | `1Chr.26.2` | 1 Ch 26:6 | w.bb.ac |
 
-### 22. Verses that don't exist — *probably slips*
+### 26. Verses that don't exist — *probably slips*
 
 `Judg.8.52` (a.ae.au, printed only "8:52"; 1 Kings 8:52 exists, so the book may have been inferred from context), `Judg.8.57` (b.ab.aa), `Isa.4.18` (a.dc.ah, printed "18"), `Num.30.31` (a.ew.aj, printed "31"), `Prov.29.30`, `Lev.26.89`, `Lev.13.62` (b.ab.aa), `Lev.7.51` (h.bq.ab), `Jer.44.50` (h.et.ab), `Ezra.13.17` (j.bx.ac), `Num.11.44` (p.ef.aa).
 
-### 23. References with no `r` — *probably slips*
+### 27. References with no `r` — *probably slips*
 
 Six `<ref>` elements have an empty `r`: e.bm.aa (Ez 36:35), g.bg.ac (Jb 28:17), h.gr.al (Ne 8:4), j.bd.ab (Ez 44:18), l.br.aa (2 Ch 36:16) and q.cb.ac (ψ 72:16).
 
@@ -179,5 +195,5 @@ Six `<ref>` elements have an empty `r`: e.bm.aa (Ez 36:35), g.bg.ac (Jb 28:17), 
 ## How Ember handles these
 
 - **TBESG** (`js/greek-lexicon.js`): items 1, 7, 8, 9 and 11 are repaired for display; item 2's outer reference is kept as text and the inner one used; items 3 and 12 stay unlinked; item 4 links as its attribute says, so its last "3" opens 1 Peter 3:3; items 5 and 6 are read as written.
-- **BDB** (`js/hebrew-lexicon.js`): item 19's book names are read as the printed book, except `Jos.21.23`, which stays text; in item 20, `Exod24.17`, `Ezra,6,15` and `Job.37:23` are read anyway and `Ezra.814` stays text; items 21–23 stay text.
-- **TAHOT**: items 13–15 are handled in `scripts/build_language.py` (`docs/HEBREW_ANATOMY_DATA_REPORT.md`); 16–18 are shown as written.
+- **BDB** (`js/hebrew-lexicon.js`): item 23's book names are read as the printed book, except `Jos.21.23`, which stays text; in item 24, `Exod24.17`, `Ezra,6,15` and `Job.37:23` are read anyway and `Ezra.814` stays text; items 25–27 stay text.
+- **TAHOT**: items 13–15 are handled in `scripts/build_language.py` (`docs/HEBREW_ANATOMY_DATA_REPORT.md`); 16–21 are shown as written; item 22's Ketiv line is skipped (`js/manuscript-variants.js`).

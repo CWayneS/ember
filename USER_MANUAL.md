@@ -232,6 +232,12 @@ The grammar descriptions for Hebrew verbs are deliberately careful. A Hebrew ver
 
 **Written vs. read (Ketiv and Qere).** In about 1,300 places the Hebrew text is read aloud one way (the *Qere*) while the consonants on the page spell something else (the *Ketiv*). Ember shows the reading, and for these words **Click for more** adds a **Written (Ketiv)** line with the written form and a note saying whether the difference changes the meaning or is only a matter of spelling.
 
+**Other manuscripts.** Ember's Hebrew follows the Leningrad Codex, the oldest complete Hebrew Bible. Where another important source reads a word differently in a way that changes the meaning, **Click for more** names the source and shows its reading: in Psalm 22:16, for example, the Dead Sea Scrolls read כָּאֲרוּ "they dug" where Leningrad has כָּאֲרִי "like a lion". The sources are the Aleppo Codex, the Cairo Codex, the Dead Sea Scrolls, the Ben Chaim edition, BHS (the standard printed edition), and the scribes' own traditions. Differences only in accents or vowel marks aren't shown.
+
+**Words not in the Hebrew.** A few words aren't in any Hebrew manuscript: they are supplied from the Greek Septuagint, where translators follow it (Genesis 4:8, "Let us go into the field"), or restored from a parallel passage (Joshua 21:36–37). Their English is in *italics*, and the card says where they come from.
+
+A small **†** after a word's English means its card has one of these notes, or a Ketiv line.
+
 ### Plans
 
 The Plans tab has two sub-tabs: **Reading Plans** and **Study Templates**. Neither depends on a verse selection.

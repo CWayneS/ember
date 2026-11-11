@@ -24,6 +24,7 @@ import {
 import { decodeMorphCode, splitHebrewWord } from './grammar-decode.js';
 import { hebrewLexiconRoots, renderHebrewLexiconEntry } from './hebrew-lexicon.js';
 import { renderGreekLexiconMeaning } from './greek-lexicon.js';
+import { manuscriptNotes, renderManuscriptNotes, isAddedWord } from './manuscript-variants.js';
 import { showVerse } from './reader.js';
 
 const EMPTY_MSG        = 'Select a verse to see its original-language text.';
@@ -354,6 +355,22 @@ function renderWordRow(members, isHebrew, rowKey) {
     row.appendChild(original);
     row.appendChild(gloss);
 
+    // A word with something to read about its manuscripts (a Ketiv, another
+    // source's reading, or not being in the Hebrew manuscripts at all) is
+    // marked, so the note can be found without opening every card. Words
+    // supplied from the Septuagint or restored also read in italics.
+    if (isHebrew) {
+        const variants = members.map(m => lastVariants.get(m.id));
+        if (members.some((m, i) => manuscriptNotes(m, variants[i]))) {
+            const mark = document.createElement('span');
+            mark.className = 'language-word-mark';
+            mark.textContent = '†';
+            mark.title = 'Manuscript note: open the word, then Click for more';
+            gloss.appendChild(mark);
+        }
+        if (variants.every(isAddedWord)) gloss.classList.add('language-word-added');
+    }
+
     const toggle = async () => {
         openCardKey = (openCardKey === rowKey) ? null : rowKey;
         openTier2Ids.clear();
@@ -508,10 +525,8 @@ async function renderTier2(word, isHebrew, tier3Open) {
         tier2.appendChild(await renderMorphDecodeBody(parts));
     }
 
-    const variant = isHebrew ? lastVariants.get(word.id) : null;
-    if (variant && variant.ketivHebrew && !ketivMatchesPrinted(variant.ketivHebrew, word.surface_text)) {
-        tier2.appendChild(renderKetiv(variant));
-    }
+    const notes = isHebrew ? manuscriptNotes(word, lastVariants.get(word.id)) : null;
+    if (notes) tier2.appendChild(renderManuscriptNotes(notes));
 
     appendDetailField(tier2, 'General usage', word.gloss_dictionary);
 
@@ -645,42 +660,6 @@ function renderPiece(piece, part, singleRoot) {
 // The Ketiv: the consonants as written, where the text follows the Qere (the
 // reading aloud). Q(K) — the written form reads differently; Q(k) — spelling
 // only.
-const KETIV_NOTES = {
-    meaning: 'The text is read as shown above (Qere); the written consonants differ and give a different reading.',
-    spelling: 'Spelling difference only.',
-};
-
-function renderKetiv(variant) {
-    const wrap = document.createElement('div');
-    wrap.className = 'language-ketiv';
-
-    const field = document.createElement('div');
-    field.className = 'language-detail-field';
-    const label = document.createElement('span');
-    label.className = 'language-detail-label';
-    label.textContent = 'Written (Ketiv)';
-    const value = document.createElement('span');
-    value.className = 'language-detail-value language-ketiv-hebrew language-hebrew';
-    value.dir = 'rtl';
-    value.textContent = variant.ketivHebrew;
-    field.appendChild(label);
-    field.appendChild(value);
-    wrap.appendChild(field);
-
-    const note = document.createElement('div');
-    note.className = 'language-ketiv-note';
-    note.textContent = KETIV_NOTES[variant.ketivKind];
-    wrap.appendChild(note);
-    return wrap;
-}
-
-// One row (Dan 4:32 #22) gives a Ketiv identical to the printed word; a Ketiv
-// line there would show the same word twice under "differ", so it is skipped.
-function ketivMatchesPrinted(ketiv, surface) {
-    const bare = text => text.replace(/\\[^/\\]*/g, '').replace(/[/\s]/g, '');
-    return bare(ketiv) === bare(surface);
-}
-
 // Parsed-morphology lines — same content the old collapsed "What does this
 // mean?" accordion rendered, now unfolded directly into tier 2 with no
 // separate toggle.

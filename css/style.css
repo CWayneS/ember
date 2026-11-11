@@ -2272,6 +2272,35 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     font-size: var(--size-base);
 }
 
+/* A word with a manuscript note (Ketiv, another reading, or not in the Hebrew
+   manuscripts) carries a small dagger after its gloss. */
+.language-word-mark {
+    margin-left: 4px;
+    font-size: 0.8em;
+    vertical-align: super;
+    color: var(--accent);
+}
+
+/* Supplied from the Septuagint or restored: not in the Hebrew manuscripts. */
+.language-word-added {
+    font-style: italic;
+}
+
+.language-manuscript-added {
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    font-style: italic;
+    color: var(--text-secondary);
+    padding: 2px 0 4px;
+}
+
+.language-manuscript-gloss {
+    margin-left: 10px;
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    color: var(--text-secondary);
+}
+
 .language-ketiv-note {
     font-family: var(--font-reading);
     font-size: var(--size-xs);

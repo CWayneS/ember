@@ -43,7 +43,6 @@ From "Deferred / Related" in `docs/Offline_Language_And_Stress_Test_Spec.md`:
 
 From "Deferred to Follow-Up Specs" in `docs/Hebrew_Word_Anatomy_Spec.md` (the Hebrew lexicon it deferred has shipped):
 
-- **Showing non-Ketiv variants** (Aleppo, BHS, LXX). The data is already in `original_word_variants`.
 - **The 14 ghost rows** (Ketiv-only words), which need their own display design.
 
 From "Deferred to Follow-Up Specs" in `docs/Hebrew_Lexicon_Spec.md`:
