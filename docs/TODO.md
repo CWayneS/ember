@@ -17,6 +17,7 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 
 | To-do | Why it matters | Size | Source |
 |---|---|---|---|
+| **Export Backup skips unsaved typing** | Export Backup reads the database without first writing autosaves still waiting on their 800 ms timer, so text typed just before the click is missing from the backup. The readable export calls `flushPendingSaves()` first; Export Backup could do the same in one line. | Small | `exportBackup()` in `js/db.js`; `flushPendingSaves()` in `js/notes.js` |
 | **Speed up markup lookups** | `getMarkupsForChapter()` still uses the old one-sided overlap test. Psalm 119 renders in 93 ms at 40 years of data, so this can wait. | Small | `docs/BUILD_6.1_ACTUAL_STATE.md` §12 |
 | **Getting a deleted bundled plan back** | Deleted bundled plans stay deleted (they're listed in `bundled_installs`). The only way back is importing the plan's JSON from `data/plans/`, which a user doesn't have. A "Restore bundled plans" action could take a plan off the list and seed it again. | Small | `seedBundledPlans()` in `js/db.js` |
 
@@ -67,7 +68,6 @@ From "Future" in `README.md`, which remains the source for this list:
 - Nested notes
 - In-app template creator, with template sharing
 - Dictionary lookup (Webster's 1913)
-- "Other occurrences of this word" for the Language tab
 - Full LSJ Greek lexicon (TFLSJ), pending bundle-size headroom
 - Version-aware translation and data reseeding for existing installs
 - Landing page and public distribution

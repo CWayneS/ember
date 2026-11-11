@@ -1,6 +1,6 @@
 // reader.js — Scripture rendering and navigation
 
-import { getChapter, getBooks, getBook, getTranslations, chapterExistsInTranslation, getNoteCountsForChapter, getMarkupsForChapter, getBookmarksForChapter, getOriginalWordsForVerses, warnLanguageUnavailable } from './db.js';
+import { getChapter, getBooks, getBook, getTranslations, chapterExistsInTranslation, getNoteCountsForChapter, getMarkupsForChapter, getBookmarksForChapter, getOriginalWordsForVerses, warnLanguageUnavailable, plainGloss } from './db.js';
 
 // ============================================================
 // Per-pane state — persisted to localStorage
@@ -308,8 +308,7 @@ async function populateTitleGloss(el, textSpan, verseId) {
     // printed word — meaningful in the Language tab's per-word interlinear
     // context, just visual noise in a reader title line ("of/ David" reads
     // worse than "of David"). Stripped here only, not in the underlying data.
-    const gloss = words.map(w => w.gloss_contextual).filter(Boolean)
-        .join(' ').replace(/\//g, ' ').replace(/\s+/g, ' ').trim();
+    const gloss = plainGloss(words.map(w => w.gloss_contextual).filter(Boolean).join(' '));
     if (gloss) {
         textSpan.textContent = gloss;
     } else {

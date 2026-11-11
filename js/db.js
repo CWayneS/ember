@@ -1219,6 +1219,12 @@ export function formatReference(startId, endId = null) {
     return `${name} ${s.chapter}:${s.verse}–${bookName(e.book)} ${e.chapter}:${e.verse}`;
 }
 
+// STEPBible's glosses mark prefix/root/suffix boundaries with '/' ("and/ he
+// created"): meaningful beside the word's pieces, noise anywhere else.
+export function plainGloss(gloss) {
+    return (gloss || '').replace(/\//g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function bookName(bookId) {
     return getBooks().find(b => b.id === bookId)?.name ?? `Book ${bookId}`;
 }
@@ -2120,6 +2126,34 @@ async function queryByWordIds(sql, wordIds) {
 // Multi-piece Hebrew words among wordIds -> Map<wordId, { pieceStrongs,
 // rootGlosses, affixForms }>, for grammar-decode.js's splitHebrewWord(). A word
 // with no entry is a one-piece word. One query per 500 words, never per word.
+// "All occurrences" of a word (the Language tab's word card): everywhere its
+// STEP number (H0430G, not every sense of H0430) appears. Book counts first,
+// [{ book, count }] in canon order; a book's verses only when it is opened.
+export async function getOccurrenceCounts(strongsNumber) {
+    const languageDb = await getLanguageDb();
+    return queryAll(languageDb,
+        `SELECT verse_id / 1000000 AS book, COUNT(*) AS count
+         FROM original_words WHERE strongs_number = ?
+         GROUP BY book ORDER BY book`, [strongsNumber]);
+}
+
+// [{ verseId, glosses: [contextual gloss of each occurrence, in word order] }]
+// for one book, in verse order.
+export async function getOccurrencesInBook(strongsNumber, book) {
+    const languageDb = await getLanguageDb();
+    const rows = queryAll(languageDb,
+        `SELECT verse_id, gloss_contextual FROM original_words
+         WHERE strongs_number = ? AND verse_id BETWEEN ? AND ?
+         ORDER BY verse_id, word_position`,
+        [strongsNumber, book * 1_000_000, book * 1_000_000 + 999_999]);
+    const verses = [];
+    for (const row of rows) {
+        if (verses.at(-1)?.verseId !== row.verse_id) verses.push({ verseId: row.verse_id, glosses: [] });
+        verses.at(-1).glosses.push(row.gloss_contextual ?? '');
+    }
+    return verses;
+}
+
 export async function getPiecesForWords(wordIds) {
     const pieces = new Map();
     if (wordIds.length === 0) return pieces;

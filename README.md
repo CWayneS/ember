@@ -222,7 +222,6 @@ Build 1 (core reading + notes) → Build 1.5 (polish) → Build 2 (cross-referen
 - Nested notes
 - In-app template creator, with template sharing
 - Dictionary lookup (Webster's 1913)
-- "Other occurrences of this word" — cross-reference index for the Language tab
 - Full LSJ Greek lexicon (TFLSJ) as an expandable detail, pending bundle-size headroom
 - Version-aware translation/data reseeding for existing installs
 - Landing page and public distribution

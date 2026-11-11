@@ -2352,7 +2352,9 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
    instead, so it still reads as "this text reveals more" at a glance and not
    just accent-colored text. */
 .language-card-more-btn,
-.language-card-lexicon-btn {
+.language-card-lexicon-btn,
+.language-occurrences-btn,
+.language-occurrences-more {
     display: block;
     margin-top: 4px;
     padding: 0;
@@ -2365,19 +2367,23 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
 }
 
 .language-card-more-btn::before,
-.language-card-lexicon-btn::before {
+.language-card-lexicon-btn::before,
+.language-occurrences-btn::before {
     content: '▸ ';
     font-size: 0.75em;
     opacity: 0.7;
 }
 
 .language-card-more-btn.open::before,
-.language-card-lexicon-btn.open::before {
+.language-card-lexicon-btn.open::before,
+.language-occurrences-btn.open::before {
     content: '▾ ';
 }
 
 .language-card-more-btn:hover,
-.language-card-lexicon-btn:hover {
+.language-card-lexicon-btn:hover,
+.language-occurrences-btn:hover,
+.language-occurrences-more:hover {
     text-decoration: underline;
 }
 
@@ -2427,6 +2433,82 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
 
 .language-lexicon-grammar {
     color: var(--text-secondary);
+}
+
+/* "All occurrences": books with counts, each opening to its verses. */
+.language-occurrences {
+    margin: 4px 0 2px 2px;
+    padding-left: 10px;
+    border-left: 2px solid var(--border-light);
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+}
+
+.language-occurrences-book,
+.language-occurrence {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    padding: 2px 4px;
+    font: inherit;
+    text-align: left;
+    color: var(--text-primary);
+    background: none;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.language-occurrences-book:hover,
+.language-occurrence:hover {
+    background: var(--bg-hover);
+}
+
+.language-occurrences-book::before {
+    content: '▸';
+    font-size: 0.75em;
+    opacity: 0.6;
+}
+
+.language-occurrences-book.open::before {
+    content: '▾';
+}
+
+.language-occurrences-count {
+    margin-left: auto;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.language-occurrences-verses {
+    margin: 0 0 4px 14px;
+}
+
+.language-occurrence-ref {
+    flex-shrink: 0;
+    min-width: 9em;
+    color: var(--accent);
+}
+
+.language-occurrence-gloss {
+    color: var(--text-secondary);
+}
+
+.language-occurrence-times,
+.language-occurrence-here {
+    flex-shrink: 0;
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+}
+
+.language-occurrence-here {
+    margin-left: auto;
+    font-style: italic;
+}
+
+.language-occurrence.current {
+    background: var(--accent-light);
 }
 
 /* A BDB scripture reference that opens its verse in the reader. Inline, in the

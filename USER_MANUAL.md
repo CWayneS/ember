@@ -207,6 +207,8 @@ Tap any row to open a card beneath it with that word's original-language spellin
 
 Tap **Click for more** on a word for its dictionary form (lemma), transliteration, and a plain-English breakdown of its grammar. At the bottom, **Show Lexicon** opens the word's dictionary entry. If the entry opens below the bottom edge of the panel, the panel glides up to show it.
 
+**All occurrences** lists everywhere the Bible uses the same word in the same sense, counted by book (Genesis 11, Exodus 1, …). Tap a book to see its verses, each with how the word is translated there; ×2 means it appears twice in that verse, and the verse you're studying is marked *this verse*. A long book shows 100 verses at a time. Tap a verse to see it in the reader; the card stays open, so you can keep going down the list. "Same sense" follows STEPBible's numbering: אֱלֹהִים meaning "God" and אֱלֹהִים meaning "gods" are counted separately.
+
 **The Hebrew lexicon** shows two dictionaries, one under the other:
 
 - **Strong's** is the simpler one, and every Hebrew word has an entry. It gives the word's meaning, where it comes from (**Derivation**), and **KJV translates as**: the English words the King James Version uses for it. Those are translations, not definitions, so they show the range of ways the word was rendered.

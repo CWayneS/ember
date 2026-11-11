@@ -19,6 +19,7 @@ import {
     formatReference, getOriginalWordsForVerses, getGreekLexiconEntry,
     getHebrewLexiconEntry, getPiecesForWords, getVariantsForWords, getHebrewAffixes,
     isLanguageDownloading, warnLanguageUnavailable, warnHebrewLexiconUnavailable,
+    getOccurrenceCounts, getOccurrencesInBook, plainGloss, getBook,
 } from './db.js';
 import { decodeMorphCode, splitHebrewWord } from './grammar-decode.js';
 import { hebrewLexiconRoots, renderHebrewLexiconEntry } from './hebrew-lexicon.js';
@@ -62,6 +63,21 @@ let hebrewLexiconFailed  = new Set(); // bases whose lookup failed; retried on t
 let hebrewLexiconLookups = new Set(); // bases with a lookup in flight
 let pendingReveal        = null;      // { lexiconKey, bdbId }: just opened, to glide into view once shown
 
+// "All occurrences" of a word's STEP number. Same invariant: open state is
+// for the open card only. The lookups are cached for the session (the data is
+// read-only) and never awaited by a rebuild, which shows what it has and is
+// called again when a lookup lands.
+let openOccurrences      = new Set(); // word ids
+let openOccurrenceBooks  = new Set(); // `wordId:book`
+const occurrenceCounts   = new Map(); // strongs -> [{ book, count }]
+const occurrenceVerses   = new Map(); // `strongs:book` -> [{ verseId, glosses }]
+const occurrenceLookups  = new Set(); // keys in flight
+let occurrenceRowsShown  = new Map(); // `wordId:book` -> rows shown, past the first page
+
+// Each tap rebuilds the card, so a book's list grows a page at a time: Luke's
+// 1,033 verses with the Greek article made every later tap take 164 ms.
+const OCCURRENCE_PAGE = 100;
+
 // A selection this tab still owes a render: made while the tab was hidden, or
 // whose load failed. language.db stays closed until the tab is actually looked
 // at, so a selection on another tab costs nothing.
@@ -84,6 +100,12 @@ export function initLanguageTab() {
     // A BDB scripture reference opens its verse in the reader without
     // selecting it, so this tab, and the entry being read, stay as they are.
     document.getElementById('language-tab').addEventListener('click', (e) => {
+        const occurrence = e.target.closest('.language-occurrence');
+        if (occurrence) {
+            const verseId = Number(occurrence.dataset.verseId);
+            showVerse(Math.floor(verseId / 1_000_000), Math.floor(verseId / 1000) % 1000, verseId);
+            return;
+        }
         const ref = e.target.closest('.language-lexicon-ref');
         if (!ref) return;
         const verseId = ref.dataset.verseId ? Number(ref.dataset.verseId) : null;
@@ -516,6 +538,8 @@ async function renderTier2(word, isHebrew, tier3Open) {
         }
     }
 
+    if (word.strongs_number) appendOccurrencesLink(tier2, word);
+
     return tier2;
 }
 
@@ -731,6 +755,143 @@ async function renderTier3(word) {
     return tier3;
 }
 
+// ---- All occurrences --------------------------------------------------------
+
+// Everywhere this word's STEP number occurs: books with counts, each opening to
+// its verses. This verse is among them, marked in its book.
+function appendOccurrencesLink(tier2, word) {
+    const strongs = word.strongs_number;
+    const counts = occurrenceCounts.get(strongs);
+    if (!counts) lookUpOccurrences(strongs, null);
+    const total = counts?.reduce((sum, row) => sum + row.count, 0);
+    const open = openOccurrences.has(word.id);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'language-occurrences-btn';
+    button.classList.toggle('open', open);
+    button.textContent = counts ? `All occurrences (${total.toLocaleString()})` : 'All occurrences';
+    button.addEventListener('click', async () => {
+        if (!openOccurrences.delete(word.id)) {
+            openOccurrences.add(word.id);
+            pendingReveal = { lexiconKey: occurrencesKey(word), bdbId: null };
+        }
+        await rerenderLexicon();
+    });
+    tier2.appendChild(button);
+    if (!open) return;
+
+    const list = document.createElement('div');
+    list.className = 'language-occurrences';
+    list.dataset.lexiconKey = occurrencesKey(word);
+    if (!counts) {
+        list.dataset.loading = 'true';
+        list.appendChild(hebrewLexiconMessage('Finding occurrences…'));
+    }
+    for (const { book, count } of counts ?? []) {
+        const bookKey = `${word.id}:${book}`;
+        const bookOpen = openOccurrenceBooks.has(bookKey);
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'language-occurrences-book';
+        toggle.classList.toggle('open', bookOpen);
+        const name = document.createElement('span');
+        name.textContent = getBook(book)?.name ?? `Book ${book}`;
+        const number = document.createElement('span');
+        number.className = 'language-occurrences-count';
+        number.textContent = count.toLocaleString();
+        toggle.append(name, number);
+        toggle.addEventListener('click', async () => {
+            if (!openOccurrenceBooks.delete(bookKey)) {
+                openOccurrenceBooks.add(bookKey);
+                pendingReveal = { lexiconKey: `${occurrencesKey(word)}:${book}`, bdbId: null };
+            }
+            await rerenderLexicon();
+        });
+        list.appendChild(toggle);
+        if (bookOpen) list.appendChild(renderOccurrenceVerses(word, book));
+    }
+    tier2.appendChild(list);
+}
+
+function occurrencesKey(word) {
+    return `occurrences:${word.id}`;
+}
+
+function renderOccurrenceVerses(word, book) {
+    const strongs = word.strongs_number;
+    const verses = occurrenceVerses.get(`${strongs}:${book}`);
+    const wrap = document.createElement('div');
+    wrap.className = 'language-occurrences-verses';
+    wrap.dataset.lexiconKey = `${occurrencesKey(word)}:${book}`;
+    if (!verses) {
+        lookUpOccurrences(strongs, book);
+        wrap.dataset.loading = 'true';
+        wrap.appendChild(hebrewLexiconMessage('Finding occurrences…'));
+        return wrap;
+    }
+    const shownKey = `${word.id}:${book}`;
+    const shown = occurrenceRowsShown.get(shownKey) ?? OCCURRENCE_PAGE;
+    for (const { verseId, glosses } of verses.slice(0, shown)) {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'language-occurrence';
+        row.dataset.verseId = verseId;
+        const reference = document.createElement('span');
+        reference.className = 'language-occurrence-ref';
+        reference.textContent = formatReference(verseId);
+        const gloss = document.createElement('span');
+        gloss.className = 'language-occurrence-gloss';
+        gloss.textContent = [...new Set(glosses.map(plainGloss).filter(Boolean))].join(' · ');
+        row.append(reference, gloss);
+        if (glosses.length > 1) {
+            const times = document.createElement('span');
+            times.className = 'language-occurrence-times';
+            times.textContent = `×${glosses.length}`;
+            row.appendChild(times);
+        }
+        if (verseId === word.verse_id) {
+            row.classList.add('current');
+            const here = document.createElement('span');
+            here.className = 'language-occurrence-here';
+            here.textContent = 'this verse';
+            row.appendChild(here);
+        }
+        wrap.appendChild(row);
+    }
+    if (verses.length > shown) {
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'language-occurrences-more';
+        more.textContent = `Show ${Math.min(OCCURRENCE_PAGE, verses.length - shown)} more of ${verses.length.toLocaleString()} verses`;
+        more.addEventListener('click', async () => {
+            occurrenceRowsShown.set(shownKey, shown + OCCURRENCE_PAGE);
+            await rerenderLexicon();
+        });
+        wrap.appendChild(more);
+    }
+    return wrap;
+}
+
+// `book` null: the book counts. Only a lookup that succeeds redraws: a failed
+// one is logged and stays a loading line, and the next tap's redraw tries again
+// (redrawing on failure would retry in a loop).
+async function lookUpOccurrences(strongs, book) {
+    const key = book === null ? strongs : `${strongs}:${book}`;
+    if (occurrenceLookups.has(key)) return;
+    occurrenceLookups.add(key);
+    try {
+        if (book === null) occurrenceCounts.set(strongs, await getOccurrenceCounts(strongs));
+        else occurrenceVerses.set(key, await getOccurrencesInBook(strongs, book));
+    } catch (e) {
+        warnLanguageUnavailable(e);
+        return;
+    } finally {
+        occurrenceLookups.delete(key);
+    }
+    if (openCardKey) await rerenderLexicon();
+}
+
 // ---- Hebrew tier 3 (Hebrew_Lexicon_Spec) ------------------------------------
 
 function hebrewLexiconKey(word, root) {
@@ -739,6 +900,9 @@ function hebrewLexiconKey(word, root) {
 
 function closeHebrewLexicons() {
     pendingReveal = null;
+    openOccurrences.clear();
+    openOccurrenceBooks.clear();
+    occurrenceRowsShown.clear();
     openHebrewLexicons.clear();
     openBdbEntries.clear();
     hebrewLexiconEntries.clear();
@@ -747,8 +911,9 @@ function closeHebrewLexicons() {
 
 function closeHebrewLexiconsOf(word) {
     const prefix = `${word.id}:`;
-    for (const keys of [openHebrewLexicons, openBdbEntries]) {
-        for (const key of keys) {
+    openOccurrences.delete(word.id);
+    for (const keys of [openHebrewLexicons, openBdbEntries, openOccurrenceBooks, occurrenceRowsShown]) {
+        for (const key of [...keys.keys()]) {
             if (key.startsWith(prefix)) keys.delete(key);
         }
     }
@@ -815,7 +980,7 @@ const REVEAL_MARGIN = 12;
 
 function revealPendingLexicon(container) {
     if (!pendingReveal) return;
-    const tier3 = [...container.querySelectorAll('.language-card-lexicon')]
+    const tier3 = [...container.querySelectorAll('[data-lexicon-key]')]
         .find(element => element.dataset.lexiconKey === pendingReveal.lexiconKey);
     if (tier3?.dataset.loading) return;
     const target = tier3 && pendingReveal.bdbId

@@ -1662,6 +1662,87 @@ def lexicon_glide(app, db, verse_id=1001001, word_position=2, label='Hebrew (Gen
           f"{label}: a Lexicon opened at the panel's edge glides into view, the link still showing ({seen})")
 
 
+READ_OCCURRENCES_JS = """() => {
+    const text = el => el.textContent.replace(/\\s+/g, ' ').trim();
+    const link = document.querySelector('.language-occurrences-btn');
+    return {
+        link: link ? text(link) : null,
+        books: [...document.querySelectorAll('.language-occurrences-book')].map(b => [text(b.firstChild), text(b.lastChild)]),
+        rows: [...document.querySelectorAll('.language-occurrence')].map(r => ({
+            verseId: Number(r.dataset.verseId),
+            times: r.querySelector('.language-occurrence-times') ? Number(text(r.querySelector('.language-occurrence-times')).slice(1)) : 1,
+            current: r.classList.contains('current') && !!r.querySelector('.language-occurrence-here'),
+            gloss: text(r.querySelector('.language-occurrence-gloss')) })),
+        more: document.querySelector('.language-occurrences-more') ? text(document.querySelector('.language-occurrences-more')) : null,
+    };
+}"""
+
+
+def open_occurrences(app, db, verse_id, word_position):
+    member = open_tier2(app, db, verse_id, word_position)
+    member.locator('.language-occurrences-btn').click()
+    app.page.wait_for_selector('.language-occurrences-book', timeout=30_000)
+    app.page.wait_for_timeout(100)
+    return member
+
+
+def open_occurrence_book(app, name):
+    p = app.page
+    p.locator('.language-occurrences-book', has=p.locator('span', has_text=name)).first.click()
+    p.wait_for_selector('.language-occurrence', timeout=30_000)
+    p.wait_for_timeout(100)
+    return p.evaluate(READ_OCCURRENCES_JS)
+
+
+def language_occurrences(app, db):
+    """All occurrences of a word: book counts from its STEP number, verses per book, taps that keep the card."""
+    p = app.page
+    book_names = {row[0]: row[1] for row in sqlite3.connect(os.path.join(ROOT, 'data', 'core.db')).execute('SELECT id, name FROM books')}
+    by_book = lambda strongs: db.execute(
+        'SELECT verse_id / 1000000, COUNT(*) FROM original_words WHERE strongs_number = ? GROUP BY 1 ORDER BY 1', (strongs,)).fetchall()
+
+    open_occurrences(app, db, 1001001, 1)  # Gen 1:1 #02 בָּרָא, H1254A
+    expected = by_book('H1254A')
+    total = sum(count for _, count in expected)
+    seen = p.evaluate(READ_OCCURRENCES_JS)
+    check(seen['link'] == f'All occurrences ({total:,})', f"H1254A: the link counts every occurrence of the sense ({seen['link']}, {total})")
+    check(seen['books'] == [[book_names[book], f'{count:,}'] for book, count in expected], f"H1254A: books in canon order with counts ({seen['books'][:3]}…)")
+    seen = open_occurrence_book(app, 'Genesis')
+    genesis = [row[0] for row in db.execute(
+        "SELECT DISTINCT verse_id FROM original_words WHERE strongs_number = 'H1254A' AND verse_id < 2000000 ORDER BY verse_id")]
+    check([row['verseId'] for row in seen['rows']] == genesis, f"H1254A: Genesis lists its verses in order ({len(seen['rows'])} rows)")
+    check(sum(row['times'] for row in seen['rows']) == dict(expected)[1], 'H1254A: the ×N marks add up to the book count')
+    check([row['verseId'] for row in seen['rows'] if row['current']] == [1001001], 'H1254A: this verse is marked, once')
+    check(all('/' not in row['gloss'] for row in seen['rows']) and seen['rows'][1]['gloss'] == 'and he created',
+          f"glosses read without STEP's '/' marks ({seen['rows'][1]['gloss']!r})")
+
+    res = p.evaluate(REFERENCE_TAP_JS.replace('.language-lexicon-ref', '.language-occurrence').replace('element.dataset.ref === osisRef', 'element.dataset.verseId === osisRef'), '1001021')
+    check(res is not None and res['shownVerse'] == 1001021 and res['selectedInPane'] == 1 and res['languageTabActive']
+          and p.evaluate("!!document.querySelector('.language-occurrences .language-occurrence')"),
+          f'tapping Genesis 1:21 shows it in the reader and leaves the card, its list and the selection as they were ({res})')
+
+    open_occurrences(app, db, 1001001, 2)  # Gen 1:1 #03 אֱלֹהִים, H0430G
+    total = sum(count for _, count in by_book('H0430G'))
+    seen = p.evaluate(READ_OCCURRENCES_JS)
+    check(seen['link'] == f'All occurrences ({total:,})', f"H0430G counts only its own sense, not H0430J ({seen['link']})")
+
+    open_occurrences(app, db, 43001001, 3)  # John 1:1 #04 ὁ, G3588: Luke has 1,033 verses
+    seen = open_occurrence_book(app, 'Luke')
+    luke_verses = db.execute("SELECT COUNT(DISTINCT verse_id) FROM original_words WHERE strongs_number = 'G3588' AND verse_id / 1000000 = 42").fetchone()[0]
+    check(len(seen['rows']) == 100 and seen['more'] == f'Show 100 more of {luke_verses:,} verses', f"a long book shows 100 verses at a time ({len(seen['rows'])}, {seen['more']})")
+    p.click('.language-occurrences-more'); p.wait_for_timeout(200)
+    check(len(p.evaluate(READ_OCCURRENCES_JS)['rows']) == 200, 'Show more adds the next 100')
+    ms = p.evaluate("""async () => { const t = performance.now();
+        document.querySelector('.language-occurrences-book:not(.open)').click();
+        await new Promise(r => setTimeout(r, 0)); return performance.now() - t; }""")
+    print(f'  (a tap with 200 rows open: {ms:.0f} ms)')
+
+    p.locator('.language-word-row.active').click(); p.wait_for_timeout(200)  # close the card
+    p.locator('.language-word-row', has_text=word_surface(db, 43001001, 3)).first.click()
+    p.wait_for_selector('.language-word-card')
+    check(p.evaluate("!document.querySelector('.language-occurrences')"), 'closing the card closes its occurrences')
+
+
 REFERENCE_TAP_JS = """(osisRef) => {
     const ref = [...document.querySelectorAll('.language-lexicon-ref')].find(element => element.dataset.ref === osisRef);
     if (!ref) return null;
@@ -1793,6 +1874,7 @@ def scenario_lexicon(browser):
     lexicon_glide(app, db)
     lexicon_glide(app, db, 43001001, 11, 'Greek (John 1:1 #12 θεόν)')
     lexicon_references(app, db)
+    language_occurrences(app, db)
     check(app.errors == [], f'lexicon words: no console errors {app.errors[:3]}')
     ctx.close()
     db.close()
