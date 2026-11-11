@@ -1780,6 +1780,18 @@ def lexicon_references(app, db):
           f'tapping "Ex 9:31" opens Exodus 9 at verse 31 ({res})')
     check(res is not None and res['entryStillOpen'] and res['languageTabActive'] and res['selectedInPane'] == 0,
           'the tap selects nothing: the Language tab and its BDB entry stay as they were')
+    p.click('.language-verse-heading')
+    p.wait_for_timeout(200)
+    back = p.evaluate("""() => ({
+        location: document.querySelector('#reader-pane-a .pane-location').textContent,
+        selected: [...document.querySelectorAll('#reader-pane-a .verse.selected')].map(v => Number(v.dataset.verseId)),
+        inView: (() => { const v = document.querySelector('#reader-pane-a [data-verse-id="2013004"]').getBoundingClientRect();
+                         const c = document.querySelector('#reader-pane-a .pane-content').getBoundingClientRect();
+                         return v.top >= c.top && v.bottom <= c.bottom; })(),
+        entryStillOpen: !!document.querySelector('#language-tab .language-lexicon-bdb-entry'),
+        languageTabActive: document.getElementById('language-tab').classList.contains('active') })""")
+    check(back == {'location': 'Exodus 13', 'selected': [2013004], 'inView': True, 'entryStillOpen': True, 'languageTabActive': True},
+          f'the verse heading leads back: Exodus 13:4 in view and still outlined as selected, the entry still open ({back})')
 
     member, card = open_lexicon(app, db, 1005001, 1)  # Gen 5:1 #02 סֵפֶר: its second entry's ψ 56:9 is English Ps 56:8
     member.locator('.language-lexicon-entry-btn').click()

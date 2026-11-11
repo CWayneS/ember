@@ -98,12 +98,13 @@ export function initLanguageTab() {
         hebrewLexiconFailed.clear();
         rerenderLexicon();
     });
-    // A lexicon's scripture reference (BDB or Greek) opens its verse in the reader without
-    // selecting it, so this tab, and the entry being read, stay as they are.
+    // A lexicon's scripture reference (BDB or Greek) or an occurrence opens its
+    // verse in the reader without selecting it, so this tab, and the entry being
+    // read, stay as they are. A verse block's heading brings its own verse back.
     document.getElementById('language-tab').addEventListener('click', (e) => {
-        const occurrence = e.target.closest('.language-occurrence');
-        if (occurrence) {
-            const verseId = Number(occurrence.dataset.verseId);
+        const verseLink = e.target.closest('.language-occurrence, .language-verse-heading');
+        if (verseLink) {
+            const verseId = Number(verseLink.dataset.verseId);
             showVerse(Math.floor(verseId / 1_000_000), Math.floor(verseId / 1000) % 1000, verseId);
             return;
         }
@@ -278,8 +279,13 @@ async function renderVerseBlock(verseId, verseWords) {
     const block = document.createElement('div');
     block.className = 'language-verse-block';
 
-    const heading = document.createElement('div');
+    // The way back to this verse after following a lexicon reference or an
+    // occurrence elsewhere (initLanguageTab).
+    const heading = document.createElement('button');
+    heading.type = 'button';
     heading.className = 'language-verse-heading';
+    heading.dataset.verseId = verseId;
+    heading.title = `Show ${formatReference(verseId)} in the reader`;
     heading.textContent = formatReference(verseId);
     block.appendChild(heading);
 

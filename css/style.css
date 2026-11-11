@@ -2023,12 +2023,23 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     border-bottom: none;
 }
 
+/* Also the way back to the verse in the reader. */
 .language-verse-heading {
+    display: block;
     font-family: var(--font-display);
     font-size: var(--size-small);
     font-weight: 600;
     color: var(--text-secondary);
     padding: 10px 16px 4px;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+}
+
+.language-verse-heading:hover {
+    color: var(--accent);
+    text-decoration: underline;
 }
 
 /* Running verse line — decorative, non-interactive. RTL as a full block for

@@ -281,6 +281,10 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
 
     applyChapterMarkups(paneId);
 
+    // The selection outlives the chapter on screen; selection.js outlines it
+    // again when its chapter comes back.
+    document.dispatchEvent(new CustomEvent('chapter-rendered', { detail: { paneId } }));
+
     if (highlightVerseId) {
         const target = textEl.querySelector(`[data-verse-id="${highlightVerseId}"]`);
         if (target) {

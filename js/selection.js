@@ -18,6 +18,17 @@ export function initSelection() {
         el.addEventListener('click', clearSelection);
     });
 
+    // A re-rendered chapter (navigation, a translation switch, a lexicon
+    // reference and the way back) loses its classes. The selection itself
+    // stands, so a verse of it that is back on screen is outlined again.
+    document.addEventListener('chapter-rendered', (e) => {
+        if (selectedVerses.length === 0 || e.detail.paneId !== anchorPaneId) return;
+        const paneEl = document.getElementById(`reader-pane-${e.detail.paneId}`);
+        for (const verseId of selectedVerses) {
+            paneEl?.querySelector(`[data-verse-id="${verseId}"]`)?.classList.add('selected');
+        }
+    });
+
     // Pane switch — clear any selection that belongs to the outgoing pane so both
     // panes can never show highlighted verses simultaneously.
     document.addEventListener('pane-changed', (e) => {

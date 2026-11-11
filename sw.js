@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v23'; // bumped: Greek lexicon outline and New Testament links (greek-lexicon.js added; language.js changed)
+const CACHE_NAME = 'ember-v24'; // bumped: the Language tab's verse heading leads back to the verse (language.js, reader.js, selection.js, style.css changed)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:
