@@ -379,18 +379,22 @@ body.theme-dark #theme-icon-moon { display: none;  }
     flex-shrink: 0;
 }
 
-#study-panels.stacked {
+/* Notes beside reference (the default); without the class, notes sit above it */
+#study-panels.side-by-side {
     flex-direction: row;
 }
 
 /* ============================================================
    Panel Header (shared)
    ============================================================ */
+/* The tabs wrap onto up to three rows when the panel is too narrow for them.
+   One row is the same 44px as the reader header (7px + a 36px row + border). */
 .panel-header {
+    --tab-row-height: 36px;
     display: flex;
-    align-items: center;
-    height: var(--reader-header-height);
-    padding: 0 10px;
+    align-items: flex-start;
+    min-height: var(--reader-header-height);
+    padding: 7px 10px 0;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-light);
     flex-shrink: 0;
@@ -403,6 +407,8 @@ body.theme-dark #theme-icon-moon { display: none;  }
     align-items: center;
     gap: 2px;
     margin-left: auto;
+    height: var(--tab-row-height);
+    flex-shrink: 0;
 }
 
 .panel-help-btn,
@@ -459,7 +465,7 @@ body.theme-dark #theme-icon-moon { display: none;  }
 }
 
 /* When panels are side-by-side, handle becomes a vertical bar */
-#study-panels.stacked #panel-resize-handle {
+#study-panels.side-by-side #panel-resize-handle {
     width:  var(--resize-handle-size);
     height: auto;
     cursor: col-resize;
@@ -477,13 +483,17 @@ body.theme-dark #theme-icon-moon { display: none;  }
     min-width: 80px;
 }
 
-/* Notes tabs — tabs shrink as more open, browser-style */
+/* Notes tabs wrap onto up to three rows; past that they narrow, browser-style
+   (panels.js:fitStudyTabs sets --notes-tab-basis). A fourth row only scrolls
+   when even the narrowest tabs can't fit in three. */
 #notes-tabs {
     display: flex;
+    flex-wrap: wrap;
     flex: 1;
     align-items: stretch;
     min-width: 0;
-    overflow: hidden;
+    max-height: calc(3 * var(--tab-row-height));
+    overflow-y: auto;
 }
 
 /* Notes tab buttons — shrink with truncation when space is tight */
@@ -497,10 +507,10 @@ body.theme-dark #theme-icon-moon { display: none;  }
     font-weight: 600;
     color: var(--text-secondary);
     border-bottom: 2px solid transparent;
-    height: 100%;
+    height: var(--tab-row-height);
     min-width: 60px;
     max-width: 160px;
-    flex: 1 1 120px;
+    flex: 1 1 var(--notes-tab-basis, 120px);
     overflow: hidden;
 }
 
@@ -546,16 +556,23 @@ body.theme-dark #theme-icon-moon { display: none;  }
     color: var(--text-muted);
     flex-shrink: 0;
     line-height: 1;
+    height: var(--tab-row-height);
 }
 
 #notes-tab-add:hover {
     color: var(--text-primary);
 }
 
+/* Too narrow for all five tabs: they wrap onto another row (three at most;
+   only a panel dragged very narrow would ever scroll) */
 #reference-tabs {
     display: flex;
+    flex-wrap: wrap;
     flex: 1;
-    gap: 2px;
+    gap: 0 2px;
+    min-width: 0;
+    max-height: calc(3 * var(--tab-row-height));
+    overflow-y: auto;
 }
 
 .tab-btn {
@@ -565,7 +582,7 @@ body.theme-dark #theme-icon-moon { display: none;  }
     color: var(--text-secondary);
     border-bottom: 2px solid transparent;
     border-radius: 0;
-    height: 100%;
+    height: var(--tab-row-height);
     white-space: nowrap;
 }
 
@@ -623,7 +640,8 @@ body.theme-dark #theme-icon-moon { display: none;  }
     gap: 6px;
 }
 
-#split-toggle-btn {
+#split-toggle-btn,
+#verse-lines-btn {
     width: 28px;
     height: 28px;
     display: flex;
@@ -634,17 +652,20 @@ body.theme-dark #theme-icon-moon { display: none;  }
     flex-shrink: 0;
 }
 
-#split-toggle-btn svg {
+#split-toggle-btn svg,
+#verse-lines-btn svg {
     width: 16px;
     height: 16px;
 }
 
-#split-toggle-btn:hover {
+#split-toggle-btn:hover,
+#verse-lines-btn:hover {
     background: var(--bg-hover);
     color: var(--text-secondary);
 }
 
-#split-toggle-btn.active {
+#split-toggle-btn.active,
+#verse-lines-btn.active {
     color: var(--accent);
     background: var(--accent-light);
 }
@@ -653,19 +674,14 @@ body.theme-dark #theme-icon-moon { display: none;  }
     flex: 1;
 }
 
-.pane-nav-spacer {
-    flex: 1;
-}
-
+/* "KJV Genesis 1": one button opens the book/chapter/translation picker */
 .translation-label {
+    font-family: var(--font-display);
     font-size: var(--size-xs);
     font-weight: 700;
     color: var(--text-muted);
-    padding: 3px 8px;
-    background: var(--bg-hover);
-    border-radius: 4px;
     letter-spacing: 0.5px;
-    white-space: nowrap;
+    margin-right: 2px;
 }
 
 #bookmark-btn,
@@ -725,28 +741,28 @@ body.theme-dark #theme-icon-moon { display: none;  }
 }
 
 .pane-book-btn {
-    padding: 4px 10px;
-    background: var(--bg-hover);
+    font: inherit;
+    padding: 4px 8px;
     border-radius: 4px;
-    font-weight: 600;
-    font-size: var(--size-small);
-    font-family: var(--font-reading);
     white-space: nowrap;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .pane-book-btn:hover {
-    background: var(--border-light);
+    background: var(--bg-hover);
 }
 
 .pane-location {
     font-size: var(--size-small);
     font-weight: 600;
     color: var(--text-secondary);
-    white-space: nowrap;
 }
 
 .pane-prev,
 .pane-next {
+    flex-shrink: 0;
     padding: 4px 8px;
     font-size: var(--size-large);
     border-radius: 4px;
@@ -858,6 +874,12 @@ body.markup-mode-on .verse.markup-circle {
 
 .verse-text {
     font-size: var(--scripture-font-size);
+}
+
+/* One verse per line (the lines button in the reader header) */
+#reader.verse-per-line .verse {
+    display: block;
+    margin-bottom: 0.35em;
 }
 
 /* Psalm title row (verse=0) — Psalm_Title_Fix_Spec.md. Its own line, not
@@ -2927,6 +2949,47 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
 }
 
 #install-dismiss-btn:hover {
+    color: var(--text-on-dark);
+}
+
+/* ============================================================
+   Mobile Notice — phones and other small touch screens (app.js)
+   ============================================================ */
+#mobile-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--bg-primary);
+    z-index: 1000; /* above #loading */
+}
+
+#mobile-notice {
+    max-width: 22rem;
+    background: var(--bg-toolbar);
+    color: var(--text-on-dark);
+    border-radius: 10px;
+    padding: 20px 24px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); /* alpha shadow — theme-neutral */
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    line-height: 1.5;
+}
+
+#mobile-notice p {
+    margin: 0 0 12px;
+}
+
+#mobile-continue-btn {
+    color: var(--text-muted);
+    font-size: var(--size-small);
+    text-decoration: underline;
+    padding: 0;
+}
+
+#mobile-continue-btn:hover {
     color: var(--text-on-dark);
 }
 

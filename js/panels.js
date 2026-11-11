@@ -1,6 +1,6 @@
 // panels.js — Study panel management: tabs, views, resize handles
 
-import { createStudy } from './db.js';
+import { createStudy, getState, setState } from './db.js';
 import { languageTabShown } from './language.js';
 
 // Open study tabs — browser-tab model
@@ -10,17 +10,30 @@ let activeStudyId = 'all';
 
 export function initPanels() {
     initNotesTabs();
+    watchStudyTabsWidth();
     initReferenceTabs();
     initWorkspaceResize();
     initPanelResize();
     initSelectionListener();
+    initPanelLayout();
     // Ensure DOM state matches JS state and initial views are rendered
     switchToStudy('all');
+}
+
+// Called once every tab's content has been built (app.js), so the tab open
+// at the last visit comes back as it was.
+export function restoreReferenceTab() {
+    const saved = localStorage.getItem(REFERENCE_TAB_KEY);
+    if (saved && document.getElementById(`${saved}-tab`)) switchTab(saved);
 }
 
 // ============================================================
 // Reference Tabs
 // ============================================================
+
+// The open tab is remembered in localStorage rather than app_state: it changes
+// on every tab click, and setState writes out the whole database.
+const REFERENCE_TAB_KEY = 'ember.reference.tab';
 
 function initReferenceTabs() {
     document.querySelectorAll('#reference-tabs .tab-btn').forEach(btn => {
@@ -39,6 +52,7 @@ function switchTab(tabName) {
         panel.classList.toggle('active', active);
         panel.classList.toggle('hidden', !active);
     });
+    try { localStorage.setItem(REFERENCE_TAB_KEY, tabName); } catch (_) {}
     if (tabName === 'language') languageTabShown();
 }
 
@@ -123,8 +137,11 @@ export function getActiveStudyId() {
 export function renameStudyTab(studyId, name) {
     const entry = openStudies.find(s => s.id === studyId);
     if (entry) entry.name = name;
-    const tab = document.querySelector(`#notes-tabs [data-study-id="${studyId}"] .notes-tab-name`);
-    if (tab) tab.textContent = name;
+    const tab = document.querySelector(`#notes-tabs [data-study-id="${studyId}"]`);
+    if (tab) {
+        tab.querySelector('.notes-tab-name').textContent = name;
+        tab.title = name;
+    }
 }
 
 function renderStudyTabs() {
@@ -144,6 +161,7 @@ function renderStudyTabs() {
         const nameSpan = document.createElement('span');
         nameSpan.className   = 'notes-tab-name';
         nameSpan.textContent = study.type === 'tag' ? `#${study.name}` : study.name;
+        tab.title            = nameSpan.textContent; // the full name, when the tab is too narrow for it
 
         const closeBtn = document.createElement('span');
         closeBtn.className   = 'notes-tab-close';
@@ -161,6 +179,42 @@ function renderStudyTabs() {
 
         addBtn.before(tab);
     }
+    fitStudyTabs();
+}
+
+// Study tabs wrap onto up to three rows at their usual width. Past three, they
+// narrow (names truncate) in 10px steps down to the 60px minimum before a
+// fourth row is allowed (and scrolls). Re-fitted when tabs open or close and
+// when the panel's width changes.
+const MAX_TAB_ROWS     = 3;
+const TAB_BASIS_WIDEST = 120;
+const TAB_BASIS_NARROW = 60;
+
+function fitStudyTabs() {
+    const nav = document.getElementById('notes-tabs');
+    let basis = TAB_BASIS_WIDEST;
+    nav.style.setProperty('--notes-tab-basis', `${basis}px`);
+    while (basis > TAB_BASIS_NARROW && countRows(nav) > MAX_TAB_ROWS) {
+        basis -= 10;
+        nav.style.setProperty('--notes-tab-basis', `${basis}px`);
+    }
+}
+
+function countRows(container) {
+    const tops = new Set();
+    for (const child of container.children) tops.add(Math.round(child.offsetTop));
+    return tops.size;
+}
+
+function watchStudyTabsWidth() {
+    const nav = document.getElementById('notes-tabs');
+    let lastWidth = 0;
+    new ResizeObserver(() => {
+        const width = nav.clientWidth;
+        if (width === lastWidth) return; // fitting changes the height, not the width
+        lastWidth = width;
+        fitStudyTabs();
+    }).observe(nav);
 }
 
 // ============================================================
@@ -203,7 +257,7 @@ function initWorkspaceResize() {
 
 // ============================================================
 // Panel Resize — redistributes notes-panel vs reference-panel.
-// Vertical drag in default (column) layout; horizontal in stacked (row) layout.
+// Horizontal drag when side by side (row); vertical when stacked (column).
 // ============================================================
 
 let panelRatio = 50;   // notes panel percentage of study-panels container
@@ -225,23 +279,23 @@ function initPanelResize() {
     let startSize = 0;
 
     handle.addEventListener('mousedown', (e) => {
-        const stacked = studyPanels.classList.contains('stacked');
+        const sideBySide = studyPanels.classList.contains('side-by-side');
         dragging  = true;
-        startPos  = stacked ? e.clientX : e.clientY;
+        startPos  = sideBySide ? e.clientX : e.clientY;
         const rect = notesPanel.getBoundingClientRect();
-        startSize = stacked ? rect.width : rect.height;
-        document.body.style.cursor     = stacked ? 'col-resize' : 'row-resize';
+        startSize = sideBySide ? rect.width : rect.height;
+        document.body.style.cursor     = sideBySide ? 'col-resize' : 'row-resize';
         document.body.style.userSelect = 'none';
         e.preventDefault();
     });
 
     document.addEventListener('mousemove', (e) => {
         if (!dragging) return;
-        const stacked       = studyPanels.classList.contains('stacked');
-        const current       = stacked ? e.clientX : e.clientY;
+        const sideBySide    = studyPanels.classList.contains('side-by-side');
+        const current       = sideBySide ? e.clientX : e.clientY;
         const delta         = current - startPos;
         const containerRect = studyPanels.getBoundingClientRect();
-        const totalSize     = stacked ? containerRect.width : containerRect.height;
+        const totalSize     = sideBySide ? containerRect.width : containerRect.height;
         const newSize       = clamp(startSize + delta, 80, totalSize - 80);
         panelRatio = newSize / totalSize * 100;
         applyPanelRatio(panelRatio);
@@ -256,15 +310,31 @@ function initPanelResize() {
 }
 
 // ============================================================
-// Layout Toggle — switch between stacked (column) and side-by-side (row)
+// Layout Toggle — notes beside the reference panel (row, the default) or
+// notes above it (column). Saved in app_state.
 // ============================================================
 
+const LAYOUT_STATE_KEY = 'study_panel_layout';   // 'side-by-side' | 'stacked'
+
+function initPanelLayout() {
+    applyPanelLayout(getState(LAYOUT_STATE_KEY) !== 'stacked');
+    document.getElementById('layout-toggle-btn').addEventListener('click', togglePanelLayout);
+}
+
+function applyPanelLayout(sideBySide) {
+    document.getElementById('study-panels').classList.toggle('side-by-side', sideBySide);
+    const btn = document.getElementById('layout-toggle-btn');
+    btn.textContent = sideBySide ? '⇅' : '⇆';
+    btn.title = sideBySide ? 'Put notes above reference' : 'Put notes beside reference';
+}
+
 export function togglePanelLayout() {
-    const studyPanels    = document.getElementById('study-panels');
     const notesPanel     = document.getElementById('notes-panel');
     const referencePanel = document.getElementById('reference-panel');
+    const sideBySide = !document.getElementById('study-panels').classList.contains('side-by-side');
 
-    studyPanels.classList.toggle('stacked');
+    applyPanelLayout(sideBySide);
+    setState(LAYOUT_STATE_KEY, sideBySide ? 'side-by-side' : 'stacked');
 
     // Reset explicit sizing and ratio so both panels start at 50/50 in the new orientation
     panelRatio = 50;

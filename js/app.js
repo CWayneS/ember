@@ -8,7 +8,7 @@ import { initSelection } from './selection.js';
 
 import { initNotes } from './notes.js';
 
-import { initPanels, togglePanelLayout } from './panels.js';
+import { initPanels, restoreReferenceTab } from './panels.js';
 import { initSearch }        from './search.js';
 import { initReference }     from './reference.js';
 import { initBookmarks }    from './bookmarks.js';
@@ -28,7 +28,25 @@ import { initGlobalSettings }     from './global-settings.js';
 // Harmless in production if window.emberDebug is never touched.
 window.emberDebug = window.emberDebug || {};
 
+// Phones and other small touch screens: a narrow viewport (either way round,
+// so a phone held sideways counts) with a coarse pointer — not the browser's
+// name. "Continue anyway" is remembered on this device.
+const MOBILE_QUERY = '(pointer: coarse) and (max-width: 767px), (pointer: coarse) and (max-height: 500px)';
+const MOBILE_DISMISSED_KEY = 'ember.mobileNotice.dismissed';
+
+function showMobileNoticeIfSmallTouchScreen() {
+    if (!window.matchMedia(MOBILE_QUERY).matches) return;
+    if (localStorage.getItem(MOBILE_DISMISSED_KEY) === 'true') return;
+    const overlay = document.getElementById('mobile-overlay');
+    overlay.classList.remove('hidden');
+    document.getElementById('mobile-continue-btn').addEventListener('click', () => {
+        overlay.classList.add('hidden');
+        try { localStorage.setItem(MOBILE_DISMISSED_KEY, 'true'); } catch (_) {}
+    }, { once: true });
+}
+
 async function init() {
+    showMobileNoticeIfSmallTouchScreen();
     try {
         await initDatabase();
 
@@ -49,8 +67,7 @@ async function init() {
         initTemplateBar();
         initGlobalSettings();
 
-        document.getElementById('layout-toggle-btn')
-            .addEventListener('click', togglePanelLayout);
+        restoreReferenceTab();
 
         // Dark mode toggle — persist preference in localStorage
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;

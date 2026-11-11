@@ -15,6 +15,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 6. App works fully offline after first load (core.db persisted to OPFS/IndexedDB on first run; `language.db` follows in the background a couple of seconds later — see 142k)
 7. Loading screen "Loading Scripture…" shown during init, hidden when ready — app.js / index.html:104
 8. On load error, loading screen displays the error message — app.js:46
+8a. Phones and other small touch screens (a coarse pointer with a viewport under 768px wide or 500px tall, so a phone held sideways counts; not detected by browser name) get a full-screen notice before the app loads: "Ember is built for a desk." with a **Continue anyway** button. Continuing is remembered on that device (`localStorage` `ember.mobileNotice.dismissed`); the app keeps loading underneath either way — app.js:showMobileNoticeIfSmallTouchScreen, index.html `#mobile-overlay`
 
 ---
 
@@ -30,8 +31,9 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 12. Two-pane layout: study panels (left, default 50%) + reader (right)
 13. Horizontal resize handle between study panels and reader — panels.js:initWorkspaceResize; min 300px each side
-14. Panel column layout toggle (⇅ button in notes panel header): switches study panels between column (notes above reference) and side-by-side (notes beside reference) — panels.js:togglePanelLayout / app.js:34
-15. Vertical resize handle between notes panel and reference panel (row resize in default layout, col resize in stacked layout) — panels.js:initPanelResize
+14. Study panel layout toggle (button in notes panel header, ⇅ when side by side, ⇆ when stacked): switches study panels between side by side (notes left of reference; `#study-panels.side-by-side`, the default) and stacked (notes above reference, no class). The choice is saved in `app_state` (`study_panel_layout`: `side-by-side` / `stacked`) and restored at startup — panels.js:initPanelLayout/togglePanelLayout
+15. Resize handle between notes panel and reference panel (column resize when side by side, row resize when stacked) — panels.js:initPanelResize
+15a. Panel tabs wrap onto more rows when the panel is too narrow, up to three; the header grows to fit (one row stays 44px), and ? and ⚙ stay on the first row. Reference tabs simply wrap (on a 1280px screen, side by side, five tabs make two rows). Study tabs fill three rows at their usual width, then narrow in 10px steps (names truncate; hovering a tab shows its full name) down to their 60px minimum before a fourth row is allowed, and only then does the strip scroll, still three rows high. Re-fitted when a tab opens or closes and when the panel's width changes — style.css:`.panel-header`/`#notes-tabs`/`#reference-tabs`, panels.js:fitStudyTabs/watchStudyTabsWidth
 16. Resize handles highlight on hover (accent color) — style.css
 
 ---
@@ -39,11 +41,12 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 ## Reader
 
 17. 6 bundled translations (KJV, ASV, WEB, YLT, Darby, BSB), all 66 books — db.js:getChapter; each translation stored in its own SQLite file under `data/translations/`
-18. Verses rendered inline (`.verse` elements, `display: inline`) with superscript verse numbers
+18. Verses rendered inline (`.verse` elements, `display: inline`) with superscript verse numbers; or one verse per line (18a)
+18a. Verse-per-line toggle (lines icon, right of the split toggle): switches both panes together between inline verses and one verse per line (`#reader.verse-per-line .verse { display: block }`). One verse per line, not poetic lineation, which the translations don't carry. The verse at the top of each pane stays where it was as the text reflows. Saved in `localStorage` (`ember.reader.versePerLine`) and applied before the first render, so the saved scroll position lands in the right place — reader.js:toggleVersePerLine/applyVersePerLine
 19. Scripture text max-width 680px, centered — style.css
-20. Reader header contains: split toggle button, spacer, bookmark button (☆), help button (?), settings button (⚙)
-21. Current location displayed as "Book Chapter" (e.g. "Genesis 1") in pane nav — reader.js
-22. Book abbreviation shown in book selector button in pane nav — reader.js
+20. Reader header contains: split toggle button, verse-per-line toggle, spacer, markup button, bookmark button (☆), help button (?), settings button (⚙)
+21. Each pane's nav row reads "KJV Genesis 1 ‹ ›": one button holding the translation abbreviation (`.translation-label`) and "Book Chapter" (`.pane-location`) opens the book/chapter/translation picker, then the ‹ › arrows. A long name in a narrow split pane is cut with an ellipsis rather than pushing the arrows out — reader.js:renderPane, index.html `.pane-nav`
+22. *(Retired: the separate book-abbreviation button and the right-hand translation label are now the one button in 21.)*
 23. Per-pane reading position, translation, and scroll offset persisted to `localStorage` (`ember.pane.left.state` / `ember.pane.right.state`); restored on reload; default Genesis 1 KJV — reader.js
 23a. `.translation-label` in pane nav updated dynamically on every render and on translation switch — reader.js:updateTranslationLabel
 24. Clicking a verse: selects it with a 2px accent-color outline (`outline-offset: 1px`); background stays transparent so markup colors show through; brief outline-pulse animation (0.4s ease-out, 3px→2px) — selection.js:handleVerseClick, style.css:`.verse.selected`, `@keyframes verse-select-glow`
@@ -87,14 +90,14 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 ## Book/Chapter Selector Overlay
 
-42. Opens by clicking the book abbreviation button in pane nav — reader.js:openBookOverlay/closeBookOverlay
+42. Opens by clicking the "KJV Genesis 1" button in pane nav — reader.js:openBookOverlay/closeBookOverlay
 43. Full-screen overlay (fixed, below global header, z-index 200) covering the workspace
 44. Books grouped by testament ("Old Testament" / "New Testament") with bold dividers
 45. Within each testament, books sub-grouped by genre with genre headings: Law, History, Poetry & Wisdom, Prophecy, Gospels, Epistles, Apocalyptic
 46. Each book shown as its abbreviation button; hover tooltip shows full book name
 47. Clicking a book shows a chapter number grid (CSS grid, auto-fill ~44px columns)
 48. Clicking a chapter number navigates to it and closes the overlay — reader.js
-49. Clicking outside the overlay (but not the book button) closes it — reader.js
+49. Clicking outside the overlay (but not the nav button) closes it — reader.js
 50. Pressing Escape closes it — reader.js
 50a. Translation row at top of overlay: one button per installed translation; active translation highlighted with accent color — reader.js:renderTranslationRow, style.css
 50b. Clicking a translation button in the row switches the active pane's translation, preserves the current passage (falls back to chapter 1 if the chapter is absent in the target translation), and keeps the overlay open — reader.js:switchPaneTranslation
@@ -355,8 +358,9 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 143. Settings popover (⚙ button in reference panel header): opens a positioned popover using the shared `.help-popover` component — reference-settings.js
 144. Default tab selector: four-button toggle group (Keep / Info / Tags / Related) — reference-settings.js. "Keep" and the auto-switch behavior are not exposed for the Language or Plans tabs — they can only be reached by manually clicking their tab button
 145. Selected default tab activates automatically whenever a verse is selected, unless set to "Keep" (in which case the currently-open tab is left alone) — reference-settings.js:48-54 (listens to `selection-changed`)
-146. Reset button returns default to Info — reference-settings.js (`DEFAULT_TAB = 'info'`)
+146. Keep is the default setting, and Reset returns to it — reference-settings.js (`DEFAULT_TAB = 'keep'`). An install that saved another choice keeps it until Reset
 147. Default tab persists across reloads via `app_state` key `default_reference_tab` — reference-settings.js
+147a. The reference tab open at the last visit is open at startup (any of the five). Saved on every switch, by click or by code, in `localStorage` (`ember.reference.tab`) rather than `app_state`, since `setState` writes out the whole database — panels.js:switchTab/restoreReferenceTab, called from app.js after every tab has been built
 
 ---
 

@@ -4,7 +4,7 @@ import { getState, setState } from './db.js';
 import { switchReferenceTab } from './panels.js';
 import { bindPopover } from './popover-registry.js';
 
-const DEFAULT_TAB = 'info';
+const DEFAULT_TAB = 'keep';
 const STATE_KEY   = 'default_reference_tab';
 
 export function initReferenceSettings() {

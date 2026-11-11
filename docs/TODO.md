@@ -23,18 +23,6 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 | **Scripture search on FTS4** | Translations are built with an FTS5 `verses_fts` that sql.js can't read, so Scripture search always falls back to `LIKE`. `LIKE '%love%'` also matches "glove" and "beloved". FTS4 (already used for `notes_fts`) gives whole-word matching and optional stemming, with no sql.js rebuild. Decided over custom-compiling sql.js with FTS5. Needs the translation files rebuilt and a reseed path for existing installs. | Small–Medium | `scripts/build_translation.py` (`verses_fts`); `js/db.js` search fallback |
 | **Queue writes in the storage worker** | `storage-worker.js` handles messages concurrently with no queue, so an older save could in principle finish after a newer one and overwrite the latest edit. Not seen in testing ("reassuring, not proof"). Serialize writes and keep only the newest pending one. | Small | `docs/STRESS_TEST_RESULTS.md`, "Other results", write ordering; `js/storage-worker.js`, `saveToStorage()` |
 
-## Reader and panel controls
-
-These all touch the reader and panel controls, so they could ship together as one small build.
-
-| To-do | What Wayne wants | Size | Source |
-|---|---|---|---|
-| **Side-by-side as the default study-panel layout** | Studies panel to the left of the Reference panel. Today the layout is notes-above-reference and resets on every refresh, because the toggle isn't saved. Default to side-by-side and save the choice (`app_state`, like the other panel settings). The code's "stacked"/"column" naming is used inconsistently, so check which class means which before changing it. | Small | `togglePanelLayout()` in `js/panels.js`; FEATURE_INVENTORY items 14–15 |
-| **"Keep" as the default reference tab** | Change `DEFAULT_TAB` from `'info'` to `'keep'`, so Reset also returns to Keep. With Keep, decide which tab is open at startup; remembering the last open tab fits best. | Small | `js/reference-settings.js` |
-| **Verse-per-line toggle** | A button just right of the split-pane button (both control the view), switching both panes together between inline verses and one verse per line. Save the choice. It means one verse per line, not poetic lineation, which the translations don't carry. Check titled Psalm rows. | Small | `js/reader.js`; `.verse` is `display: inline` in `css/style.css` |
-| **Reader nav row: "KJV Genesis 1 < >"** | Replace the separate book button (`GEN`), the "Genesis 1" label and the far-right translation label with one row reading "KJV Genesis 1 < >". Clicking "KJV Genesis 1" opens the existing book/chapter/translation picker. Less to scan, one fewer control. Applies to each pane's nav row. | Small | `.pane-nav` in `index.html`; `js/reader.js` |
-| **"Mobile not supported" message** | For phones and other small touch screens. Detect by a narrow viewport plus a coarse pointer, not by browser name. Reuse the install-overlay pattern ("Ember is built for a desk") with a "Continue anyway" link. Low priority. | Small | `#install-overlay` in `index.html` |
-
 **Not recommended on current numbers:** splitting user data into its own database (remedy 5) or replacing sql.js (remedy 6). The reasoning is in "My read now that 1 to 3 are done", under "Candidate remedies" in `docs/STRESS_TEST_RESULTS.md`. `PRAGMA locking_mode=EXCLUSIVE` was tested and not adopted; see "Long lists, fixed" in the same file.
 
 ## Documentation

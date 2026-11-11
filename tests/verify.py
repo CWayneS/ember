@@ -24,6 +24,9 @@ Usage (from the repo root):
    python3 tests/verify.py storage       # search index after edits and its one-time repair, anchor lookups
                                          #   against a plain scan, empty and damaged core.db, persistent
                                          #   storage request and settings line
+   python3 tests/verify.py controls      # reader and panel controls: side-by-side default, Keep and the
+                                         #   remembered reference tab, verse per line, "KJV Genesis 1" nav
+                                         #   row, the phone notice; each saved across a reload
    python3 tests/verify.py boots         # warm-boot time to "app live": prints samples and the median
    python3 tests/verify.py dbsnapshot out.json          # results of ~36 db.js calls as JSON
    python3 tests/verify.py dbcompare before.json after.json
@@ -394,7 +397,7 @@ def scenario_smoke(app):
     check(not app.visible('#template-bar'), 'template bar shown') if False else check(app.visible('#template-bar'), 'template bar shown')
     p.click('#template-bar-next'); p.wait_for_timeout(200)
     p.click('#template-bar-close')
-    p.click('#reference-tabs [data-tab="plans"]')  # plan navigation selected a verse, which switched the tab back to Info
+    p.click('#reference-tabs [data-tab="plans"]')  # plan navigation opened the Info tab
     p.click('.plans-subtab-btn[data-subtab="study-templates"]')
     check(p.evaluate("document.querySelectorAll('.template-card').length") == 3, 'three templates')
     p.click('.template-card')
@@ -2518,8 +2521,251 @@ def scenario_boots(browser):
     return FAILURES
 
 
+# ---------------------------------------------------------------- reader and panel controls
+
+def reload_app(app):
+    app.page.reload()
+    app.page.wait_for_selector('#loading.hidden', state='attached', timeout=60_000)
+    app.page.wait_for_selector('#reader-pane-a .verse', timeout=30_000)
+
+
+def top_verse_offset(p, pane='a'):
+    """The verse at the top of a pane and how far below the pane's top it starts."""
+    return p.evaluate("""pane => {
+        const content = document.querySelector(`#reader-pane-${pane} .pane-content`);
+        const top = content.getBoundingClientRect().top;
+        for (const verse of content.querySelectorAll('.verse')) {
+            const rect = verse.getBoundingClientRect();
+            if (rect.bottom > top) return [Number(verse.dataset.verseId), Math.round(rect.top - top)];
+        }
+        return null;
+    }""", pane)
+
+
+def verse_offset(p, verse_id, pane='a'):
+    return p.evaluate("""([pane, id]) => {
+        const content = document.querySelector(`#reader-pane-${pane} .pane-content`);
+        const verse = content.querySelector(`.verse[data-verse-id="${id}"]`);
+        return Math.round(verse.getBoundingClientRect().top - content.getBoundingClientRect().top);
+    }""", [pane, verse_id])
+
+
+def scenario_controls(browser):
+    ctx = browser.new_context(viewport={'width': 1280, 'height': 800})
+    app = App(ctx.new_page())
+    app.boot()
+    p = app.page
+    state = lambda key: p.evaluate(f"import('./js/db.js').then(db => db.getState('{key}'))")
+
+    # Side by side by default, and the choice is saved.
+    check(p.evaluate("document.getElementById('study-panels').classList.contains('side-by-side')"), 'layout: side by side by default')
+    widths = p.evaluate("['notes-panel', 'reference-panel'].map(id => document.getElementById(id).getBoundingClientRect())"
+                        ".map(r => [Math.round(r.left), Math.round(r.top)])")
+    check(widths[0][0] < widths[1][0] and widths[0][1] == widths[1][1], f'layout: notes to the left of reference ({widths})')
+    # A 1280px screen leaves each study panel ~320px: tabs wrap onto more rows
+    # (never more than three, never scrolled or clipped), with ? and ⚙ in view.
+    tabs_layout = """sel => {
+        const nav = document.querySelector(sel);
+        const box = nav.getBoundingClientRect();
+        const header = nav.closest('.panel-header').getBoundingClientRect();
+        const kids = [...nav.children];
+        return {
+            rows: new Set(kids.map(k => Math.round(k.getBoundingClientRect().top))).size,
+            hidden: kids.filter(k => { const r = k.getBoundingClientRect();
+                return r.right > box.right + 1 || r.bottom > box.bottom + 1 || r.width < 20; }).length,
+            scrolls: nav.scrollHeight > nav.clientHeight + 1,
+            actionsOut: [...nav.closest('.panel-header').querySelectorAll('.panel-header-actions button')]
+                .filter(b => b.getBoundingClientRect().right > header.right + 1).length,
+            height: Math.round(header.height),
+        };
+    }"""
+    ref = p.evaluate(tabs_layout, '#reference-tabs')
+    check(ref['rows'] in (2, 3) and ref['hidden'] == 0 and not ref['scrolls'] and ref['actionsOut'] == 0,
+          f'layout: reference tabs wrap at 1280px, all in view ({ref})')
+    p.set_viewport_size({'width': 1920, 'height': 800})
+    p.wait_for_timeout(100)
+    ref = p.evaluate(tabs_layout, '#reference-tabs')
+    check(ref['rows'] == 1 and ref['height'] == 44, f'layout: one 44px row at 1920px ({ref})')
+    p.set_viewport_size({'width': 1280, 'height': 800})
+    p.wait_for_timeout(100)
+    for count, rows in ((4, None), (8, 3)):
+        p.evaluate(f"""import('./js/panels.js').then(m => {{
+            for (let i = document.querySelectorAll('#notes-tabs .notes-tab').length; i <= {count}; i++)
+                m.openStudy('t' + i, 'Study number ' + i); }})""")
+        p.wait_for_timeout(150)
+        notes = p.evaluate(tabs_layout, '#notes-tabs')
+        ok = notes['hidden'] == 0 and not notes['scrolls'] and notes['actionsOut'] == 0 and notes['rows'] <= 3
+        if rows: ok = ok and notes['rows'] == rows
+        check(ok, f'layout: {count} open studies wrap, at most three rows, all in view ({notes})')
+    if os.environ.get('EMBER_SCREENSHOTS'):
+        p.screenshot(path=os.path.join(os.environ['EMBER_SCREENSHOTS'], 'controls-1280-tabs.png'))
+    basis = p.evaluate("document.getElementById('notes-tabs').style.getPropertyValue('--notes-tab-basis')")
+    check(basis != '120px', f'layout: with three rows full, study tabs narrow instead of adding a row ({basis})')
+    p.evaluate("""import('./js/panels.js').then(m => {
+        for (let i = 9; i <= 16; i++) m.openStudy('t' + i, 'Study number ' + i); })""")
+    p.wait_for_timeout(150)
+    notes = p.evaluate(tabs_layout, '#notes-tabs')
+    check(notes['scrolls'] and notes['height'] == 116, f'layout: past what three rows hold, the header stays three rows high and scrolls ({notes})')
+    p.evaluate("import('./js/panels.js').then(m => { for (let i = 1; i <= 16; i++) m.closeStudy('t' + i); })")
+    p.wait_for_timeout(150)
+    notes = p.evaluate(tabs_layout, '#notes-tabs')
+    check(notes['rows'] == 1, f'layout: closing them returns to one row ({notes})')
+    p.click('#layout-toggle-btn')
+    check(not p.evaluate("document.getElementById('study-panels').classList.contains('side-by-side')"), 'layout: toggle stacks notes above reference')
+    check(state('study_panel_layout') == 'stacked', 'layout: stacked saved in app_state')
+    p.wait_for_timeout(500)
+    reload_app(app)
+    check(not p.evaluate("document.getElementById('study-panels').classList.contains('side-by-side')"), 'layout: stacked kept across a reload')
+    p.click('#layout-toggle-btn')
+    check(state('study_panel_layout') == 'side-by-side', 'layout: side by side saved again')
+
+    # Keep is the default reference tab; the open tab comes back after a reload.
+    active_setting = "document.querySelector('#reference-settings-popover .tab-toggle-btn.active').dataset.tab"
+    active_tab = "document.querySelector('#reference-tabs .tab-btn.active').dataset.tab"
+    check(p.evaluate(active_setting) == 'keep', 'reference: Keep is the default tab setting')
+    p.click('#reference-tabs [data-tab="tags"]')
+    app.select_verse(1001003)
+    check(p.evaluate(active_tab) == 'tags', 'reference: selecting a verse keeps the open tab')
+    p.wait_for_timeout(300)
+    reload_app(app)
+    check(p.evaluate(active_tab) == 'tags', 'reference: the last open tab is open after a reload')
+    check(p.evaluate("!document.getElementById('tags-tab').classList.contains('hidden')"), 'reference: and its content is shown')
+    p.click('#reference-tabs [data-tab="plans"]')
+    p.wait_for_timeout(300)
+    reload_app(app)
+    check(p.evaluate(active_tab) == 'plans' and p.evaluate("document.querySelectorAll('#plans-tab .plan-card').length") == 3,
+          'reference: Plans comes back with its plans listed')
+    p.click('#reference-tabs [data-tab="language"]')
+    p.wait_for_timeout(300)
+    reload_app(app)
+    check(p.evaluate(active_tab) == 'language', 'reference: Language comes back')
+    check(p.evaluate("!document.getElementById('language-tab').classList.contains('hidden')"), 'reference: and its panel is shown')
+    p.click('#reference-tabs [data-tab="tags"]')
+    p.click('#reference-panel .panel-settings-btn')
+    p.click('#reference-settings-popover [data-tab="info"]')
+    app.select_verse(1001004)
+    check(p.evaluate(active_tab) == 'info', 'reference: a chosen default tab still opens on selection')
+    p.evaluate("document.getElementById('ref-tab-reset').click()")  # the popover closed on the verse click
+    check(p.evaluate(active_setting) == 'keep', 'reference: Reset returns to Keep')
+
+    # Nav row reads "KJV Genesis 1 ‹ ›", and the one button opens the picker.
+    nav = p.evaluate("document.querySelector('#reader-pane-a .pane-nav').innerText.replace(/\\s+/g, ' ').trim()")
+    check(nav == 'KJV Genesis 1 ‹ ›', f'nav: one row "{nav}"')
+    p.click('#reader-pane-a .pane-book-btn')
+    check(app.visible('#book-overlay'), 'nav: the button opens the book/chapter/translation picker')
+    p.click('.translation-btn:has-text("WEB")')
+    p.keyboard.press('Escape')
+    check(p.evaluate("document.querySelector('#reader-pane-a .pane-book-btn').textContent") == 'WEB Genesis 1', 'nav: translation shown in the button')
+    p.click('#split-toggle-btn')
+    app.navigate(52, 5)  # 1 Thessalonians, the longest name, in pane A of a split reader
+    fits = p.evaluate("(() => { const nav = document.querySelector('#reader-pane-a .pane-nav').getBoundingClientRect();"
+                      " const next = document.querySelector('#reader-pane-a .pane-next').getBoundingClientRect();"
+                      " return next.right <= nav.right; })()")
+    check(fits, 'nav: "WEB 1 Thessalonians 5 ‹ ›" fits a split pane')
+    p.click('#split-toggle-btn')
+
+    # One verse per line, both panes, saved; the top verse stays put.
+    display = "getComputedStyle(document.querySelector('#reader-pane-a .verse:not(.verse-title)')).display"
+    check(p.evaluate(display) == 'inline', 'verse per line: off by default')
+    app.navigate(19, 119)
+    # The top verse keeps its place; one that starts above the pane's top edge
+    # (an inline verse running over several lines) is brought to the top.
+    p.evaluate("document.querySelector('#reader-pane-a .pane-content').scrollTop = 2000")
+    anchor, offset = top_verse_offset(p)
+    p.click('#verse-lines-btn')
+    after = verse_offset(p, anchor)
+    check(p.evaluate(display) == 'block', 'verse per line: verses are blocks')
+    check(p.evaluate("document.getElementById('verse-lines-btn').getAttribute('aria-pressed')") == 'true', 'verse per line: button pressed')
+    check(abs(after - max(0, offset)) <= 1, f'verse per line: Psalm 119 top verse stays at the top ({anchor} {offset} → {after})')
+    p.evaluate("document.querySelector('#reader-pane-a .pane-content').scrollTop += 13")
+    anchor, offset = top_verse_offset(p)
+    p.click('#verse-lines-btn')
+    after = verse_offset(p, anchor)
+    check(abs(after - max(0, offset)) <= 1, f'verse per line: and back again ({anchor} {offset} → {after})')
+    p.click('#verse-lines-btn')
+    p.click('#split-toggle-btn')
+    check(p.evaluate("getComputedStyle(document.querySelector('#reader-pane-b .verse:not(.verse-title)')).display") == 'block', 'verse per line: the second pane follows')
+    p.click('#split-toggle-btn')
+    p.click('#reader-pane-a .pane-book-btn')
+    p.click('.translation-btn:has-text("KJV")')
+    p.keyboard.press('Escape')
+    app.navigate(19, 3)  # a titled Psalm (KJV; its title fills in once language.db is here)
+    p.wait_for_selector('#reader-pane-a .verse-title .verse-text:not(:empty)', timeout=180_000)
+    title = p.evaluate("(() => { const t = document.querySelector('#reader-pane-a .verse-title');"
+                       " return t ? [getComputedStyle(t).display, getComputedStyle(t.querySelector('.verse-text')).fontStyle] : null; })()")
+    check(title == ['block', 'italic'], f'verse per line: Psalm 3 title row ({title})')
+    lines = p.evaluate("[...document.querySelectorAll('#reader-pane-a .verse:not(.verse-title)')].slice(0, 3)"
+                       ".map(v => Math.round(v.getBoundingClientRect().left))")
+    check(len(set(lines)) == 1, f'verse per line: each verse starts its own line ({lines})')
+    app.navigate(19, 119)
+    p.evaluate("document.querySelector('#reader-pane-a .pane-content').scrollTop = 2400")
+    p.wait_for_timeout(400)  # past the 200 ms scroll save
+    anchor, offset = top_verse_offset(p)
+    reload_app(app)
+    p.wait_for_timeout(300)
+    check(p.evaluate(display) == 'block', 'verse per line: kept across a reload')
+    after = top_verse_offset(p)
+    check(after == [anchor, offset], f'verse per line: a reload opens at the same verse ({[anchor, offset]} → {after})')
+    shots = os.environ.get('EMBER_SCREENSHOTS')  # a directory: saves the layout to look at
+    if shots:
+        p.screenshot(path=os.path.join(shots, 'controls-1280.png'))
+        p.click('#split-toggle-btn'); p.wait_for_timeout(300)
+        p.screenshot(path=os.path.join(shots, 'controls-1280-split.png'))
+        p.click('#split-toggle-btn')
+        app.navigate(1, 1)
+        app.select_verse(1001001)
+        p.click('#reference-tabs [data-tab="language"]')
+        p.wait_for_selector('.language-word-row', timeout=120_000)
+        p.click('.language-word-row >> nth=1')
+        p.wait_for_selector('.language-word-card')
+        p.click('.language-card-more-btn')
+        p.wait_for_selector('.language-card-tier2')
+        lexicon = p.query_selector('.language-card-lexicon-btn')
+        if lexicon:
+            lexicon.click(); p.wait_for_selector('.language-card-lexicon', timeout=60_000)
+        p.wait_for_timeout(500)
+        p.screenshot(path=os.path.join(shots, 'controls-1280-language.png'))
+    p.click('#verse-lines-btn')
+    for e in app.errors:
+        print('  ERROR ' + e)
+    FAILURES.extend(app.errors)
+    ctx.close()
+
+    # Phones: the notice shows, "Continue anyway" closes it and is remembered.
+    phone = browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+    page = phone.new_page()
+    page.goto(URL)
+    check(page.evaluate("matchMedia('(pointer: coarse)').matches"), 'phone: the emulated pointer is coarse')
+    page.wait_for_selector('#mobile-overlay:not(.hidden)', timeout=10_000)
+    check(page.evaluate("Number(getComputedStyle(document.getElementById('mobile-overlay')).zIndex) > Number(getComputedStyle(document.getElementById('loading')).zIndex)"),
+          'phone: the notice is above the loading screen')
+    box = page.evaluate("(() => { const r = document.getElementById('mobile-notice').getBoundingClientRect(); return [r.left, r.right]; })()")
+    check(box[0] >= 0 and box[1] <= 390, f'phone: the notice fits the screen ({box})')
+    page.click('#mobile-continue-btn')
+    check(page.evaluate("document.getElementById('mobile-overlay').classList.contains('hidden')"), 'phone: Continue anyway closes it')
+    page.wait_for_selector('#loading.hidden', state='attached', timeout=180_000)
+    page.reload()
+    page.wait_for_timeout(500)
+    check(page.evaluate("document.getElementById('mobile-overlay').classList.contains('hidden')"), 'phone: not shown again after Continue anyway')
+    phone.close()
+    landscape = browser.new_context(viewport={'width': 844, 'height': 390}, is_mobile=True, has_touch=True)
+    page = landscape.new_page()
+    page.goto(URL)
+    page.wait_for_timeout(500)
+    check(not page.evaluate("document.getElementById('mobile-overlay').classList.contains('hidden')"), 'phone held sideways: the notice shows')
+    landscape.close()
+    desk = browser.new_context(viewport={'width': 700, 'height': 600})
+    page = desk.new_page()
+    page.goto(URL)
+    page.wait_for_timeout(500)
+    check(page.evaluate("document.getElementById('mobile-overlay').classList.contains('hidden')"), 'narrow desktop window (fine pointer): no notice')
+    desk.close()
+    return FAILURES
+
+
 BROWSER_SCENARIOS = {'offline': scenario_offline, 'lexicon': scenario_lexicon,
-                     'storage': scenario_storage, 'boots': scenario_boots}
+                     'storage': scenario_storage, 'boots': scenario_boots,
+                     'controls': scenario_controls}
 
 
 def main():

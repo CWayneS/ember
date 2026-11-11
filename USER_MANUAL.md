@@ -28,13 +28,16 @@ You'll land on Genesis 1 with empty study panels on the left. The loading screen
 
 ### The layout
 
-The screen is split into two halves. The right side is the reader. The left side holds your study panels — notes above, reference below. You can drag the vertical handle between them to resize either half, and click the **⇅** button above the notes panel to switch between the panels being stacked or side by side.
+The screen is split into two halves. The right side is the reader. The left side holds your study panels — notes on the left, reference beside them. You can drag the handles between them to resize any of the three, and click the **⇅** button in the notes panel header to stack notes above reference instead (**⇆** puts them side by side again). Ember remembers which you chose.
+
+Ember is built for a desk: a large screen, a keyboard, and a mouse or trackpad. On a phone it shows a notice saying so first; **Continue anyway** opens it regardless, and the notice won't appear again on that phone.
 
 ### The reader header
 
 At the top of the reader you'll find, from left to right:
 
 - **Split reader** (the two-rectangle icon) — opens a second reading pane alongside the first, so you can read two passages (or two translations) at once. Click again to close it.
+- **One verse per line** (the lines icon) — starts each verse on its own line instead of running them together as paragraphs, in both panes. Click again to go back. Ember remembers the choice. This is one verse per line, not the poetic line breaks of a printed Bible, which these translations don't carry.
 - **Markup tools** (the pen icon) — opens a strip of highlight colors, underline styles, and a circle tool for marking up a selected verse or range. See [Marking Up Verses](#marking-up-verses).
 - **☆ Bookmark** — bookmarks the selected verse, or shows your bookmark list if nothing is selected. See [Bookmarks](#bookmarks).
 - **? Help** — a quick reference popover for the reader.
@@ -42,7 +45,7 @@ At the top of the reader you'll find, from left to right:
 
 ### Switching translations
 
-Each reading pane shows its translation abbreviation (e.g. "KJV") at the top. Click the book/chapter button to open the selector — it now opens with a row of translation buttons (KJV, ASV, WEB, YLT, Darby, BSB) across the top. Click one to switch that pane to that translation without leaving your current chapter. If you're using split reader, each pane keeps its own translation independently.
+Each reading pane's top row reads like "KJV Genesis 1 ‹ ›". Click "KJV Genesis 1" to open the selector — it opens with a row of translation buttons (KJV, ASV, WEB, YLT, Darby, BSB) across the top. Click one to switch that pane to that translation without leaving your current chapter. If you're using split reader, each pane keeps its own translation independently.
 
 ### Reading in two panes side by side
 
@@ -56,7 +59,7 @@ Your reading position is saved automatically. When you reopen Ember, you'll retu
 
 ### The book/chapter selector
 
-Click the book abbreviation button (e.g. "Gen") to open the selector. It covers the workspace with a translation row at top, then all 66 books organized by testament and genre:
+Click the translation and chapter at the top of a pane (e.g. "KJV Genesis 1") to open the selector. It covers the workspace with a translation row at top, then all 66 books organized by testament and genre:
 
 **Old Testament:** Law · History · Poetry & Wisdom · Prophecy
 
@@ -178,7 +181,9 @@ In the All Studies view, hover over a study to reveal the **✕** delete button 
 
 ## The Reference Panel
 
-The reference panel sits below the notes panel on the left. It has five tabs: **Info**, **Tags**, **Related**, **Language**, and **Plans**.
+The reference panel sits beside the notes panel (or below it, if you've stacked them). It has five tabs: **Info**, **Tags**, **Related**, **Language**, and **Plans**. Whichever tab you had open is open again the next time you start Ember.
+
+Selecting a verse leaves the open tab alone. To have a particular tab come up every time you select a verse instead, choose it under the panel's **⚙** → Default tab; **Keep** (the default) leaves the tab as it is.
 
 Select a verse in the reader to populate the first four tabs. Without a selection, each shows "Select a verse to see reference material." Plans doesn't depend on a selection — see below.
 

@@ -62,6 +62,7 @@ function getTranslationsList() {
 let activePaneId = 'a';
 let splitActive  = localStorage.getItem('ember.reader.split') === 'true';
 let splitRatio   = 50;    // pane A percentage width when split
+let versePerLine = localStorage.getItem('ember.reader.versePerLine') === 'true';
 let overlayPane  = 'a';   // which pane triggered the book overlay
 
 // ============================================================
@@ -92,6 +93,9 @@ export function initReader() {
     }
 
     document.getElementById('split-toggle-btn').addEventListener('click', toggleSplit);
+    document.getElementById('verse-lines-btn').addEventListener('click', toggleVersePerLine);
+    // Before the first render: the saved scroll positions are for this layout.
+    applyVersePerLine();
 
     document.addEventListener('click', (e) => {
         const overlay = document.getElementById('book-overlay');
@@ -238,7 +242,6 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
     const verses = getChapter(panes[paneId].translationId, bookId, chapter);
     const textEl = getTextEl(paneId);
 
-    navEl(paneId, '.pane-book-btn').textContent = book.abbrev;
     navEl(paneId, '.pane-location').textContent = `${book.name} ${chapter}`;
 
     textEl.innerHTML = '';
@@ -458,6 +461,47 @@ function toggleSplit() {
         getPaneEl('b').style.flex = '';
         if (activePaneId === 'b') setActivePane('a');
     }
+}
+
+// ============================================================
+// Verse-per-line toggle — both panes together. One verse per line, not
+// poetic lineation: the translations don't carry line breaks.
+// ============================================================
+
+function applyVersePerLine() {
+    document.getElementById('reader').classList.toggle('verse-per-line', versePerLine);
+    const btn = document.getElementById('verse-lines-btn');
+    btn.classList.toggle('active', versePerLine);
+    btn.setAttribute('aria-pressed', String(versePerLine));
+}
+
+function toggleVersePerLine() {
+    // Keep the verse at the top of each pane where it is while the text reflows.
+    const anchors = visiblePaneIds().map(id => ({ id, ...topVisibleVerse(id) }));
+    versePerLine = !versePerLine;
+    localStorage.setItem('ember.reader.versePerLine', String(versePerLine));
+    applyVersePerLine();
+    for (const { id, verse, offset } of anchors) {
+        if (!verse) continue;
+        const content = getContentEl(id);
+        content.scrollTop += verse.getBoundingClientRect().top - content.getBoundingClientRect().top - offset;
+    }
+}
+
+function visiblePaneIds() {
+    return splitActive ? ['a', 'b'] : ['a'];
+}
+
+// The first verse whose box reaches below the pane's top edge, and how far
+// below that edge it starts.
+function topVisibleVerse(paneId) {
+    const content = getContentEl(paneId);
+    const top = content.getBoundingClientRect().top;
+    for (const verse of getTextEl(paneId).querySelectorAll('.verse')) {
+        const rect = verse.getBoundingClientRect();
+        if (rect.bottom > top) return { verse, offset: Math.max(0, rect.top - top) };
+    }
+    return { verse: null, offset: 0 };
 }
 
 // ============================================================

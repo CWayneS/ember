@@ -39,7 +39,7 @@
 
     <div id="workspace">
 
-        <div id="study-panels">
+        <div id="study-panels" class="side-by-side">
 
             <section id="notes-panel">
                 <header class="panel-header">
@@ -49,7 +49,7 @@
                         <button id="notes-tab-add" aria-label="New study" title="New study">+</button>
                     </nav>
                     <div class="panel-header-actions">
-                        <button id="layout-toggle-btn" aria-label="Toggle panel layout" title="Toggle stacked / side-by-side">⇅</button>
+                        <button id="layout-toggle-btn" aria-label="Toggle panel layout" title="Put notes above reference">⇅</button>
                         <button class="panel-help-btn" aria-label="Notes help">?</button>
                         <button class="panel-settings-btn" aria-label="Notes settings">⚙</button>
                     </div>
@@ -108,6 +108,13 @@
                         <rect x="11.5" y="2.5" width="7" height="15" rx="1"/>
                     </svg>
                 </button>
+                <button id="verse-lines-btn" aria-label="One verse per line" aria-pressed="false" title="One verse per line">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+                        <line x1="2.5" y1="4.5" x2="3.5" y2="4.5"/><line x1="6.5" y1="4.5" x2="17.5" y2="4.5"/>
+                        <line x1="2.5" y1="10" x2="3.5" y2="10"/><line x1="6.5" y1="10" x2="15" y2="10"/>
+                        <line x1="2.5" y1="15.5" x2="3.5" y2="15.5"/><line x1="6.5" y1="15.5" x2="16.5" y2="15.5"/>
+                    </svg>
+                </button>
                 <div class="reader-header-spacer"></div>
                 <button id="markup-btn" aria-label="Markup tools" title="Markup tools">
                     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -140,12 +147,9 @@
             <div id="reader-body">
                 <div class="reader-pane active" id="reader-pane-a">
                     <div class="pane-nav">
-                        <button class="pane-book-btn" aria-label="Select book and chapter"></button>
-                        <span class="pane-location"></span>
-                        <button class="pane-prev" aria-label="Previous chapter">‹</button>
-                        <button class="pane-next" aria-label="Next chapter">›</button>
-                        <div class="pane-nav-spacer"></div>
-                        <span class="translation-label">KJV</span>
+                        <button class="pane-book-btn" title="Choose book, chapter, or translation"><span class="translation-label">KJV</span> <span class="pane-location"></span></button>
+                        <button class="pane-prev" aria-label="Previous chapter" title="Previous chapter">‹</button>
+                        <button class="pane-next" aria-label="Next chapter" title="Next chapter">›</button>
                     </div>
                     <div class="pane-content">
                         <div class="scripture-text"></div>
@@ -154,12 +158,9 @@
                 <div id="reader-split-handle" class="hidden" aria-hidden="true"></div>
                 <div class="reader-pane hidden" id="reader-pane-b">
                     <div class="pane-nav">
-                        <button class="pane-book-btn" aria-label="Select book and chapter"></button>
-                        <span class="pane-location"></span>
-                        <button class="pane-prev" aria-label="Previous chapter">‹</button>
-                        <button class="pane-next" aria-label="Next chapter">›</button>
-                        <div class="pane-nav-spacer"></div>
-                        <span class="translation-label">KJV</span>
+                        <button class="pane-book-btn" title="Choose book, chapter, or translation"><span class="translation-label">KJV</span> <span class="pane-location"></span></button>
+                        <button class="pane-prev" aria-label="Previous chapter" title="Previous chapter">‹</button>
+                        <button class="pane-next" aria-label="Next chapter" title="Next chapter">›</button>
                     </div>
                     <div class="pane-content">
                         <div class="scripture-text"></div>
@@ -198,11 +199,11 @@
     <div id="reader-help-popover" class="help-popover hidden" role="dialog" aria-label="Reader help">
         <p class="help-popover-lead"><strong>Your Bible.</strong> Navigate, read, and bookmark Scripture here.</p>
         <ul>
-            <li>Use the book button (top left) to jump to any book and chapter</li>
+            <li>Click the translation and chapter (e.g. "KJV Genesis 1") to jump to any book, chapter, or translation</li>
             <li>Click a verse to select it — notes and references update automatically</li>
             <li>‹ › arrows move between chapters</li>
             <li>The ⬤ button bookmarks the selected verse</li>
-            <li>Split view lets you read two passages side by side</li>
+            <li>Split view lets you read two passages side by side; the lines button next to it puts each verse on its own line</li>
         </ul>
         <a href="#" class="help-more-link">Need more? A full help guide is on its way. For now, try clicking around — Ember is designed to teach itself through use.</a>
     </div>
@@ -283,6 +284,15 @@
             <p>Install Ember for the full offline experience.</p>
             <button id="install-accept-btn">Install</button>
             <button id="install-dismiss-btn">Not now</button>
+        </div>
+    </div>
+
+    <!-- Phones and other small touch screens (app.js) -->
+    <div id="mobile-overlay" class="hidden" role="dialog" aria-labelledby="mobile-notice-heading">
+        <div id="mobile-notice">
+            <p id="mobile-notice-heading"><strong>Ember is built for a desk.</strong></p>
+            <p>It needs a large screen, a keyboard, and a mouse or trackpad, so on a phone much of it won't fit or won't work. Open it on a computer for the full study workspace.</p>
+            <button id="mobile-continue-btn">Continue anyway</button>
         </div>
     </div>
 

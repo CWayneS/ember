@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v26'; // bumped: Export Backup writes pending autosaves first (global-settings.js changed)
+const CACHE_NAME = 'ember-v27'; // bumped: reader and panel controls (index.html, style.css, app.js, panels.js, reader.js, reference-settings.js changed)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:
