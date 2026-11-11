@@ -1799,6 +1799,97 @@ def lexicon_references(app, db):
     check(shown == 0, f'selecting a verse mid-fade leaves no outline to replay later ({shown})')
 
 
+def greek_lexicon(app, db):
+    """TBESG: outline markers become nested senses, New Testament references link, nothing is lost."""
+    p = app.page
+    res = p.evaluate("""async () => {
+        const m = await import('./js/greek-lexicon.js');
+        const cases = [['Mat.27.46', 'Mat.27:46;'], ['Heb.11.4; 12.24', 'Heb.11:4, 12:24'], ['Rom.15.5, 13, 33', 'Rom.15:5, 13, 33'],
+            ['3Jn.11', 'III Jo 11'], ['Luk.4.34.', 'Luk.4:34.'], ['Mat.8.30-32', 'Mat.8:30-32'], ['Luke.20.37', 'Luk.20:37'],
+            ['Deu.3.24', 'Deu.3:24'], ['Act.5.39', 'Act.5:39'], ['Jhn.2.28', 'Jhn.2:28'], ['Luk.1.5', 'Luk.1:6'], ['1Ma.11.33', '1Ma.11:33']];
+        return cases.map(([attribute, label]) => m.resolveGreekReference(attribute, label)
+            .map(part => part.target ? [part.text, part.target.book * 1000000 + part.target.chapter * 1000 + part.target.verse] : part.text));
+    }""")
+    expected = [[['Mat.27:46', 40027046], ';'], [['Heb.11:4', 58011004], ', ', ['12:24', 58012024]],
+                [['Rom.15:5', 45015005], ', ', ['13', 45015013], ', ', ['33', 45015033]], [['III Jo 11', 64001011]],
+                [['Luk.4:34', 42004034], '.'], [['Mat.8:30-32', 40008030]], [['Luk.20:37', 42020037]],
+                ['Deu.3:24'], ['Act.5:39'], ['Jhn.2:28'], ['Luk.1:6'], ['1Ma.11:33']]
+    check(res == expected, f'Greek references: New Testament verses link, one link per verse; the Septuagint, a differently numbered verse, '
+          f'a missing verse and a mismatched label stay text ({[r for r, e in zip(res, expected) if r != e]})')
+
+    res = p.evaluate("""async () => {
+        const m = await import('./js/greek-lexicon.js');
+        const host = document.createElement('div');
+        host.appendChild(m.renderGreekLexiconMeaning(
+            "<script>window.__greekRan = 1</script><img src=x onerror='window.__greekRan = 2'>&lt;b&gt;bold?&lt;/b&gt; "
+            + "<ref='Mat.1.1' onclick='window.__greekRan = 3'>Mat.1:1</ref><a href=\\"javascript:void(0)\\" title='t'>era</a>"));
+        document.body.appendChild(host);
+        await new Promise(r => setTimeout(r, 100));
+        const out = { elements: [...host.querySelectorAll('*')].map(e => e.tagName),
+            attributes: [...new Set([...host.querySelectorAll('*')].flatMap(e => [...e.attributes].map(a => a.name)))],
+            text: host.textContent, ran: window.__greekRan ?? null };
+        host.remove();
+        return out;
+    }""")
+    check(res['ran'] is None and not set(res['elements']) - {'DIV', 'BUTTON'} and not any(a.startswith('on') or a == 'href' for a in res['attributes'])
+          and '<b>bold?</b>' in res['text'], f'hostile Greek markup: text only, no handlers, no live tags ({res})')
+
+    entries = [(row[0], row[1]) for row in db.execute("SELECT strongs_number, meaning FROM step_lexicon_greek WHERE meaning IS NOT NULL AND meaning != ''")]
+    res = p.evaluate("""async (entries) => {
+        const m = await import('./js/greek-lexicon.js');
+        // A stray "{" before a marker ends up after its label.
+        const squash = text => text.replace(/\\s+/g, '').replace(/\\(with\\)/g, '(c)').replace(/[{}]/g, '');
+        const decode = text => text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+        const bad = { visible: [], lost: [], elements: 0 };
+        for (const [strongs, meaning] of entries) {
+            const host = document.createElement('div');
+            host.appendChild(m.renderGreekLexiconMeaning(meaning));
+            const text = host.textContent;
+            if (/__|<date|<a |<ref|&gt;|&amp;|javascript:/.test(text) && bad.visible.length < 5) bad.visible.push(strongs);
+            bad.elements += host.querySelectorAll('script, img, a, iframe, [href], [onclick], [onerror]').length;
+            const source = decode(meaning.replace(/<\\/?[A-Za-z]+(?:\\s*=\\s*'[^']*'[^>]*?|\\s+[^>]*?)?\\s*\\/?>/g, '')).replace(/__/g, '').replace(/([A-Za-z])_(\\d)/g, '$1$2');
+            if (squash(text) !== squash(source) && bad.lost.length < 5) bad.lost.push(strongs);
+        }
+        return bad;
+    }""", entries)
+    check(res == {'visible': [], 'lost': [], 'elements': 0},
+          f"every Greek entry ({len(entries)}) renders with no markup or markers showing and no text lost ({res})")
+
+    g2316 = p.evaluate("""async () => {
+        const m = await import('./js/greek-lexicon.js');
+        const host = document.createElement('div');
+        host.appendChild(m.renderGreekLexiconMeaning(await (await import('./js/db.js')).getGreekLexiconEntry('G2316').then(e => e.meaning)));
+        const labels = parent => [...parent.querySelectorAll(':scope > .language-lexicon-sense')].map(s => s.querySelector('.language-lexicon-sense-label').textContent);
+        const second = host.querySelectorAll(':scope > .language-lexicon-sense')[1];
+        return { top: labels(host), nested: labels(second.querySelector('.language-lexicon-sense-body')) };
+    }""")
+    check(g2316['top'] == ['1.', '2.'] and g2316['nested'][:2] == ['(a)', '(b)'], f'θεός: 1. and 2. at the top, (a) and (b) inside 2. ({g2316})')
+
+    with_entry = next(strongs for strongs, meaning in entries if re.search(r'__\(b\)(?:(?!__).)*__\(with\)', meaning))
+    labels = p.evaluate("""async (strongs) => {
+        const m = await import('./js/greek-lexicon.js');
+        const host = document.createElement('div');
+        host.appendChild(m.renderGreekLexiconMeaning(await (await import('./js/db.js')).getGreekLexiconEntry(strongs).then(e => e.meaning)));
+        return [...host.querySelectorAll('.language-lexicon-sense-label')].map(l => l.textContent);
+    }""", with_entry)
+    check('(c)' in labels and '(with)' not in labels, f'{with_entry}: "__(with)" after (b) reads "(c)" ({labels})')
+    labels = p.evaluate("""async () => {
+        const m = await import('./js/greek-lexicon.js');
+        const host = document.createElement('div');
+        host.appendChild(m.renderGreekLexiconMeaning(await (await import('./js/db.js')).getGreekLexiconEntry('G2106').then(e => e.meaning)));
+        return [...host.querySelectorAll('.language-lexicon-sense-label')].map(l => l.textContent);
+    }""")
+    check(labels[-1] == '(c)', f'G2106: "(with)" after (b) and its α, β sub-points still reads "(c)" ({labels})')
+
+    member = open_tier2(app, db, 43001001, 11)  # John 1:1 #12 θεόν, G2316
+    member.locator(LEXICON_LINK).click()
+    p.wait_for_selector('.language-card-lexicon .language-lexicon-sense')
+    res = p.evaluate(REFERENCE_TAP_JS.replace('element.dataset.ref === osisRef', 'element.dataset.verseId === osisRef'), '40027046')
+    check(res is not None and res['shownVerse'] == 40027046 and res['location'] == 'Matthew 27' and res['entryStillOpen'] is False
+          and res['languageTabActive'] and p.evaluate("!!document.querySelector('.language-card-lexicon .language-lexicon-sense')"),
+          f'tapping "Mat.27:46" in θεός opens Matthew 27:46 and leaves the Greek entry open ({res})')
+
+
 def lexicon_loading(browser):
     """Item 4: opened on the first Lexicon tap, never at boot; exactly one download; friendly when missing."""
     run = OfflineRun(browser)
@@ -1875,6 +1966,7 @@ def scenario_lexicon(browser):
     lexicon_glide(app, db, 43001001, 11, 'Greek (John 1:1 #12 θεόν)')
     lexicon_references(app, db)
     language_occurrences(app, db)
+    greek_lexicon(app, db)
     check(app.errors == [], f'lexicon words: no console errors {app.errors[:3]}')
     ctx.close()
     db.close()

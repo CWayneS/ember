@@ -207,6 +207,8 @@ Tap any row to open a card beneath it with that word's original-language spellin
 
 Tap **Click for more** on a word for its dictionary form (lemma), transliteration, and a plain-English breakdown of its grammar. At the bottom, **Show Lexicon** opens the word's dictionary entry. If the entry opens below the bottom edge of the panel, the panel glides up to show it.
 
+**The Greek lexicon** (Abbott-Smith, for New Testament words) is laid out as an outline like the Hebrew one: numbered senses, with lettered ones indented beneath them. Its New Testament references are links that open the verse the same way. Its Old Testament references stay plain text: Abbott-Smith cites the Greek Septuagint, whose book names and verse numbers often differ from English Bibles (its "1 Kingdoms" is 1 Samuel, and most of its Psalms are numbered one lower).
+
 **All occurrences** lists everywhere the Bible uses the same word in the same sense, counted by book (Genesis 11, Exodus 1, …). Tap a book to see its verses, each with how the word is translated there; ×2 means it appears twice in that verse, and the verse you're studying is marked *this verse*. A long book shows 100 verses at a time. Tap a verse to see it in the reader; the card stays open, so you can keep going down the list. "Same sense" follows STEPBible's numbering: אֱלֹהִים meaning "God" and אֱלֹהִים meaning "gods" are counted separately.
 
 **The Hebrew lexicon** shows two dictionaries, one under the other:
@@ -308,4 +310,4 @@ Your last reading position is also saved locally and restored each time you open
 
 ---
 
-*Planned for future updates: nested notes, shareable study templates, a Webster's dictionary lookup, a fuller Greek lexicon, and tappable references inside the Hebrew lexicon.*
+*Planned for future updates: nested notes, shareable study templates, a Webster's dictionary lookup, and a fuller Greek lexicon.*

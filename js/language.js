@@ -23,6 +23,7 @@ import {
 } from './db.js';
 import { decodeMorphCode, splitHebrewWord } from './grammar-decode.js';
 import { hebrewLexiconRoots, renderHebrewLexiconEntry } from './hebrew-lexicon.js';
+import { renderGreekLexiconMeaning } from './greek-lexicon.js';
 import { showVerse } from './reader.js';
 
 const EMPTY_MSG        = 'Select a verse to see its original-language text.';
@@ -97,7 +98,7 @@ export function initLanguageTab() {
         hebrewLexiconFailed.clear();
         rerenderLexicon();
     });
-    // A BDB scripture reference opens its verse in the reader without
+    // A lexicon's scripture reference (BDB or Greek) opens its verse in the reader without
     // selecting it, so this tab, and the entry being read, stay as they are.
     document.getElementById('language-tab').addEventListener('click', (e) => {
         const occurrence = e.target.closest('.language-occurrence');
@@ -744,7 +745,7 @@ async function renderTier3(word) {
     const body = document.createElement('div');
     body.className = 'language-detail-lexicon';
     if (lex && lex.meaning) {
-        body.innerHTML = sanitizeLexiconMeaning(lex.meaning);
+        body.appendChild(renderGreekLexiconMeaning(lex.meaning));
     } else {
         // Rare (~0.2% of Greek codes, per db.js) — a disambiguation-suffix
         // mismatch between TAGNT and TBESG in the source data itself.
@@ -1035,24 +1036,6 @@ function appendDetailField(container, label, value) {
     field.appendChild(labelEl);
     field.appendChild(valueEl);
     container.appendChild(field);
-}
-
-// TBESG's `meaning` field carries a small, known set of formatting tags
-// (<b>, <i>, <BR/>, <ref='Bk.C.V'>label</ref>, <re>, <author>, <greek>,
-// <note>, <lb/>) rather than plain text. The whole string is escaped first,
-// so nothing from the source data can ever produce a live tag other than the
-// ones explicitly allow-listed below — unrecognized markup stays inert text.
-function sanitizeLexiconMeaning(raw) {
-    let s = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    s = s
-        .replace(/&lt;(\/?)b&gt;/gi,  (_, close) => close ? '</strong>' : '<strong>')
-        .replace(/&lt;(\/?)i&gt;/gi,  (_, close) => close ? '</em>' : '<em>')
-        .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
-        .replace(/&lt;lb\s*\/?&gt;/gi, '<br>')
-        .replace(/&lt;ref='[^']*'&gt;/gi, '')
-        .replace(/&lt;\/(ref|re|author|greek|note)&gt;/gi, '')
-        .replace(/&lt;(re|author|greek|note)&gt;/gi, '');
-    return s;
 }
 
 // ============================================================
