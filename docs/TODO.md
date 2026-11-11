@@ -17,7 +17,6 @@ Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finish
 
 | To-do | Why it matters | Size | Source |
 |---|---|---|---|
-| **Export Backup skips unsaved typing** | Export Backup reads the database without first writing autosaves still waiting on their 800 ms timer, so text typed just before the click is missing from the backup. The readable export calls `flushPendingSaves()` first; Export Backup could do the same in one line. | Small | `exportBackup()` in `js/db.js`; `flushPendingSaves()` in `js/notes.js` |
 | **Speed up markup lookups** | `getMarkupsForChapter()` still uses the old one-sided overlap test. Psalm 119 renders in 93 ms at 40 years of data, so this can wait. | Small | `docs/BUILD_6.1_ACTUAL_STATE.md` §12 |
 | **Link the Greek lexicon's Old Testament references** | 6,647 references in TBESG cite the Septuagint, so they stay text: its book names ("1Ki" = 1 Samuel) and verse numbers (most Psalms one lower) differ from English Bibles. Linking them needs an LXX-to-English map, like `hebrew-versification.js` for BDB. | Medium | FEATURE_INVENTORY item 142ak; `js/greek-lexicon.js` |
 | **Getting a deleted bundled plan back** | Deleted bundled plans stay deleted (they're listed in `bundled_installs`). The only way back is importing the plan's JSON from `data/plans/`, which a user doesn't have. A "Restore bundled plans" action could take a plan off the list and seed it again. | Small | `seedBundledPlans()` in `js/db.js` |

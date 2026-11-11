@@ -2477,6 +2477,19 @@ def scenario_export(app):
     hostile = next(note for note in page['notes'] if note['body'] == HOSTILE_BODY)
     check(hostile['references'] == ['Genesis 1:1 (ASV)'] and 'heavens' in hostile['quotes'][0][0],
           f"Gen 1:1 quoted in ASV ({hostile['quotes'][0]})")
+
+    # Export Backup also writes typing still waiting on its autosave
+    p.evaluate(f"import('./js/panels.js').then(panels => panels.openStudy({studies['first']}, 'Creation'))")
+    p.wait_for_selector('.study-export-btn')
+    p.click(last_body); p.keyboard.press('Control+End'); p.keyboard.type(' and a backup')
+    p.click('#global-settings-btn')
+    with p.expect_download() as download_info:
+        p.click('#global-settings-popover .settings-action-btn:has-text("Export Backup")')
+    p.keyboard.press('Escape')
+    backup = sqlite3.connect(download_info.value.path())
+    bodies = [row[0] for row in backup.execute("SELECT body FROM notes WHERE body LIKE 'to be typed into%'")]
+    backup.close()
+    check(bodies == ['to be typed into plus fresh typing and a backup'], f'Export Backup includes text typed just before it ({bodies})')
     return FAILURES
 
 

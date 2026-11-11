@@ -535,7 +535,7 @@ All five prefixes are functional:
 
 ## Backup & Restore
 
-232. Export Backup: serializes the live `core.db` via the same `db.export()` call every write already uses, wraps it in a `Blob`, and triggers a download via a synthetic anchor click — no page navigation or reload — db.js:exportBackup
+232. Export Backup: first writes any note still waiting on its 800 ms autosave (`flushPendingSaves()`, as the readable export does), then serializes the live `core.db` via the same `db.export()` call every write already uses, wraps it in a `Blob`, and triggers a download via a synthetic anchor click — no page navigation or reload — db.js:exportBackup, global-settings.js:SECTIONS
 232a. Filename: `ember-backup-YYYY-MM-DD-HHmm.db`, local time, zero-padded — sorts chronologically and won't collide within the same minute — db.js:exportBackup
 232b. Export scope is the entirety of `core.db` — every reference table and every user table, including `meta` and the reading-plans tables — db.js:exportBackup (wraps the whole `db.export()` output, not a partial query)
 

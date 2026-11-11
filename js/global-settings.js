@@ -12,6 +12,7 @@
 import { bindPopover } from './popover-registry.js';
 import { exportBackup, isStoragePersisted } from './db.js';
 import { exportReadableCopy } from './readable-export.js';
+import { flushPendingSaves } from './notes.js';
 import { restoreFromBackup } from './backup.js';
 
 const STORAGE_AT_RISK_NOTE = 'Your browser may clear Ember’s data if this device runs low on storage. Export a backup regularly to keep your notes safe.';
@@ -45,7 +46,11 @@ const SECTIONS = [
             exportBtn.type = 'button';
             exportBtn.className = 'settings-action-btn';
             exportBtn.textContent = 'Export Backup';
-            exportBtn.addEventListener('click', () => exportBackup());
+            // Typing still waiting on its autosave goes into the backup too.
+            exportBtn.addEventListener('click', () => {
+                flushPendingSaves();
+                exportBackup();
+            });
 
             const readableBtn = document.createElement('button');
             readableBtn.type = 'button';
