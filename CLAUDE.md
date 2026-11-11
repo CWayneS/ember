@@ -76,3 +76,4 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - USER_MANUAL.md — end-user documentation
 - docs/ — specs per build and per feature; the latest BUILD_N_ACTUAL_STATE.md is the ground-truth audit of shipped code
 - docs/TODO.md — everything known to be open; update it when an item is finished or found
+- docs/DATA_QUIRKS.md — slips and oddities found in upstream data (STEPBible, Open Scriptures), written to share with them; add to it whenever one turns up

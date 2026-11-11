@@ -257,6 +257,7 @@ STEPBible-Data's license permits inclusion in software without requesting permis
 | `docs/BUILD_N_ACTUAL_STATE.md` (per build) | Ground-truth audit of each build's shipped code, derived from source, not planning docs. Latest: `docs/BUILD_6.1_ACTUAL_STATE.md` (post-Build-6 Language tab rework + September 2026 architecture-review pass; its §12–13 addenda cover the November 2026 offline, stress-test and long-list work, §14 the Hebrew lexicon) |
 | `docs/Offline_Language_And_Stress_Test_Spec.md`, `docs/OFFLINE_LANGUAGE_REPORT.md` | Spec for offline language data and the stress test, and the record of what was found and decided |
 | `docs/STRESS_TEST_RESULTS.md` | Longevity stress test: results at 1/10/25/40 years of use, what drives the cost, ranked candidate remedies |
+| `docs/DATA_QUIRKS.md` | Slips and oddities found in the STEPBible and Open Scriptures data, with entries, counts and raw text, written to share with their maintainers |
 | `docs/crossref_audit_bundle.md`, `docs/grammar_decode_audit_bundle.md`, `docs/tegmc_value_domain.md` | Raw extracted material and query output, assembled for earlier audits and content authoring; no interpretation |
 | `docs/ANCHOR_QUERIES.md` | SQL query convention for range-aware verse-anchor lookups |
 | `docs/TODO.md` | Everything known to be open, with links to where the detail lives |
