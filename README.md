@@ -251,7 +251,7 @@ STEPBible-Data's license permits inclusion in software without requesting permis
 | `FEATURE_INVENTORY.md` | Full working-feature audit, traced to live code |
 | `USER_MANUAL.md` | End-user documentation |
 | `docs/Bible_Study_Software_Proposal_v6.md` | Design proposal: the philosophy, feature tiers, interface and data model Ember is built toward |
-| `docs/Add_To_Proposal_And_Tech_Spec.md` | Planning decisions from Builds 1.5–3 to fold into the proposal and tech spec, with later supersessions marked |
+| `docs/Add_To_Proposal_And_Tech_Spec.md` | Planning decisions from Builds 1–3 to fold into the proposal and tech spec, with later supersessions marked |
 | `docs/Technical_Spec_Build_1.md` | Build 1 technical specification — schema, module specs, code |
 | `docs/Build_N_Spec.md` (per build) | Per-build specifications |
 | `docs/Psalm_Title_Fix_Spec.md`, `docs/Grammar_Decode_Spec_DRAFT.md`, `docs/Language_Panel_Word_Inspector_Spec.md`, `docs/Hebrew_Word_Anatomy_Spec.md` | Standalone feature specs between numbered builds |

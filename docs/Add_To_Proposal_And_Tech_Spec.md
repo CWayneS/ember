@@ -552,13 +552,19 @@ Clicking the button toggles between states. One control, two states, no separate
 
 ## Cross-References
 
-- **Dataset:** Merged TSK + OpenBible.info ranked cross-references. Strategy is **union with OpenBible ranking** — show all TSK refs, sort by OpenBible vote count where votes exist, fall back to TSK order for unvoted refs. Matches the physical study metaphor: the reference shelf holds everything, but the most-used volumes sit at eye level.
-- **Storage:** One combined table in `core.db` (not a separate file — this is app data, not content, and does not need to be addable/removable like translations). Alongside Nave's topics.
-- **Schema:** `cross_references(source_verse, target_start, target_end, votes, sources)`. Targets stored as ranges with the same NULL convention as `note_anchors` — a ref to "Romans 8:28-30" is one row with `target_end` set. Single-verse targets use `target_end = NULL`. Consistent pattern across the app.
-- **Sources field:** Small bitmask or string like `"tsk,ob"` indicating which datasets contributed the ref. Useful for future filtering.
-- **Scale estimate:** ~600-700K rows merged and deduped. Adds ~15-25MB to `core.db`. Indexed on `source_verse`.
-- **Display:** Grouped by target book in canonical order. Default shows the top 15 by OpenBible vote descending. "Show all" reveals the rest, grouped by book with collapsible sections.
+- **Dataset:** OpenBible.info ranked cross-references only. Already in the project at `build/sources/cross_references.txt`. CC-BY licensed, snapshot date in file header. 344,799 rows. Format is tab-separated with `From Verse`, `To Verse`, `Votes` columns; verse format is `BookName.Chapter.Verse` (e.g., `1John.4.9`); ranges use `Start-End` format. Book tokens map cleanly to internal book IDs with a single static lookup. See `CROSSREF_RECON.md` for the full reconnaissance.
+- **TSK dropped from Build 2.** Considered as a complementary source but cut. Adds significant data prep complexity (book abbreviation normalization, merge logic, dedup) without changing the headline experience — OpenBible's vote-ranked data already provides Build 2's curation needs. The `sources` field in the schema leaves room to add TSK later as `"ob,tsk"` if it becomes a felt need.
+- **Storage:** One table in `core.db` (not a separate file — this is app data, not content, and does not need to be addable/removable like translations). Alongside Nave's topics.
+- **Schema:** `cross_references(source_verse, target_start, target_end, votes, sources)`. All 344,799 rows stored verbatim, including negative-vote rows. Nothing discarded. Compound index on `(source_verse, votes DESC)` covers the canonical query and makes the sort free.
+- **Range NULL convention:** Single-verse targets use `target_end = NULL`, matching `note_anchors` and `markups`. Same-chapter range targets store both endpoints. Consistent pattern across the app.
+- **Cross-chapter and cross-book range splitting:** The OpenBible source includes 655 same-book cross-chapter ranges and 18 cross-book ranges. The data prep script splits them at chapter and book boundaries — one row per chapter the range touches, each inheriting the original vote count. The user sees two clean intra-chapter entries that travel together visually because they share the same source verse. Cross-book splits are written to a report file for hand-audit before commit. This is honest about the data shape and avoids special-casing in the reader.
+- **Sources field:** String like `"ob"` (Build 2 default everywhere) with room for `"tsk"` or `"ob,tsk"` if TSK is added later.
+- **Scale estimate:** 344,799 OpenBible rows + ~700 split rows = ~345,500. Adds ~12-18MB to `core.db`. Smaller than the prior TSK+OpenBible estimate because TSK is gone.
+- **Vote floor:** A constant `CROSSREF_VOTE_FLOOR = 5` lives in `js/db.js`. The default Related tab query applies the floor; "Show all" bypasses it. Tunable from the browser console via `window.emberDebug.crossrefFloor` for live iteration during development. No database rebuild required to change the floor.
+- **Display:** Top 25 by votes DESC at floor 5 in the default view. "Show all" expands to every cross-reference for the verse — bypasses the row cap and the floor — grouped by target book in canonical order. Both the count and the floor are tunable constants; expect to adjust during Build 2 testing based on how the Related tab feels in actual use.
+- **Empty state:** "No cross-references for this verse" when nothing exists above the floor. If the long tail has refs but the default view is empty, hint at "Show all."
 - **Interaction:** Clicking a cross-reference navigates the active reader pane to the target *and* selects the range. Range selection is a first-class Build 2 feature, and cross-references are where it earns its keep visually.
+- **Nave's curation gap audited at Build 2 time.** `CROSSREF_RECON.md` flags John 1:1's Christological neighborhood as a Nave's coverage gap — INCARNATION missing as a visible topic, WORD OF GOD possibly mis-parsed, TRINITY coverage thin. A short curation pass before Build 2 ships cross-references closes the gap so John's Gospel feels right in the Related tab. This is data work, not code work; treated as a guide chapter in Part 3.
 
 ---
 
@@ -638,6 +644,42 @@ A user-facing "add translation" workflow that accepts external files conforming 
 - **Versification mismatch handling** — all launch translations share English versification.
 - **Click-to-preview cross-reference in reference panel** — clicking navigates + selects; no preview-in-place. Can be revisited later.
 - **"Show highlights" as a separate setting** — merged into the markup button itself; no settings entry.
+- **TSK (Treasury of Scripture Knowledge) cross-references** — deferred. OpenBible alone provides Build 2's curation needs. May be added later as augmentation via the `sources` field already in the schema. The data prep shape and book name normalization for TSK would be net new work, so revisit only if the long tail becomes a felt need.
+- **Topic overlap annotation on cross-references** — visual indicator + tooltip showing which Nave's topics a cross-reference shares with the source verse. Free at query time via JOIN to `topic_verses`. Deferred to a polish pass — see "Post-Build-2 Polish Ideas" below.
+- **Topic-aware sorting for cross-references** — boost shared-topic refs above pure votes-DESC. Deferred to the same polish pass.
+
+---
+
+## Post-Build-2 Polish Ideas (Recording So They Don't Get Lost)
+
+These are real ideas that surfaced during Build 2 planning but aren't in scope for Build 2 itself. They're recorded here so they survive between sessions and so the next planning conversation doesn't have to rediscover them.
+
+### Topic Overlap on Cross-References
+
+`CROSSREF_RECON.md` flagged that cross-checking each cross-reference against `topic_verses` is a strong secondary quality signal independent of vote count. Pattern from the recon: "high votes + shared topic" is almost always a genuinely useful link; "high votes + no shared topic" is worth investigating case by case.
+
+Two flavors of this feature, both deferred from Build 2:
+
+1. **Visual indicator + tooltip.** A small dot or star next to cross-references that share at least one topic with the source verse. Hovering shows the list of shared topics. Cheap to add (one JOIN at query time). Doesn't change sort order — just annotates.
+
+2. **Topic-aware sort.** Promote shared-topic refs nearer the top of the Related tab results. Two sub-options:
+   - **Strict tier:** shared-topic refs first (sorted by votes within), then pure votes-DESC for the rest.
+   - **Weighted score:** `score = votes + (shared_topics_count × N)` where N is a tunable boost. Predictable but harder to explain.
+   - Lean toward the strict tier as the default with pure votes as a fallback toggle.
+
+Both flavors land together in the same polish pass. Build the visual indicator first, then layer the sort on top of it.
+
+### TSK Augmentation
+
+If the long tail of OpenBible cross-references ever feels insufficient — particularly for less-popular verses where vote signals are sparse — TSK can be added later as a complementary source. The schema already has the `sources` field for this. Adding TSK would involve: obtaining a clean parseable source, normalizing book abbreviations, merging with OpenBible (preserving votes for refs that exist in both), and writing the merged data into the same `cross_references` table. No schema migration required.
+
+### Cross-Reference Display Tuning
+
+Two tunable constants in `js/db.js` (`CROSSREF_VOTE_FLOOR`, top-N count) will need adjustment based on actual feel during Build 2 testing. The dev hooks (`window.emberDebug.crossrefFloor`, `window.emberDebug.crossrefTopN`) make this easy. Once Build 2 ships and you've used the Related tab in real study sessions, the values may settle differently than the initial defaults of 5 and 25.
+
+### Nave's Curation Gaps Beyond Christology
+
+Build 2 closes the John 1:1 / Christological gap (INCARNATION, WORD OF GOD, TRINITY). Other Nave's gaps will surface during use. There's no point trying to find them all in one pass — just fix them as they show up. A pattern: when a verse's Related tab feels unhelpful, check whether it's a Nave's coverage problem (missing topic) or a cross-reference data problem (sparse OpenBible signal). The first is cheap to fix; the second is what TSK augmentation would address.
 
 ---
 
