@@ -1,4 +1,4 @@
-# Ember Bible Study — Design Proposal (v5)
+# Ember Bible Study — Design Proposal (v6)
 
 ---
 

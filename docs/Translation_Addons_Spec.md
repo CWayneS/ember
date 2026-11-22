@@ -66,6 +66,7 @@ A new file, `data/translations/catalog.json`, lists every translation Ember offe
       "license": "Public Domain",
       "tier": "locked",
       "size_bytes": 0,
+      "verse_count": 31102,
       "description": "The historic standard. Archaic, familiar, widely cross-referenced."
     }
   ]
@@ -74,6 +75,7 @@ A new file, `data/translations/catalog.json`, lists every translation Ember offe
 
 - `tier` is `locked`, `default` or `available`.
 - `size_bytes` comes from the real file in `data/translations/`. Fill it from the build script or by hand, but never estimate it.
+- `verse_count` is the file's real `SELECT COUNT(*) FROM verses WHERE verse > 0`, used by Add's check (Item 3). Take it from the file, never assume it: it is 31,102 for every shipped translation except WEB, which has 31,098 (it has no Luke 17:37, Acts 8:40, 15:41 or 24:27, and puts the Romans doxology at 14:24–26 instead of 16:25–27).
 - `description` is one line for the shelf. Draft lines (Wayne to edit):
   - **KJV:** The historic standard. Archaic, familiar, widely cross-referenced.
   - **ASV:** The 1901 scholarly revision in the KJV line.
@@ -102,11 +104,11 @@ A new file, `data/translations/catalog.json`, lists every translation Ember offe
 `addTranslation(catalogEntry)` in `db.js`:
 
 1. If offline, stop and say so. Nothing is written.
-2. Fetch `./data/translations/{filename}`. Show progress if `Content-Length` is present ("Downloading Darby… 3.1 of 5.2 MB"); otherwise show an indeterminate "Downloading…".
+2. Fetch `./data/translations/{filename}`. Show progress if `Content-Length` is present ("Downloading Darby… 3.1 of 8.1 MB"); otherwise show an indeterminate "Downloading…".
 3. Write it to OPFS `translations/{filename}` with `createWritable()`, the same pattern `seedTranslations()` uses.
 4. **Check before registering it.** Open it with sql.js and confirm:
    - `meta.abbreviation` matches the catalog entry
-   - `SELECT COUNT(*) FROM verses WHERE verse > 0` is 31,102. Count `verse > 0` only: KJV, ASV and Darby carry 116 `verse = 0` Psalm title rows, so a plain count is wrong for those three.
+   - `SELECT COUNT(*) FROM verses WHERE verse > 0` equals the catalog entry's `verse_count`. Don't hard-code 31,102: WEB has 31,098, so a fixed count would reject it and "Restore default translations" would fail. Count `verse > 0` only: KJV, ASV and Darby carry 116 `verse = 0` Psalm title rows, so a plain count is wrong for those three.
 5. If anything fails, `removeEntry()` the file, show a clear message, and leave the manifest untouched.
 6. On success, insert the manifest row (catalog metadata, `installed_at` = now), keep the open handle in `_translationDbs`, and save `core.db`.
 7. Tell the UI the list changed (see Item 6).
@@ -264,7 +266,7 @@ In `initDatabase()`, around the existing seeding:
 ## Out of Scope
 
 - **Importing your own translation file.** The install-and-check function is written to be reused for it later. **ID note for that work:** imported translations can't take IDs from the catalog, or two machines could give the same ID to different translations and a moved backup would point at the wrong one. Give imports their own ID range (for example, 10000 and up, assigned per install) and match them across machines by content (`meta` plus a file hash), not by ID alone.
-- **Updating an installed translation's text in place.** Still not a supported operation (see `OPFS_Reseed_Gap.md`).
+- **Updating an installed translation's text in place.** Still not a supported operation (see "Version-aware translation and data reseeding" in `docs/TODO.md`).
 - **Non-English versification.** All catalog translations share English versification.
 - **Cross-translation search.**
 - **New add-on translations beyond Darby.** The catalog makes adding one a data change, decided separately.

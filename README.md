@@ -250,9 +250,12 @@ STEPBible-Data's license permits inclusion in software without requesting permis
 |---|---|
 | `FEATURE_INVENTORY.md` | Full working-feature audit, traced to live code |
 | `USER_MANUAL.md` | End-user documentation |
+| `docs/Bible_Study_Software_Proposal_v6.md` | Design proposal: the philosophy, feature tiers, interface and data model Ember is built toward |
+| `docs/Add_To_Proposal_And_Tech_Spec.md` | Planning decisions from Builds 1.5–3 to fold into the proposal and tech spec, with later supersessions marked |
 | `docs/Technical_Spec_Build_1.md` | Build 1 technical specification — schema, module specs, code |
 | `docs/Build_N_Spec.md` (per build) | Per-build specifications |
 | `docs/Psalm_Title_Fix_Spec.md`, `docs/Grammar_Decode_Spec_DRAFT.md`, `docs/Language_Panel_Word_Inspector_Spec.md`, `docs/Hebrew_Word_Anatomy_Spec.md` | Standalone feature specs between numbered builds |
+| `docs/Translation_Addons_Spec.md` | Draft: every translation but KJV removable, Darby moved to a downloadable add-on, and a Translations shelf (not yet built) |
 | `docs/Hebrew_Lexicon_Spec.md`, `docs/HEBREW_LEXICON_REPORT.md` | The Hebrew lexicon's spec, and the build's record: data checks, sizes, and every decision that changed the spec |
 | `docs/HEBREW_ANATOMY_DATA_REPORT.md` | The Hebrew Word Anatomy build's record: the language.db rebuild (sources, checks, sizes) and every decision that changed the spec |
 | `docs/BUILD_N_ACTUAL_STATE.md` (per build) | Ground-truth audit of each build's shipped code, derived from source, not planning docs. Latest: `docs/BUILD_6.1_ACTUAL_STATE.md` (post-Build-6 Language tab rework + September 2026 architecture-review pass; its §12–13 addenda cover the November 2026 offline, stress-test and long-list work, §14 the Hebrew lexicon) |
