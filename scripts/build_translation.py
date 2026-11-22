@@ -300,11 +300,27 @@ def _parse_web_chapter_file(filepath: str) -> list[str]:
     return [l for l in non_empty[2:] if l.strip()]
 
 
+# The engwebp "_read" files strip verse numbers, so verses are numbered by
+# line. WEB leaves these four verses out entirely (no line, not even a
+# placeholder), so numbering must skip them or every later verse in the
+# chapter lands one number low. Found by comparing each chapter's verse count
+# with KJV: these are the only four chapters one short. Romans 14 and 16 also
+# differ, but that is WEB's own numbering (doxology at 14:24-26), not a gap.
+WEB_OMITTED_VERSES = {
+    (42, 17, 36),  # Luke 17:36
+    (44,  8, 37),  # Acts 8:37
+    (44, 15, 34),  # Acts 15:34
+    (44, 24,  7),  # Acts 24:7
+}
+WEB_EXPECTED_VERSE_COUNT = 31_098
+
+
 def load_from_web_dir(source_path: str) -> list[tuple]:
     """
     Parse WEB per-chapter text files from the engwebp distribution.
     Filename pattern: engwebp_NNN_BOOK_CC_read.txt
     Non-canonical book codes (Apocrypha) are silently skipped.
+    Verse numbers skip WEB_OMITTED_VERSES.
     """
     file_re = re.compile(r'^engwebp_\d+_([A-Z0-9]+)_(\d+)_read\.txt$')
     verses: list[tuple] = []
@@ -324,7 +340,11 @@ def load_from_web_dir(source_path: str) -> list[tuple]:
         filepath   = os.path.join(source_path, filename)
         verse_texts = _parse_web_chapter_file(filepath)
 
-        for verse_num, text in enumerate(verse_texts, start=1):
+        verse_num = 0
+        for text in verse_texts:
+            verse_num += 1
+            while (book_id, chapter, verse_num) in WEB_OMITTED_VERSES:
+                verse_num += 1
             verses.append((book_id, chapter, verse_num, text))
 
     return verses
@@ -482,21 +502,32 @@ def verify(output_path: str, abbrev: str) -> bool:
         "SELECT text FROM verses WHERE book=45 AND chapter=8 AND verse=28"
     ).fetchone()
 
+    shifted = []
+    # An omitted verse must leave a hole, not shift the rest of its chapter.
+    if abbrev == "WEB":
+        for book, chapter, verse in sorted(WEB_OMITTED_VERSES):
+            present = conn.execute(
+                "SELECT 1 FROM verses WHERE book=? AND chapter=? AND verse=?",
+                (book, chapter, verse),
+            ).fetchone()
+            if present:
+                shifted.append(f"{book} {chapter}:{verse}")
+
     conn.close()
 
     print(f"\n{'═' * 52}")
     print(f"  {abbrev} — verification")
     print(f"{'═' * 52}")
-    # Verse count: KJV/ASV/YLT/Darby/BSB = 31,102 exactly.
-    # WEB intentionally omits ~4 verses (Acts 8:37, Luke 17:36, etc.) that are
-    # absent from the critical Greek text but present in the KJV Textus Receptus.
-    # WEB also uses a different versification for Romans 14/16 (doxology placement).
-    # Accept anything in the 30,900–31,200 range as valid.
-    verse_ok = 30_900 <= verse_count <= 31_200
-    verse_note = "✓" if verse_count == EXPECTED_VERSE_COUNT else (
-        f"✓ ({verse_count - EXPECTED_VERSE_COUNT:+d} vs KJV — textual/versification difference)"
-        if verse_ok else f"✗ expected ~{EXPECTED_VERSE_COUNT:,}"
-    )
+    # Verse count: KJV/ASV/YLT/Darby/BSB = 31,102 exactly. WEB = 31,098: it
+    # omits the four WEB_OMITTED_VERSES, and the Romans doxology at 14:24-26
+    # instead of 16:25-27 nets to zero.
+    expected = WEB_EXPECTED_VERSE_COUNT if abbrev == "WEB" else EXPECTED_VERSE_COUNT
+    verse_ok = verse_count == expected
+    verse_note = "✓" if verse_ok else f"✗ expected {expected:,}"
+    if shifted:
+        verse_ok = False
+        verse_note += f"  ✗ should be absent: {', '.join(shifted)}"
+
     print(f"  Verses : {verse_count:,}  {verse_note}")
     if title_count:
         print(f"  Titles : {title_count} Psalm title placeholder row(s) (verse=0)")

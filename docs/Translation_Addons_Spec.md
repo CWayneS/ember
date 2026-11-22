@@ -75,7 +75,7 @@ A new file, `data/translations/catalog.json`, lists every translation Ember offe
 
 - `tier` is `locked`, `default` or `available`.
 - `size_bytes` comes from the real file in `data/translations/`. Fill it from the build script or by hand, but never estimate it.
-- `verse_count` is the file's real `SELECT COUNT(*) FROM verses WHERE verse > 0`, used by Add's check (Item 3). Take it from the file, never assume it: it is 31,102 for every shipped translation except WEB, which has 31,098 (it has no Luke 17:37, Acts 8:40, 15:41 or 24:27, and puts the Romans doxology at 14:24–26 instead of 16:25–27).
+- `verse_count` is the file's real `SELECT COUNT(*) FROM verses WHERE verse > 0`, used by Add's check (Item 3). Take it from the file, never assume it: it is 31,102 for every shipped translation except WEB, which has 31,098 (it leaves out Luke 17:36, Acts 8:37, 15:34 and 24:7, and puts the Romans doxology at 14:24–26 instead of 16:25–27).
 - `description` is one line for the shelf. Draft lines (Wayne to edit):
   - **KJV:** The historic standard. Archaic, familiar, widely cross-referenced.
   - **ASV:** The 1901 scholarly revision in the KJV line.

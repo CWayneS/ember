@@ -385,3 +385,13 @@ Record: `HEBREW_LEXICON_REPORT.md`. Spec: `Hebrew_Lexicon_Spec.md`. It supersede
 **`sw.js`:** `hebrew-lexicon.js` is precached. `CACHE_NAME` is `ember-v17`.
 
 **Tests:** `tests/verify.py lexicon` is new. `smoke` now expects a Hebrew Lexicon button, and `offline`'s header check covers both shipped files.
+
+---
+
+## 15. ADDENDUM — 2026-11-22, WEB verse numbering
+
+**`data/translations/web.db`** was rebuilt. The engwebp "_read" source strips verse numbers, and `load_from_web_dir()` numbered lines in order. WEB leaves out Luke 17:36, Acts 8:37, 15:34 and 24:7, so every later verse in those four chapters sat one number low (Acts 8:37 held 8:38's text, and so on), and each chapter's last verse was missing. 27 verses moved back to their right numbers and 4 were restored. WEB now has 31,098 verses: every KJV verse except those four and Romans 16:25–27, which WEB numbers 14:24–26.
+
+**`scripts/build_translation.py`:** `WEB_OMITTED_VERSES` lists the four, and numbering skips them. `verify()` now expects exactly 31,102 verses (31,098 for WEB) instead of accepting 30,900–31,200, and fails if any omitted WEB verse is present.
+
+**Existing installs** keep their old `web.db` in OPFS, since seeding never replaces a whole file. Clear `translations/web.db` from OPFS to get the fix.
