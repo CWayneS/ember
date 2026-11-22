@@ -640,7 +640,9 @@ A user-facing "add translation" workflow that accepts external files conforming 
 - **Character-level markups** — deferred indefinitely; different storage model, separate project.
 - **Cross-translation search** — out of scope; search is per-translation.
 - **User-added translations** — future workflow; bundled shortlist only in Build 2.
+  > **Partly superseded (November 2026):** planned: users will add and remove translations from Ember's own catalog on a Translations shelf. Importing your own translation file stays future work. See `Translation_Addons_Spec.md`.
 - **Lazy-loaded translations** — all bundled translations seed at install time.
+  > **Superseded (November 2026):** planned: only the five default translations will seed at install time, and Darby and any later add-ons will download when the user adds them. See `Translation_Addons_Spec.md`.
 - **Versification mismatch handling** — all launch translations share English versification.
 - **Click-to-preview cross-reference in reference panel** — clicking navigates + selects; no preview-in-place. Can be revisited later.
 - **"Show highlights" as a separate setting** — merged into the markup button itself; no settings entry.
