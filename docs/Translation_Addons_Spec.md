@@ -266,7 +266,7 @@ In `initDatabase()`, around the existing seeding:
 ## Out of Scope
 
 - **Importing your own translation file.** The install-and-check function is written to be reused for it later. **ID note for that work:** imported translations can't take IDs from the catalog, or two machines could give the same ID to different translations and a moved backup would point at the wrong one. Give imports their own ID range (for example, 10000 and up, assigned per install) and match them across machines by content (`meta` plus a file hash), not by ID alone.
-- **Updating an installed translation's text in place.** Still not a supported operation (see `OPFS_Reseed_Gap.md`).
+- **Updating an installed translation's text in place.** Still not a supported operation: `seedTranslations()` only checks that a file is present and whole, never its version. That's planned as "Version-aware translation and data reseeding" in `docs/TODO.md`'s Roadmap. Until then, to see changed translation data locally, clear the OPFS copy. (An August 2026 note, `OPFS_Reseed_Gap.md`, said this; it was never in the repo and isn't needed.)
 - **Non-English versification.** All catalog translations share English versification.
 - **Cross-translation search.**
 - **New add-on translations beyond Darby.** The catalog makes adding one a data change, decided separately.
