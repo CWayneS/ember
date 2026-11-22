@@ -2,75 +2,86 @@
 
 Everything known to be open, in one place. Each item links to where the detail lives, so this file stays a short index. It points to sections rather than line numbers, which drift.
 
-Created 2026-11-04, at `cc95ec5`. Nothing here is urgent. When an item is finished, delete it here and record the work in the usual build or feature docs.
+Created 2026-11-04, at `cc95ec5`. Ordered into a path on 2026-11-22. When an item is finished, delete it here and record the work in the usual build or feature docs.
+
+**The order, in one line:** make saves safe, finish every change to the translation files while Wayne's install is the only one to clear, build the add-ons and a way to update installed data, get ready to go public, then add features. The reason for that order is that after launch, a changed data file reaches no one unless the app can update it (step 3).
 
 ---
 
-## Decisions for Wayne
-
-| Decision | The question | Source |
-|---|---|---|
-| **Save frequency** | From about year 10 of data, autosave blocks typing on a CPU 4× slower than the test machine, mostly because it exports the whole database. Saving less often means fewer stutters, though each one stays as long and a crash could lose a little more text. | `docs/STRESS_TEST_RESULTS.md`, "Candidate remedies", remedy 4 |
-| **Stress thresholds** | The thresholds are the spec's proposed starting points, left for you to adjust once you'd seen real numbers. | `docs/STRESS_TEST_RESULTS.md`, intro and "Thresholds after the fixes" |
-
-## Performance and code
+## 1. Make saves safe
 
 | To-do | Why it matters | Size | Source |
 |---|---|---|---|
-| **Speed up markup lookups** | `getMarkupsForChapter()` still uses the old one-sided overlap test. Psalm 119 renders in 93 ms at 40 years of data, so this can wait. | Small | `docs/BUILD_6.1_ACTUAL_STATE.md` §12 |
-| **Link the Greek lexicon's Old Testament references** | 6,647 references in TBESG cite the Septuagint, so they stay text: its book names ("1Ki" = 1 Samuel) and verse numbers (most Psalms one lower) differ from English Bibles. Linking them needs an LXX-to-English map, like `hebrew-versification.js` for BDB. | Medium | FEATURE_INVENTORY item 142ak; `js/greek-lexicon.js` |
-| **Rebuild WEB from eBible's USFM** | WEB is built from eBible's audio-reading edition (2020 stable text), which has no verse numbers, so `scripts/build_translation.py` numbers lines and hard-codes the four verses WEB omits (`WEB_OMITTED_VERSES`). The USFM edition (`engwebp_usfm.zip`) carries real numbers: omitted verses are footnote-only `\v` markers. Compared 2026-11-22: every verse number matches. Switching drops the hard-coded list and brings in about 270 small revisions since 2020 (mostly "in the earth" → "on the earth"). Keep Psalm titles (`\d`) at the start of verse 1 and Song of Songs speaker labels (`\sp`) in the text, as today, or decide otherwise. Existing installs need their old `web.db` cleared from OPFS. | Small–Medium | `scripts/build_translation.py` (`load_from_web_dir`); `docs/BUILD_6.1_ACTUAL_STATE.md` §15 |
-| **Translation add-ons** | Make every translation but KJV removable, move Darby to a downloadable add-on, and add a Translations shelf. Specced, not built. | Medium–Large | `docs/Translation_Addons_Spec.md` |
-| **Getting a deleted bundled plan back** | Deleted bundled plans stay deleted (they're listed in `bundled_installs`). The only way back is importing the plan's JSON from `data/plans/`, which a user doesn't have. A "Restore bundled plans" action could take a plan off the list and seed it again. | Small | `seedBundledPlans()` in `js/db.js` |
-| **Scripture search on FTS4** | Translations are built with an FTS5 `verses_fts` that sql.js can't read, so Scripture search always falls back to `LIKE`. `LIKE '%love%'` also matches "glove" and "beloved". FTS4 (already used for `notes_fts`) gives whole-word matching and optional stemming, with no sql.js rebuild. Decided over custom-compiling sql.js with FTS5. Needs the translation files rebuilt and a reseed path for existing installs. | Small–Medium | `scripts/build_translation.py` (`verses_fts`); `js/db.js` search fallback |
-| **Queue writes in the storage worker** | `storage-worker.js` handles messages concurrently with no queue, so an older save could in principle finish after a newer one and overwrite the latest edit. Not seen in testing ("reassuring, not proof"). Serialize writes and keep only the newest pending one. | Small | `docs/STRESS_TEST_RESULTS.md`, "Other results", write ordering; `js/storage-worker.js`, `saveToStorage()` |
+| **Queue writes in the storage worker** | `storage-worker.js` handles messages concurrently with no queue, so an older save could in principle finish after a newer one and overwrite the latest edit. Not seen in testing ("reassuring, not proof"). Serialize writes and keep only the newest pending one. The only open item that could lose data. | Small | `docs/STRESS_TEST_RESULTS.md`, "Other results", write ordering; `js/storage-worker.js`, `saveToStorage()` |
 
-**Not recommended on current numbers:** splitting user data into its own database (remedy 5) or replacing sql.js (remedy 6). The reasoning is in "My read now that 1 to 3 are done", under "Candidate remedies" in `docs/STRESS_TEST_RESULTS.md`. `PRAGMA locking_mode=EXCLUSIVE` was tested and not adopted; see "Long lists, fixed" in the same file.
+**Decision for Wayne, same code:** **save frequency.** From about year 10 of data, autosave blocks typing on a CPU 4× slower than the test machine, mostly because it exports the whole database. Saving less often means fewer stutters, though each one stays as long and a crash could lose a little more text. Source: `docs/STRESS_TEST_RESULTS.md`, "Candidate remedies", remedy 4.
 
-## Documentation
+## 2. Rebuild all six translation files once
 
-- **Fix drifted line references in `FEATURE_INVENTORY.md`.** For example, item 8 says the load error is shown at `app.js:46`, which is now `initMarkups()`; the `catch` is at line 77. Not recorded anywhere else.
+Both items change the translation files through `scripts/build_translation.py`. Doing them together means one rebuild and one OPFS clear on Wayne's install. They come before step 3 because the add-ons catalog records each file's real size and verse count.
 
-## To check on Wayne's install
+| To-do | Why it matters | Size | Source |
+|---|---|---|---|
+| **Scripture search on FTS4** | Translations are built with an FTS5 `verses_fts` that sql.js can't read, so Scripture search always falls back to `LIKE`. `LIKE '%love%'` also matches "glove" and "beloved". FTS4 (already used for `notes_fts`) gives whole-word matching and optional stemming, with no sql.js rebuild. Decided over custom-compiling sql.js with FTS5. | Small–Medium | `scripts/build_translation.py` (`verses_fts`); `js/db.js` search fallback |
+| **Rebuild WEB from eBible's USFM** | WEB is built from eBible's audio-reading edition (2020 stable text), which has no verse numbers, so `scripts/build_translation.py` numbers lines and hard-codes the four verses WEB omits (`WEB_OMITTED_VERSES`). The USFM edition (`engwebp_usfm.zip`) carries real numbers: omitted verses are footnote-only `\v` markers. Compared 2026-11-22: every verse number matches. Switching drops the hard-coded list and brings in about 270 small revisions since 2020 (mostly "in the earth" → "on the earth"). **Decide first:** keep Psalm titles (`\d`) at the start of verse 1 and Song of Songs speaker labels (`\sp`) in the text, as today, or do otherwise. | Small–Medium | `scripts/build_translation.py` (`load_from_web_dir`); `docs/BUILD_6.1_ACTUAL_STATE.md` §15 |
 
-- **Storage persistence.** Run `await navigator.storage.persisted()` in the installed app and in a normal Chrome tab, and note each result here. A real grant has never been tested, because headless Chromium always declines, so seeing Backup & Restore switch to its "has agreed" wording would be the first real confirmation. Background: `docs/OFFLINE_LANGUAGE_REPORT.md` §5.
-- **The Hebrew lexicon in your own Firefox profile.** It was checked in Playwright's Firefox (H7307, H2617, H1254, H2219, H0114). In your browser, open one Hebrew Lexicon offline after it has downloaded once.
-- **Readable export in Firefox.** Checked in Chromium only. In your Firefox, export a study and Export Readable Copy, and open each file; with a large library, see that "Preparing…" shows while it works.
-- **Long studies in Firefox.** `content-visibility` was only tested in Chromium. In a long study, check that typing then quickly scrolling away saves the note, that the tag autocomplete isn't cut off, and that Ctrl+F finds a note far down. Browsers without `content-visibility` just ignore it and lay out every block.
+After the rebuild, clear `translations/*.db` from OPFS on Wayne's install.
 
-## Deferred by specs
+## 3. Translation add-ons, then updating installed data
 
-From "Deferred / Related" in `docs/Offline_Language_And_Stress_Test_Spec.md`:
+| To-do | Why it matters | Size | Source |
+|---|---|---|---|
+| **Translation add-ons** | Make every translation but KJV removable, move Darby to a downloadable add-on, and add a Translations shelf. Specced, not built. Give each catalog entry a version or sha256 as well, for the next item. | Medium–Large | `docs/Translation_Addons_Spec.md` |
+| **Version-aware reseeding** | `seedTranslations()` only checks that a file is present and whole, so a fixed or rebuilt translation never reaches an existing install. Compare each installed file with its catalog version and download the new one when they differ. Needed before launch, or the first data fix after launch reaches no one. Cover `language.db` and `lexicon-hebrew.db` the same way. | Medium | `js/db.js` (`seedTranslations()`, `downloadReferenceDbInBackground()`); README "Future" |
+| **Getting a deleted bundled plan back** | Deleted bundled plans stay deleted (they're listed in `bundled_installs`). The only way back is importing the plan's JSON from `data/plans/`, which a user doesn't have. A "Restore bundled plans" action could take a plan off the list and seed it again. Same pattern as "Restore default translations", so build them together. | Small | `seedBundledPlans()` in `js/db.js` |
 
-- **OPFS → IndexedDB fallback test**, including where translations and `language.db` live without OPFS, and Safari's missing `createWritable()` on restore. See also `docs/BUILD_6.1_ACTUAL_STATE.md` §11 and `docs/OFFLINE_LANGUAGE_REPORT.md` §2.
+**Scope question:** updates to cross-references or Nave's live in `core.db`, which also holds the user's notes. It can't be swapped like a translation file, so updating those tables needs its own approach. Fine to defer, but decide it consciously.
 
-From "Deferred to Follow-Up Specs" in `docs/Hebrew_Word_Anatomy_Spec.md` (the Hebrew lexicon it deferred has shipped):
+## 4. Get ready to go public
 
-- **The 14 ghost rows** (Ketiv-only words), which need their own display design.
+**Help**
 
-From "Deferred to Follow-Up Specs" in `docs/Hebrew_Lexicon_Spec.md`:
+- **Update the stale Help text.** Do it after the features above, since the shelf and the new search change what Help has to explain. See `FEATURE_INVENTORY.md` items 67a and 148a, and `docs/BUILD_6.1_ACTUAL_STATE.md` §7.
+- **A Help entry** explaining Strong's vs. BDB. From "Deferred to Follow-Up Specs" in `docs/Hebrew_Lexicon_Spec.md` (Open Question 5).
 
-- **A BDB abbreviations key** for the scholarly shorthand ("Ges", "Kö", "Dl W").
-- **Root families**, from `LexicalIndex.xml`'s `<etym>` data.
-- **Stub entries as links** to the entries they point at. No Strong's number links to a stub today.
-- **TFLSJ** (fuller Greek lexicon), reusing the lexicon's loading pattern.
-- **Re-checking Open Scriptures' progress.** A rebuild needs the pinned commits and sha256 values updated in `scripts/build_lexicon_hebrew.py`, and its exact-count checks reviewed.
-- **A Help entry** explaining Strong's vs. BDB, with the Help rewrite below (Open Question 5).
+**Testing**
 
-## Before going public
+- **OPFS → IndexedDB fallback test**, including where translations and `language.db` live without OPFS, and Safari's missing `createWritable()` on restore. From "Deferred / Related" in `docs/Offline_Language_And_Stress_Test_Spec.md`; see also `docs/BUILD_6.1_ACTUAL_STATE.md` §11 and `docs/OFFLINE_LANGUAGE_REPORT.md` §2.
+- **On Wayne's install:**
+  - **Storage persistence.** Run `await navigator.storage.persisted()` in the installed app and in a normal Chrome tab, and note each result here. A real grant has never been tested, because headless Chromium always declines, so seeing Backup & Restore switch to its "has agreed" wording would be the first real confirmation. Background: `docs/OFFLINE_LANGUAGE_REPORT.md` §5.
+  - **The Hebrew lexicon in your own Firefox profile.** It was checked in Playwright's Firefox (H7307, H2617, H1254, H2219, H0114). In your browser, open one Hebrew Lexicon offline after it has downloaded once.
+  - **Readable export in Firefox.** Checked in Chromium only. In your Firefox, export a study and Export Readable Copy, and open each file; with a large library, see that "Preparing…" shows while it works.
+  - **Long studies in Firefox.** `content-visibility` was only tested in Chromium. In a long study, check that typing then quickly scrolling away saves the note, that the tag autocomplete isn't cut off, and that Ctrl+F finds a note far down. Browsers without `content-visibility` just ignore it and lay out every block.
+
+**Polish**
 
 - **Add the PWA icons.** `manifest.json` lists them, but `icons/` has none. See `FEATURE_INVENTORY.md` item 3. Three concepts were sketched (a glowing coal, a flame rising from an open book, a spark over a page corner); the coal was the one that stayed readable at 16px. No final choice recorded yet. Warm amber on dark; keep the mark inside the central ~80% for the maskable version.
 - **Finish the PWA install prompt.** The page element and styles exist, but there's no `beforeinstallprompt` handler. See `docs/BUILD_6.1_ACTUAL_STATE.md` §7.
-- **Update the stale Help text.** See `FEATURE_INVENTORY.md` items 67a and 148a, and `docs/BUILD_6.1_ACTUAL_STATE.md` §7.
+- **Fix drifted line references in `FEATURE_INVENTORY.md`.** For example, item 8 says the load error is shown at `app.js:46`, which is now `initMarkups()`; the `catch` is at line 77. Not recorded anywhere else.
+
+**Launch**
+
+- **Landing page and public distribution.** From "Future" in `README.md`.
 - **Notify STEPBible** once Ember is publicly available. See `README.md`, "Data & Attribution".
 
-## Roadmap
+## 5. After launch, roughly by value to the user
 
-From "Future" in `README.md`, which remains the source for this list:
+1. **Nested notes.** From "Future" in `README.md`.
+2. **In-app template creator, with template sharing.** From "Future" in `README.md`.
+3. **Hebrew lexicon follow-ups**, from "Deferred to Follow-Up Specs" in `docs/Hebrew_Lexicon_Spec.md`:
+   - **A BDB abbreviations key** for the scholarly shorthand ("Ges", "Kö", "Dl W").
+   - **Stub entries as links** to the entries they point at. No Strong's number links to a stub today.
+   - **Root families**, from `LexicalIndex.xml`'s `<etym>` data.
+4. **Link the Greek lexicon's Old Testament references.** 6,647 references in TBESG cite the Septuagint, so they stay text: its book names ("1Ki" = 1 Samuel) and verse numbers (most Psalms one lower) differ from English Bibles. Linking them needs an LXX-to-English map, like `hebrew-versification.js` for BDB. Medium. Source: FEATURE_INVENTORY item 142ak; `js/greek-lexicon.js`.
+5. **Dictionary lookup (Webster's 1913)**, then **TFLSJ** (full LSJ Greek lexicon), pending bundle-size headroom and reusing the lexicon's loading pattern. From "Future" in `README.md` and `docs/Hebrew_Lexicon_Spec.md`.
+6. **The 14 ghost rows** (Ketiv-only words), which need their own display design. From "Deferred to Follow-Up Specs" in `docs/Hebrew_Word_Anatomy_Spec.md`.
 
-- Nested notes
-- In-app template creator, with template sharing
-- Dictionary lookup (Webster's 1913)
-- Full LSJ Greek lexicon (TFLSJ), pending bundle-size headroom
-- Version-aware translation and data reseeding for existing installs
-- Landing page and public distribution
+## When needed
+
+- **Speed up markup lookups.** `getMarkupsForChapter()` still uses the old one-sided overlap test. Psalm 119 renders in 93 ms at 40 years of data, so this can wait until the numbers say otherwise. Small. Source: `docs/BUILD_6.1_ACTUAL_STATE.md` §12.
+- **Re-checking Open Scriptures' progress.** A rebuild needs the pinned commits and sha256 values updated in `scripts/build_lexicon_hebrew.py`, and its exact-count checks reviewed. After launch, ship the result through step 3's update path. From `docs/Hebrew_Lexicon_Spec.md`.
+- **Decision for Wayne: stress thresholds.** The thresholds are the spec's proposed starting points, left for you to adjust once you'd seen real numbers. Source: `docs/STRESS_TEST_RESULTS.md`, intro and "Thresholds after the fixes".
+
+**Not recommended on current numbers:** splitting user data into its own database (remedy 5) or replacing sql.js (remedy 6). The reasoning is in "My read now that 1 to 3 are done", under "Candidate remedies" in `docs/STRESS_TEST_RESULTS.md`. `PRAGMA locking_mode=EXCLUSIVE` was tested and not adopted; see "Long lists, fixed" in the same file.
+
+The README's "Future" list remains the public roadmap; every item on it is placed above.
