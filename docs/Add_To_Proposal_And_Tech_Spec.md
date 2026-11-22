@@ -611,7 +611,7 @@ Per-translation. Search executes against the active pane's translation FTS table
 
 **BSB licensing note:** Dedicated to the public domain April 30, 2023. All uses freely permitted. Attribution and linking appreciated but not required. The Berean name may be used because Ember maintains verbatim text. Optional attribution can appear in the translation's info display in the book picker or a future About screen. Not a UI concern for Build 2.
 
-> **Superseded (November 2026):** Darby is no longer installed by default. KJV is the only locked translation and can't be removed. ASV, WEB, YLT and BSB install by default and can be removed and downloaded again. Darby is the first add-on translation, available from a Translations shelf reached from the book picker. See `Translation_Addons_Spec.md`.
+> **Superseded (November 2026):** planned: Darby will no longer be installed by default. KJV will be the only locked translation and can't be removed. ASV, WEB, YLT and BSB will install by default and can be removed and downloaded again. Darby will be the first add-on translation, available from a Translations shelf reached from the book picker. See `Translation_Addons_Spec.md`.
 
 ### Translation Selection UI
 
@@ -627,7 +627,7 @@ Each pane remembers its own `{ translation, book, chapter, verse, scroll_positio
 
 All six bundled translations are seeded into OPFS during the same bootstrap that currently seeds `core.db`. No lazy loading, no "please wait" moments, no first-use friction after install.
 
-> **Superseded (November 2026):** first boot now seeds the five default translations (KJV, ASV, WEB, YLT, BSB). Darby and any later add-ons are downloaded only when the user adds them. See `Translation_Addons_Spec.md`.
+> **Superseded (November 2026):** planned: first boot will seed the five default translations (KJV, ASV, WEB, YLT, BSB), and Darby and any later add-ons will download only when the user adds them. See `Translation_Addons_Spec.md`.
 
 ### Future (Post-Build-2 Conversation)
 
