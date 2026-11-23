@@ -191,6 +191,8 @@ Select a verse in the reader to populate the first four tabs. Without a selectio
 
 Shows the book name, testament, and genre. Below that, the current chapter number and verse count. If the selected verse has notes, they're listed here too — with their text, tags, and a button to open the parent study.
 
+The WEB is shown verse-only, so its headings — Psalm 119's Hebrew letters (ALEPH, BETH…), the speakers in the Song of Songs (Beloved, Lover, Friends), and the five books of the Psalms — aren't in the reading text. When the pane shows the WEB, the Info tab lists the chapter's headings and where each falls, such as "BETH — before 119:9".
+
 ### Tags
 
 Shows two groups of chips for the selected verse:

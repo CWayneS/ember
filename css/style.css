@@ -1888,6 +1888,27 @@ body.markup-mode-on .verse.markup-circle {
     padding: 10px 16px 4px;
 }
 
+/* Headings a translation keeps out of its verse text (Info tab) */
+.ref-heading-list {
+    list-style: none;
+    margin: 0;
+    padding: 0 16px 10px;
+}
+
+.ref-heading-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 8px;
+    padding: 3px 0;
+}
+
+.ref-heading-text {
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    color: var(--text-primary);
+}
+
 .ref-chips {
     display: flex;
     flex-wrap: wrap;

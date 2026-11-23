@@ -352,9 +352,29 @@ def check_scripture_search(app):
     p.wait_for_timeout(300)
     title = p.evaluate("document.querySelector('#reader-pane-a .verse.verse-title')?.textContent")
     check(title == 'A Psalm by David, when he fled from Absalom his son.', f'WEB Psalm 3 title row ({title!r})')
+
+    # The Info tab lists the headings WEB keeps out of its verse text.
+    headings = lambda: p.evaluate("""[...document.querySelectorAll('#info-tab .ref-heading-item')]
+        .map(item => item.textContent)""")
+    p.click('#reference-tabs [data-tab="info"]')
+    app.navigate(19, 119)
+    app.select_verse(19119009)
+    found = headings()
+    check(len(found) == 22 and found[0] == 'ALEPHbefore 119:1' and found[1] == 'BETHbefore 119:9',
+          f'Info tab: Psalm 119 letter headings in WEB ({len(found)}: {found[:2]})')
+    app.navigate(19, 42)
+    app.select_verse(19042001)
+    check(headings() == ['BOOK 2before the title'], f'Info tab: a heading before a Psalm title ({headings()})')
+    app.navigate(22, 1)
+    app.select_verse(22001004)
+    found = headings()
+    check('Friendsin 1:4, before “We will be glad and rejoice…”' in found and found[0] == 'Belovedbefore 1:2',
+          f'Info tab: Song of Songs speakers, before and inside a verse ({found[:4]})')
     p.click('#reader-pane-a .pane-book-btn')
     p.click('.translation-btn:has-text("KJV")')
     p.keyboard.press('Escape')
+    p.wait_for_timeout(300)
+    check(headings() == [], f'Info tab: no headings section once the pane shows KJV ({headings()})')
 
 
 def scenario_smoke(app):

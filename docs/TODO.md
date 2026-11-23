@@ -45,6 +45,7 @@ Done 2026-11-22: Scripture search on FTS4, and WEB rebuilt from eBible's USFM (`
 
 **Polish**
 
+- **Info tab shows the chapter before a verse is selected.** Today the tab is empty until a verse is selected, though its book, chapter and headings sections don't depend on one; only the notes do. Decide first: when the selected verse is in a different chapter from the one on screen, which the tab follows; and in split view, whether it follows the active pane, as the headings section already does. Tags, Related and Language stay verse-only. Source: `js/reference.js` (`renderInfoTab`, `clearAll`); Wayne, 2026-11-23.
 - **Add the PWA icons.** `manifest.json` lists them, but `icons/` has none. See `FEATURE_INVENTORY.md` item 3. Three concepts were sketched (a glowing coal, a flame rising from an open book, a spark over a page corner); the coal was the one that stayed readable at 16px. No final choice recorded yet. Warm amber on dark; keep the mark inside the central ~80% for the maskable version.
 - **Finish the PWA install prompt.** The page element and styles exist, but there's no `beforeinstallprompt` handler. See `docs/BUILD_6.1_ACTUAL_STATE.md` §7.
 - **Fix drifted line references in `FEATURE_INVENTORY.md`.** For example, item 8 says the load error is shown at `app.js:46`, which is now `initMarkups()`; the `catch` is at line 77. Not recorded anywhere else.

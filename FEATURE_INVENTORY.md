@@ -248,6 +248,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 130. Active when a verse is selected; placeholder "Select a verse to see reference material." otherwise — reference.js
 131. Shows: book name, testament label ("Old Testament" / "New Testament"), genre — reference.js:57-69
 132. Shows: chapter number, verse count for that chapter — reference.js:76-88
+132a. When the active pane's translation keeps headings out of its verse text (only WEB: Psalm 119's 22 letters, the 33 Song of Songs speaker labels, the Psalms' 5 book divisions), a "Headings · WEB" section lists the chapter's, each with where it falls: "before 119:9", "before the title", or for a label inside a verse "in 1:4, before “We will be glad and rejoice…”". Re-rendered when the pane's translation or the active pane changes. From `web.db`'s `headings` table (book, chapter, verse, offset, text), which other translation files don't have — reference.js:appendChapterHeadings, db.js:getHeadingsForChapter
 133. If the selected verse has notes: shows a "Notes" section with each note's body, tag chips, and a "StudyName →" link button — reference.js:appendVerseNotes
 134. Clicking tag chip in reference panel: opens tag view — reference.js:118
 135. Clicking study link in reference panel: opens that study in a tab — reference.js:127

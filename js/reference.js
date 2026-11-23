@@ -3,9 +3,9 @@
 import {
     getBook, parseVerseId, formatReference,
     getChapterVerseCount, getTopicsForVerse, getUserTagsForVerse,
-    getNotesForVerse, getCrossReferencesForVerse
+    getNotesForVerse, getCrossReferencesForVerse, getHeadingsForChapter
 } from './db.js';
-import { navigateTo, getCurrentLocation } from './reader.js';
+import { navigateTo, getCurrentLocation, getActivePaneTranslationId, getActivePaneTranslationAbbrev } from './reader.js';
 import { selectVerseRange } from './selection.js';
 import { openStudy, openTagView } from './panels.js';
 import { initLanguageTab, renderLanguageTab as renderLanguageTabContent } from './language.js';
@@ -22,8 +22,20 @@ export function refreshReference(verseId) {
     renderTagsTab(verseId);
 }
 
+// The verse the Info tab is showing, so it can be shown again when the active
+// pane's translation changes (its headings section depends on it).
+let infoVerseId = null;
+
 export function initReference() {
     initLanguageTab();
+    const refreshInfo = () => {
+        if (infoVerseId === null) return;
+        const parsed = parseVerseId(infoVerseId);
+        renderInfoTab(getBook(parsed.book), parsed.chapter, infoVerseId);
+    };
+    // A translation switch re-renders the pane; switching panes may change translation.
+    document.addEventListener('chapter-rendered', refreshInfo);
+    document.addEventListener('pane-changed', refreshInfo);
     document.addEventListener('selection-changed', (e) => {
         const { verseIds } = e.detail;
         if (verseIds.length > 0) {
@@ -62,6 +74,7 @@ function clearAll() {
 function renderInfoTab(book, chapter, verseId) {
     const container = document.getElementById('info-tab');
     container.innerHTML = '';
+    infoVerseId = book ? verseId : null;
 
     if (!book) {
         setPlaceholder(container, EMPTY_MSG);
@@ -103,7 +116,50 @@ function renderInfoTab(book, chapter, verseId) {
     chapterSection.appendChild(chapterLabel);
     chapterSection.appendChild(chapterMeta);
     container.appendChild(chapterSection);
+    appendChapterHeadings(container, book, chapter);
     appendVerseNotes(container, verseId);
+}
+
+// Headings the active pane's translation keeps out of its verse text (only
+// WEB has any): each with where it falls, "before 119:9" or, for one inside a
+// verse, "in 1:4, before “We will be glad…”".
+function appendChapterHeadings(container, book, chapter) {
+    const headings = getHeadingsForChapter(getActivePaneTranslationId(), book.id, chapter);
+    if (headings.length === 0) return;
+
+    container.appendChild(refHeading(`Headings · ${getActivePaneTranslationAbbrev()}`));
+    const list = document.createElement('ul');
+    list.className = 'ref-heading-list';
+    for (const heading of headings) {
+        const item = document.createElement('li');
+        item.className = 'ref-heading-item';
+
+        const text = document.createElement('span');
+        text.className = 'ref-heading-text';
+        text.textContent = heading.text;
+
+        const place = document.createElement('span');
+        place.className = 'ref-meta';
+        const reference = `${chapter}:${heading.verse}`;
+        if (heading.verse === 0) {
+            place.textContent = 'before the title';
+        } else if (heading.offset === 0) {
+            place.textContent = `before ${reference}`;
+        } else {
+            place.textContent = `in ${reference}, before “${openingWords(heading.following)}”`;
+        }
+
+        item.appendChild(text);
+        item.appendChild(place);
+        list.appendChild(item);
+    }
+    container.appendChild(list);
+}
+
+// The first few words of a passage, with an ellipsis when there is more.
+function openingWords(text, count = 6) {
+    const words = (text || '').split(' ');
+    return words.length > count ? `${words.slice(0, count).join(' ')}…` : words.join(' ');
 }
 
 function appendVerseNotes(container, verseId) {

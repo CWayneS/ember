@@ -236,7 +236,7 @@ Ember bundles data from several sources. The same information is shown in-app un
 
 The six bundled translations (KJV, ASV, WEB, YLT, Darby, BSB), Nave's Topical Bible, and the Brown-Driver-Briggs (1906) and Strong's (1890) Hebrew dictionaries are public domain and don't require attribution.
 
-The World English Bible appears as the **Verse-only World English Bible**: its verses without headings, footnotes or speaker labels. Its publisher asks that a changed text not be called the World English Bible, and "World English Bible" is a trademark of eBible.org. Ember changes no verse text, but the plainer name makes clear what is left out.
+The World English Bible appears as the **Verse-only World English Bible**: its verses without headings, footnotes or speaker labels in the reading text (the Info tab lists the headings and speaker labels separately). Its publisher asks that a changed text not be called the World English Bible, and "World English Bible" is a trademark of eBible.org. Ember changes no verse text, but the plainer name makes clear what is left out.
 
 | Source | License | Powers |
 |---|---|---|

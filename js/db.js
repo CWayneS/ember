@@ -1293,6 +1293,29 @@ export function getChapter(translationId, bookId, chapter) {
     );
 }
 
+// Headings a translation keeps out of its verse text, for the Info tab. Only
+// WEB has them (Psalm 119's letters, the Song of Songs speaker labels, the
+// Psalms' book divisions); other files have no headings table, so they and
+// WEB files built before it give []. Each row is before its verse (offset 0;
+// verse 0 is a Psalm title) or inside it, before `following`.
+export function getHeadingsForChapter(translationId, bookId, chapter) {
+    const tdb = _translationDbs.get(translationId);
+    if (!tdb) return [];
+    const hasTable = queryValue(tdb,
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'headings'");
+    if (!hasTable) return [];
+    return queryAll(tdb,
+        `SELECT h.book * 1000000 + h.chapter * 1000 + h.verse AS verse_id,
+                h.verse, h.offset, h.text,
+                CASE WHEN h.offset > 0 THEN substr(v.text, h.offset + 1) END AS following
+         FROM headings h
+         LEFT JOIN verses v ON v.book = h.book AND v.chapter = h.chapter AND v.verse = h.verse
+         WHERE h.book = ? AND h.chapter = ?
+         ORDER BY h.verse, h.offset`,
+        [bookId, chapter]
+    );
+}
+
 // How many verses one translation has from startId to endId, across chapters
 // and books (the readable export names a long anchor's size rather than quote it).
 export function countVersesInRange(translationId, startId, endId) {

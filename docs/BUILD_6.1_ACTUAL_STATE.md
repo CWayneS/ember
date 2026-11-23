@@ -438,5 +438,7 @@ All twelve suites pass.
 
 **`sw.js`:** `CACHE_NAME` → `ember-v30`.
 
+**Headings in the Info tab (2026-11-23).** The USFM parser keeps the 60 headings it leaves out of WEB's text (Psalm 119's 22 letters, 33 Song of Songs speaker labels, the Psalms' 5 book divisions) in a new `headings` table in `web.db` (book, chapter, verse, offset, text). A heading belongs to the text after it: offset 0 when that's the start of a verse (verse 0 when it's a Psalm title, as "BOOK 2" before Psalm 42's), otherwise its character offset inside the verse. Four labels fall inside a verse, e.g. Song 1:4 "Friends" at "We will be glad…". `verify()` expects 60, each before an existing verse or at a word boundary inside one. The verse text, books and meta are unchanged from the earlier rebuild; only the table is new. `db.js:getHeadingsForChapter()` returns [] for a file without the table. `reference.js:appendChapterHeadings()` lists them under "Headings · WEB" in the Info tab, which now re-renders on `chapter-rendered` and `pane-changed`, so a translation switch shows or hides the section. `tests/verify.py smoke` checks Psalm 119, Psalm 42, Song 1 and the switch back to KJV. `CACHE_NAME` → `ember-v31`. Wayne's install needs `translations/web.db` cleared from OPFS again.
+
 **Existing installs** keep their old translation files in OPFS, since seeding never replaces a whole file. On them, Scripture search still uses LIKE and WEB is still the old text, until `translations/*.db` is cleared from OPFS. Version-aware reseeding (TODO step 3) is what will reach other installs.
 

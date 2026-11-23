@@ -289,6 +289,8 @@ WEB_OMITTED_VERSES = {
     (44, 24,  7),  # Acts 24:7
 }
 WEB_EXPECTED_VERSE_COUNT = 31_098
+# Psalm 119's 22 letters, the 33 Song of Songs speaker labels, Psalms' 5 book divisions.
+WEB_EXPECTED_HEADING_COUNT = 60
 # Also footnote-only, and not a gap: it says WEB has the doxology at 14:24-26.
 WEB_FOOTNOTE_ONLY_MARKERS = WEB_OMITTED_VERSES | {(45, 16, 25)}
 
@@ -296,49 +298,96 @@ WEB_FOOTNOTE_ONLY_MARKERS = WEB_OMITTED_VERSES | {(45, 16, 25)}
 # stops the build, so nothing unexamined reaches the verse text.
 USFM_PARAGRAPH = {"p", "q1", "q2", "b", "m", "mi", "pi1", "li1", "nb"}  # a space
 USFM_CHARACTER = {"w", "+w", "wj", "qs", "bk"}  # keep the words, drop the markup
-USFM_HEADING   = {"id", "ide", "h", "toc1", "toc2", "toc3", "mt1", "mt2", "mt3",
-                  "ms1", "cl",
-                  "sp"}  # Song of Songs speaker labels: headings, not Scripture
+USFM_BOOK_TITLES = {"id", "ide", "h", "toc1", "toc2", "toc3", "mt1", "mt2", "mt3",
+                    "cl"}  # dropped
+# Kept out of the verse text, and stored in the headings table, which the
+# Info tab shows: the Psalms' five book divisions (BOOK 1 ...) and the Song
+# of Songs speaker labels. Psalm 119's letter headings are \d, handled below.
+USFM_HEADINGS  = {"ms1", "sp"}
 USFM_NOTE      = re.compile(r'\\(f|x) .*?\\\1\*', re.DOTALL)  # footnotes, cross-references
 # An opening marker owns the one space after it ("Aren’\+w t" is "Aren’t").
 USFM_MARKER    = re.compile(r'\\(\+?[a-z]+[0-9]*)(?:(\*)|\s?)')
 USFM_CHAPTER_NUMBER = re.compile(r"\s*(\d+)")
 USFM_VERSE_NUMBER   = re.compile(r"\s*(\d+)\s")
+# Marks where a heading falls inside a verse's text until its offset is known.
+HEADING_MARK = "\uE000"
 
 
-def _parse_web_usfm_book(usfm: str, book_id: int) -> list[tuple]:
+def _normalize_space(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _parse_web_usfm_book(usfm: str, book_id: int) -> tuple[list[tuple], list[tuple]]:
     r"""
-    Parse one book's USFM into (book_id, chapter, verse, text) rows.
+    Parse one book's USFM into (book_id, chapter, verse, text) rows, and
+    (book_id, chapter, verse, offset, text) headings.
 
     A \d (Psalm title) before a titled Psalm's first verse becomes verse 0.
-    Every other \d is one of Psalm 119's letter headings (ALEPH, BETH, ...),
-    which are dropped. Footnotes, cross-references and headings are dropped;
-    \w word|strong="..." keeps just the word.
+    Every other \d is one of Psalm 119's letter headings (ALEPH, BETH, ...).
+    Footnotes, cross-references and book titles are dropped; \w word|strong="..."
+    keeps just the word.
+
+    A heading belongs to the text that follows it: offset 0 when that is the
+    start of a verse (or a Psalm title, verse 0), or the character offset in
+    the verse when the heading falls inside it (Song of Songs 1:4 "Friends").
     """
     usfm = USFM_NOTE.sub("", usfm)
     rows: list[tuple] = []
+    headings: list[tuple] = []
     chapter = 0
     verse = None       # None: before the chapter's first verse
     target = None      # the list text goes to, or None to discard it
     buffers: dict[int, list[str]] = {}
     in_word = False    # inside \w ... \w*: drop the |attributes
+    heading = None     # a heading's text while it is being read
+    waiting = []       # headings read, not yet placed
+
+    def close_heading():
+        nonlocal heading
+        if heading is not None:
+            waiting.append(_normalize_space("".join(heading)))
+            heading = None
+
+    def place_waiting_before(verse_number):
+        for text in waiting:
+            headings.append((book_id, chapter, verse_number, 0, text))
+        waiting.clear()
 
     def finish_chapter():
+        within = []  # headings inside this chapter's verses, in order
         for verse_number, parts in buffers.items():
-            text = re.sub(r"\s+", " ", "".join(parts)).strip()
-            if text:
-                rows.append((book_id, chapter, verse_number, text))
-            elif (book_id, chapter, verse_number) not in WEB_FOOTNOTE_ONLY_MARKERS:
-                raise ValueError(f"empty verse {book_id} {chapter}:{verse_number}")
+            raw = "".join(parts)
+            text = _normalize_space(raw.replace(HEADING_MARK, " "))
+            if not text:
+                if (book_id, chapter, verse_number) not in WEB_FOOTNOTE_ONLY_MARKERS:
+                    raise ValueError(f"empty verse {book_id} {chapter}:{verse_number}")
+                continue
+            rows.append((book_id, chapter, verse_number, text))
+            for index, character in enumerate(raw):
+                if character == HEADING_MARK:
+                    before = _normalize_space(raw[:index].replace(HEADING_MARK, " "))
+                    within.append((verse_number, len(before) + 1 if before else 0))
+        # The marks were put in the order the headings were read.
+        for (verse_number, offset), heading_row in zip(within, chapter_within):
+            headings.append((book_id, chapter, verse_number, offset, heading_row))
 
+    chapter_within: list[str] = []
     position = 0
     for match in USFM_MARKER.finditer(usfm + "\\p"):
         text = usfm[position:match.start()]
         position = match.end()
         marker, closing = match.group(1), match.group(2) is not None
 
-        if target is not None:
-            target.append(text.split("|", 1)[0] if in_word else text)
+        if in_word:
+            text = text.split("|", 1)[0]
+        if heading is not None:
+            heading.append(text)
+        elif target is not None:
+            if waiting and text.strip() and verse is not None and target is buffers.get(verse):
+                target.append(HEADING_MARK)  # a heading inside this verse
+                chapter_within.extend(waiting)
+                waiting.clear()
+            target.append(text)
 
         if marker in ("w", "+w"):
             in_word = not closing
@@ -348,12 +397,14 @@ def _parse_web_usfm_book(usfm: str, book_id: int) -> list[tuple]:
         if closing:
             raise ValueError(f"unexpected closing marker \\{marker}*")
 
-        # Block-level markers: the number of \c and \v comes first in the text after.
+        # Block-level markers end a heading. The number of \c and \v comes first in the text after.
+        close_heading()
         if marker == "c":
             if chapter:
                 finish_chapter()
             number = USFM_CHAPTER_NUMBER.match(usfm, position)
             chapter, verse, buffers, target = int(number.group(1)), None, {}, None
+            chapter_within = []
             position = number.end()
         elif marker == "v":
             number = USFM_VERSE_NUMBER.match(usfm, position)
@@ -361,13 +412,19 @@ def _parse_web_usfm_book(usfm: str, book_id: int) -> list[tuple]:
             if verse in buffers:
                 raise ValueError(f"verse {book_id} {chapter}:{verse} appears twice")
             position = number.end()
+            place_waiting_before(verse)
             target = buffers.setdefault(verse, [])
         elif marker == "d":
             if book_id != PSALMS_BOOK_ID:
                 raise ValueError(f"\\d outside Psalms ({book_id} {chapter})")
-            is_title = verse is None and chapter in PSALM_TITLE_CHAPTERS
-            target = buffers.setdefault(0, []) if is_title else None
-        elif marker in USFM_HEADING:
+            if verse is None and chapter in PSALM_TITLE_CHAPTERS:
+                place_waiting_before(0)
+                target = buffers.setdefault(0, [])
+            else:
+                heading, target = [], None
+        elif marker in USFM_HEADINGS:
+            heading, target = [], None
+        elif marker in USFM_BOOK_TITLES:
             target = None
         elif marker in USFM_PARAGRAPH:
             if target is not None:
@@ -378,12 +435,14 @@ def _parse_web_usfm_book(usfm: str, book_id: int) -> list[tuple]:
             raise ValueError(f"unknown USFM marker \\{marker} in book {book_id} {chapter}")
     if chapter:
         finish_chapter()
-    return rows
+    if waiting:
+        raise ValueError(f"headings with no text after them: {waiting}")
+    return rows, headings
 
 
-def load_from_web_usfm(source_path: str) -> list[tuple]:
+def load_from_web_usfm(source_path: str) -> tuple[list[tuple], list[tuple]]:
     """
-    Load WEB from eBible's USFM zip (engwebp_usfm.zip), read in place.
+    Load WEB's verses and headings from eBible's USFM zip (engwebp_usfm.zip), read in place.
     Files are named NN-CODEengwebp.usfm; front matter (FRT) and the
     glossary (GLO) are skipped.
     """
@@ -399,6 +458,7 @@ def load_from_web_usfm(source_path: str) -> list[tuple]:
         sys.exit(1)
 
     verses: list[tuple] = []
+    headings: list[tuple] = []
     seen_books = set()
     with zipfile.ZipFile(source_path) as archive:
         for name in sorted(archive.namelist()):
@@ -407,7 +467,10 @@ def load_from_web_usfm(source_path: str) -> list[tuple]:
                 continue
             book_id = WEB_BOOK_CODES[m.group(1)]
             seen_books.add(book_id)
-            verses += _parse_web_usfm_book(archive.read(name).decode("utf-8-sig"), book_id)
+            book_verses, book_headings = _parse_web_usfm_book(
+                archive.read(name).decode("utf-8-sig"), book_id)
+            verses += book_verses
+            headings += book_headings
 
     if seen_books != set(range(1, 67)):
         print(f"Error: books missing from the zip: {sorted(set(range(1, 67)) - seen_books)}",
@@ -423,7 +486,7 @@ def load_from_web_usfm(source_path: str) -> list[tuple]:
               file=sys.stderr)
         sys.exit(1)
 
-    return sorted(verses, key=lambda row: (row[0], row[1], row[2]))
+    return sorted(verses, key=lambda row: (row[0], row[1], row[2])), headings
 
 
 # ── Psalm title placeholders (Psalm_Title_Fix_Spec.md) ───────────────────────
@@ -534,6 +597,25 @@ def populate_meta(
     )
 
 
+# Headings kept out of the verse text (WEB only), shown in the Info tab.
+# offset 0: before the verse (verse 0 is a Psalm title); otherwise the
+# character offset in the verse's text where the heading falls.
+def populate_headings(conn: sqlite3.Connection, headings: list[tuple]) -> None:
+    conn.execute("""
+        CREATE TABLE headings (
+            book    INTEGER NOT NULL,
+            chapter INTEGER NOT NULL,
+            verse   INTEGER NOT NULL,
+            offset  INTEGER NOT NULL,
+            text    TEXT    NOT NULL
+        )""")
+    conn.execute("CREATE INDEX idx_headings_chapter ON headings(book, chapter)")
+    conn.executemany(
+        "INSERT INTO headings (book, chapter, verse, offset, text) VALUES (?, ?, ?, ?, ?)",
+        headings,
+    )
+
+
 def populate_verses(conn: sqlite3.Connection, verses: list[tuple]) -> None:
     conn.executemany(
         "INSERT INTO verses (book, chapter, verse, text) VALUES (?, ?, ?, ?)",
@@ -619,6 +701,18 @@ def verify(output_path: str, abbrev: str) -> bool:
         "SELECT text FROM verses WHERE book=45 AND chapter=8 AND verse=28"
     ).fetchone()
 
+    # Every heading sits before a verse that exists, or at a word boundary inside one.
+    heading_problems, heading_count = [], 0
+    if abbrev == "WEB":
+        rows = conn.execute(
+            "SELECT h.book, h.chapter, h.verse, h.offset, h.text, v.text FROM headings h "
+            "LEFT JOIN verses v USING (book, chapter, verse)").fetchall()
+        heading_count = len(rows)
+        for book, chapter, verse, offset, heading, verse_text in rows:
+            if verse_text is None or not heading or (
+                    offset and not (0 < offset < len(verse_text) and verse_text[offset - 1] == " ")):
+                heading_problems.append(f"{book} {chapter}:{verse}@{offset} {heading!r}")
+
     shifted = []
     # An omitted verse must leave a hole, not shift the rest of its chapter.
     if abbrev == "WEB":
@@ -650,6 +744,11 @@ def verify(output_path: str, abbrev: str) -> bool:
         kind = "with WEB's own wording" if filled_titles else "placeholder(s), empty"
         print(f"  Titles : {title_count} Psalm title row(s) (verse=0), {kind}")
     print(f"  Markup : {'✓ none left' if not markup_left else '✗ ' + repr(markup_left)}")
+    if abbrev == "WEB":
+        heading_ok = heading_count == WEB_EXPECTED_HEADING_COUNT and not heading_problems
+        print(f"  Heads  : {heading_count} heading(s)  "
+              f"{'✓' if heading_ok else f'✗ expected {WEB_EXPECTED_HEADING_COUNT}, placed right'} "
+              f"{heading_problems[:5] if heading_problems else ''}")
     print(f"  Words  : {'✓' if fts_word_ok else '✗'} 'love' matches whole words only")
     print(f"  Books  : {book_count}  {'✓' if book_count == 66 else '✗ expected 66'}")
     print(f"  Meta   : {meta}")
@@ -658,7 +757,8 @@ def verify(output_path: str, abbrev: str) -> bool:
     print(f"  Jn  3:16 — {jn3_16[0][:80] if jn3_16 else '✗ MISSING'}")
     print(f"  Rom 8:28 — {rom8_28[0][:80] if rom8_28 else '✗ MISSING'}")
 
-    if not verse_ok or book_count != 66 or not fts_hits or markup_left or not fts_word_ok:
+    headings_ok = abbrev != "WEB" or (heading_count == WEB_EXPECTED_HEADING_COUNT and not heading_problems)
+    if not verse_ok or book_count != 66 or not fts_hits or markup_left or not fts_word_ok or not headings_ok:
         ok = False
         print("\n  ✗ One or more checks FAILED.", file=sys.stderr)
     else:
@@ -689,9 +789,10 @@ def main() -> None:
 
     # ── Load verses ───────────────────────────────────────────────────────────
 
+    headings: list[tuple] = []
     if source.endswith(".zip"):
         print(f"Loading {abbrev} from WEB USFM: {source}")
-        verses = load_from_web_usfm(source)
+        verses, headings = load_from_web_usfm(source)
     elif source.endswith((".txt", ".tsv")):
         print(f"Loading {abbrev} from BSB TSV: {source}")
         verses = load_from_bsb_tsv(source)
@@ -719,6 +820,8 @@ def main() -> None:
     populate_books(conn)
     populate_meta(conn, args.name, abbrev, args.year, args.license_)
     populate_verses(conn, verses)
+    if headings:
+        populate_headings(conn, headings)
 
     print("  Rebuilding FTS index …")
     rebuild_fts(conn)
