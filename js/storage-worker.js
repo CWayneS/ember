@@ -1,7 +1,7 @@
 // storage-worker.js — Off-thread OPFS / IndexedDB persistence
 //
-// Receives a Uint8Array (transferred, not copied) from the main thread and
-// writes it to OPFS when available, falling back to IndexedDB.
+// Receives saves as Uint8Arrays (transferred, not copied) from the main thread and
+// writes each to OPFS when available, falling back to IndexedDB.
 //
 // Writes run one at a time, in order. Each message is a whole copy of core.db, so
 // only the newest one waiting matters: while a write is in progress, a newer save
@@ -14,15 +14,29 @@
 // garbage collector, which allocates so little that it rarely runs: about one file's
 // worth of memory piled up per save, reaching 1.2 GB at 40 years of data
 // (docs/STRESS_TEST_RESULTS.md). The main thread collects it promptly.
+//
+// The one other message, { type: 'idle' }, is answered with { type: 'idle' } once
+// every save sent before it has been written. Restore waits on it (db.js,
+// restoreCoreDb()) before writing core.db itself.
 
-let waiting = null;   // newest save not yet started
-let writing = false;  // a write is in progress
+let waiting = null;        // newest save not yet started
+let writing = false;       // a write is in progress
+let idleRequests = 0;      // 'idle' messages to answer when the queue empties
 
 function handBack(data) {
     self.postMessage(data, [data.buffer]);
 }
 
+function answerIdleRequests() {
+    for (; idleRequests > 0; idleRequests--) self.postMessage({ type: 'idle' });
+}
+
 self.onmessage = (e) => {
+    if (e.data?.type === 'idle') {
+        idleRequests++;
+        if (!writing) answerIdleRequests();
+        return;
+    }
     if (waiting) handBack(waiting);
     waiting = e.data; // Uint8Array
     if (!writing) drainQueue();
@@ -42,6 +56,7 @@ async function drainQueue() {
         }
     }
     writing = false;
+    answerIdleRequests();
 }
 
 async function writeCoreDb(data) {

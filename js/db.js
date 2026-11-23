@@ -27,6 +27,8 @@ const BUNDLED_TEMPLATE_FILES = [
 let db             = null;
 let _booksCache    = null;
 let _storageWorker = null;
+let _restoring     = false; // set by restoreCoreDb(): ordinary saves are held off
+let _savedDuringRestore = false;
 let _SQL           = null; // cached sql.js module — reused by restore's validation step
 
 // Translation handles — keyed by integer translation ID (1 = KJV, 2 = ASV, …).
@@ -1091,7 +1093,41 @@ export function looksLikeCoreDb(bytes) {
 // instead of the good IndexedDB copy, i.e. exactly the half-restored state
 // this function must not produce. If OPFS is the platform's storage,
 // commit to it and let failure reject outright.
+//
+// Ordinary saves go through the storage worker's queue, which this write does not.
+// So it first stops new saves and waits for the worker to finish the ones it has:
+// otherwise a save already being written could land after the restore, before the
+// reload, and the restore would seem not to have taken. On success, saves stay
+// stopped until the reload, so nothing can overwrite the restored file. On failure,
+// the live database is saved again if anything was held off meanwhile.
 export async function restoreCoreDb(bytes) {
+    _restoring = true;
+    _savedDuringRestore = false;
+    try {
+        await waitForStorageWorker();
+        await writeRestoredCoreDb(bytes);
+    } catch (error) {
+        _restoring = false;
+        if (_savedDuringRestore) saveToStorage(db.export());
+        throw error;
+    }
+}
+
+// Resolves once the storage worker has written every save sent to it so far.
+function waitForStorageWorker() {
+    if (!_storageWorker) return Promise.resolve();
+    return new Promise((resolve) => {
+        const onMessage = (event) => {
+            if (event.data?.type !== 'idle') return;
+            _storageWorker.removeEventListener('message', onMessage);
+            resolve();
+        };
+        _storageWorker.addEventListener('message', onMessage);
+        _storageWorker.postMessage({ type: 'idle' });
+    });
+}
+
+async function writeRestoredCoreDb(bytes) {
     if ('storage' in navigator && 'getDirectory' in navigator.storage) {
         const root     = await navigator.storage.getDirectory();
         const handle   = await root.getFileHandle('core.db', { create: true });
@@ -1124,6 +1160,11 @@ export async function restoreCoreDb(bytes) {
 // blocks on OPFS/IndexedDB. db.export() (WASM serialization) still runs
 // synchronously here, but the actual disk write is off-thread.
 function saveToStorage(data) {
+    if (_restoring) {
+        // restoreCoreDb() is replacing core.db; see there.
+        _savedDuringRestore = true;
+        return;
+    }
     // Transfer the underlying ArrayBuffer — zero-copy, no clone needed. The worker
     // transfers it back when the write is done (see storage-worker.js); nothing
     // here needs to listen, since all that's left to do is let it be collected.

@@ -402,6 +402,6 @@ Record: `HEBREW_LEXICON_REPORT.md`. Spec: `Hebrew_Lexicon_Spec.md`. It supersede
 
 **`tests/verify.py storage`:** the hand-back check now sends 10 rapid saves instead of 3, expects all 10 buffers back whole, and expects the last value after a reload. Old code passed this as well. The ordering guarantee comes from the queue's structure, not from the test.
 
-**`sw.js`:** `CACHE_NAME` → `ember-v28`.
+**`sw.js`:** `CACHE_NAME` → `ember-v29`.
 
-**Still open:** `restoreCoreDb()` writes from the main thread, outside the queue, so a worker write already in progress could land after the restore and before the reload. Listed in `docs/TODO.md`.
+**Restore waits for the worker.** `restoreCoreDb()` writes core.db from the main thread, outside the queue. It now stops new saves, sends the worker `{ type: 'idle' }`, and writes only after the worker answers once every earlier save is written. On success, saves stay stopped until the reload, so nothing lands over the restored file. On failure, saves resume, and if any were held off meanwhile the live database is saved again. Before this, a save still being written, or one made during the restore, could land after it, and the restore seemed not to have taken. `tests/verify.py storage` (`storage_restore_after_saves`) restores while 5 saves are queued and saves again during and after. The old code failed it (the last save, `'after'`, was on disk after the reload); the new code passes.

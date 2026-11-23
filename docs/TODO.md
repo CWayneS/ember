@@ -10,9 +10,7 @@ Created 2026-11-04, at `cc95ec5`. Ordered into a path on 2026-11-22. When an ite
 
 ## 1. Make saves safe
 
-| To-do | Why it matters | Size | Source |
-|---|---|---|---|
-| **Restore waits for the storage worker** | `restoreCoreDb()` writes core.db from the main thread, outside the worker's queue. A save already being written when Restore is confirmed could land after the restore, before the reload, so the restore seems not to have taken. The backup file is still there to try again, so no edits are lost. Have restore wait until the worker is idle, then write. | Small | `js/db.js` (`restoreCoreDb()`); `docs/BUILD_6.1_ACTUAL_STATE.md` §16 |
+Done 2026-11-22: the storage worker queues its writes, and restore waits for it (`docs/BUILD_6.1_ACTUAL_STATE.md` §16). Save frequency stays as it is (`docs/STRESS_TEST_RESULTS.md`, remedy 4).
 
 ## 2. Rebuild all six translation files once
 

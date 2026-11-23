@@ -2236,6 +2236,35 @@ def storage_worker_hands_back(browser):
     run.close()
 
 
+def storage_restore_after_saves(browser):
+    """Restore writes core.db outside the worker's queue, so it waits for the worker to
+    finish, and holds off saves until the reload: none may land over the restored file."""
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    p.wait_for_timeout(1000)
+    p.evaluate("import('./js/db.js').then(db => db.setState('restore_probe', 'restored'))")
+    p.wait_for_timeout(3000)
+    p.evaluate("""async () => {
+        const root = await navigator.storage.getDirectory();
+        window.__backup = new Uint8Array(await (await (await root.getFileHandle('core.db')).getFile()).arrayBuffer());
+    }""")
+    p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        for (let i = 0; i < 5; i++) db.setState('restore_probe', 'live ' + i);
+        const restoring = db.restoreCoreDb(window.__backup);
+        db.setState('restore_probe', 'during');
+        await restoring;
+        db.setState('restore_probe', 'after');
+    }""")
+    p.wait_for_timeout(3000)
+    run.reload()
+    value = p.evaluate("import('./js/db.js').then(db => db.getState('restore_probe'))")
+    check(value == 'restored', f'restore over saves still being written: the restored file survives ({value!r})')
+    run.check_no_errors('restore after saves')
+    run.close()
+
+
 def storage_core_db_files(browser):
     """An empty core.db is a first run that never finished saving, and starts over. A
     damaged one with anything in it must fail visibly and stay on disk: it may hold
@@ -2375,6 +2404,7 @@ def scenario_storage(browser):
     storage_bundled_installs(browser)
     storage_anchor_lookups(browser)
     storage_worker_hands_back(browser)
+    storage_restore_after_saves(browser)
     storage_core_db_files(browser)
     storage_persist(browser)
     return FAILURES
