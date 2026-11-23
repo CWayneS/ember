@@ -43,7 +43,7 @@ At the top of the reader you'll find, from left to right:
 - **Markup tools** (the pen icon) — opens a strip of highlight colors, underline styles, and a circle tool for marking up a selected verse or range. See [Marking Up Verses](#marking-up-verses).
 - **☆ Bookmark** — bookmarks the selected verse, or shows your bookmark list if nothing is selected. See [Bookmarks](#bookmarks).
 - **? Help** — a quick reference popover for the reader.
-- **⚙ Settings** — adjust reading font size and other display options for this pane.
+- **⚙ Settings** — adjust the size of the Scripture text in both panes; **Reset** puts it back.
 
 ### Switching translations
 
@@ -94,9 +94,9 @@ To select a range of verses, click the first verse, then **Shift+click** the las
 
 **Clicking inside the notes or reference panel does not clear your selection.** You can move between the panels and the reader freely without losing it. The selection clears when you click in the header or anywhere else outside the two panels.
 
-### Note indicator dots
+### Note and bookmark dots
 
-If a verse has notes attached to it, a small gold dot appears after the verse text. Hover over it to see how many notes there are.
+If a verse has notes attached to it, a small gold dot appears under its verse number. Hover over it to see how many notes there are. A bookmarked verse gets a green dot there too; hover over it to see the bookmark's label.
 
 ---
 
@@ -229,11 +229,15 @@ Tap any row to open a card beneath it with that word's original-language spellin
 
 Tap **Click for more** on a word for its dictionary form (lemma), transliteration, and a plain-English breakdown of its grammar. At the bottom, **Show Lexicon** opens the word's dictionary entry. If the entry opens below the bottom edge of the panel, the panel glides up to show it.
 
-**The Greek lexicon** (Abbott-Smith, for New Testament words) is laid out as an outline like the Hebrew one: numbered senses, with lettered ones indented beneath them. Its New Testament references are links that open the verse the same way. Its Old Testament references stay plain text: Abbott-Smith cites the Greek Septuagint, whose book names and verse numbers often differ from English Bibles (its "1 Kingdoms" is 1 Samuel, and most of its Psalms are numbered one lower).
-
 **All occurrences** lists everywhere the Bible uses the same word in the same sense, counted by book (Genesis 11, Exodus 1, …). Tap a book to see its verses, each with how the word is translated there; ×2 means it appears twice in that verse, and the verse you're studying is marked *this verse*. A long book shows 100 verses at a time. Tap a verse to see it in the reader; the card stays open, so you can keep going down the list. "Same sense" follows STEPBible's numbering: אֱלֹהִים meaning "God" and אֱלֹהִים meaning "gods" are counted separately.
 
-**The Hebrew lexicon** shows two dictionaries, one under the other:
+#### The Greek lexicon
+
+The Greek lexicon (Abbott-Smith, for New Testament words) is laid out as an outline like the Hebrew one: numbered senses, with lettered ones indented beneath them. Its New Testament references are links that open the verse the same way. Its Old Testament references stay plain text: Abbott-Smith cites the Greek Septuagint, whose book names and verse numbers often differ from English Bibles (its "1 Kingdoms" is 1 Samuel, and most of its Psalms are numbered one lower).
+
+#### The Hebrew lexicon: Strong's and BDB
+
+The Hebrew lexicon shows two dictionaries, one under the other:
 
 - **Strong's** is the simpler one, and every Hebrew word has an entry. It gives the word's meaning, where it comes from (**Derivation**), and **KJV translates as**: the English words the King James Version uses for it. Those are translations, not definitions, so they show the range of ways the word was rendered.
 - **Brown-Driver-Briggs** (BDB) is the fuller scholarly dictionary, laid out as a numbered outline of the word's senses. The copy Ember uses is a volunteer transcription that is still in progress, so most entries are abridged: they carry BDB's definitions and outline, but not yet all of its references and word history. A short note under an entry says so. A few foreign words BDB prints in Arabic, Syriac or Ethiopic weren't typed in; those show as **[Arabic]** and so on.
@@ -245,6 +249,8 @@ The scripture references in a BDB entry are links: tap one to open that verse in
 **To get back** to the verse you were studying, tap its reference at the top of the Language tab (for example **Exodus 13:4**). The reader returns to it, still selected, and your place in the Language tab stays as it was. This works the same after following a Greek lexicon reference or one of a word's occurrences.
 
 A word built from pieces has its Lexicon link for the word itself, not for its prefix or suffix (the anatomy already explains those). A few rows that hold two words have a link for each. The Hebrew lexicon downloads in the background like the rest of the Language tab's data; if you tap **Show Lexicon** before it has ever arrived and you're offline, the card says so and the rest of it keeps working.
+
+#### Reading the Hebrew
 
 **Hebrew words are often built from pieces.** A single printed Hebrew word can carry a little word on the front ("and", "in", "the") and a pronoun on the end ("his", "them"): בְּרֵאשִׁית is "in" + "beginning", and וַיֹּאמֶר is "and" + "he said". For a word like this, **Click for more** shows its *anatomy*: one block per piece, in reading order, each with the piece's Hebrew, whether it's a **Prefix**, the **Word** itself, or a **Suffix**, what that piece means in this verse, and a plain-English breakdown of its grammar. If a piece's usual meaning differs from how it's used here, a small "General usage" line says so (בַּ is usually "in", but here "with the"). A few rows hold two written words at once; those show one group of pieces under each word.
 
@@ -319,7 +325,7 @@ Clicking a verse reference in a tag view navigates the reader there. Clicking th
 
 Click the **☀/🌙** icon next to the search bar to toggle dark mode.
 
-Most panels have a **⚙** button in their header for panel-specific display options (like font size). The **⚙** next to the search bar opens global settings, covering:
+Each panel has a **⚙** button in its header for that panel's own settings: the reader's and the notes panel's set their font size, and the reference panel's sets its default tab. The **⚙** next to the search bar opens global settings, covering:
 
 - **Backup & Restore** — export your entire notes/tags/studies/bookmarks database as a single file, or restore from a previously exported one. **Export Readable Copy** saves all your studies as one web page to read, print or share, with a contents list at the top (see "Exporting a study"); with many years of notes it takes a few seconds, and the button says "Preparing…" meanwhile. Restoring asks you to confirm first, since it replaces everything currently on your device. A line here also tells you whether your browser has agreed to keep Ember's data.
 - **Data & Attribution** — credits for the three externally-sourced, CC BY 4.0–licensed datasets Ember bundles (original-language word data, cross-reference data, and the Hebrew lexicon), each linked to its source.
@@ -339,7 +345,3 @@ No account is required. There is no cloud sync — if you use Ember on more than
 A backup file is the only thing Ember can restore from. For a copy you can read anywhere, now or in fifty years, export a readable copy too: it's an ordinary web page with your notes and the verses they're about.
 
 Your last reading position is also saved locally and restored each time you open the app.
-
----
-
-*Planned for future updates: nested notes, shareable study templates, a Webster's dictionary lookup, and a fuller Greek lexicon.*
