@@ -395,3 +395,13 @@ Record: `HEBREW_LEXICON_REPORT.md`. Spec: `Hebrew_Lexicon_Spec.md`. It supersede
 **`scripts/build_translation.py`:** `WEB_OMITTED_VERSES` lists the four, and numbering skips them. `verify()` now expects exactly 31,102 verses (31,098 for WEB) instead of accepting 30,900–31,200, and fails if any omitted WEB verse is present.
 
 **Existing installs** keep their old `web.db` in OPFS, since seeding never replaces a whole file. Clear `translations/web.db` from OPFS to get the fix.
+
+## 16. ADDENDUM — 2026-11-22, storage worker write queue
+
+**`js/storage-worker.js`** now writes one save at a time, in the order they arrive. It holds at most one save waiting behind the write in progress: a newer save replaces it, and the replaced buffer is handed back at once, so §12's hand-back still covers every buffer. A write in progress is never cut short. Before this, each message ran its own async write, so two overlapping writes could finish out of order and leave the older copy on disk (`STRESS_TEST_RESULTS.md`, "Write ordering"; never seen in testing). The IndexedDB fallback is now a Promise that settles on every outcome and closes its connection, so a failed write logs and the queue moves on instead of stalling. The OPFS-to-IndexedDB fallback itself is unchanged.
+
+**`tests/verify.py storage`:** the hand-back check now sends 10 rapid saves instead of 3, expects all 10 buffers back whole, and expects the last value after a reload. Old code passed this as well. The ordering guarantee comes from the queue's structure, not from the test.
+
+**`sw.js`:** `CACHE_NAME` → `ember-v28`.
+
+**Still open:** `restoreCoreDb()` writes from the main thread, outside the queue, so a worker write already in progress could land after the restore and before the reload. Listed in `docs/TODO.md`.

@@ -2208,8 +2208,10 @@ def storage_persist(browser):
 
 
 def storage_worker_hands_back(browser):
-    """The worker returns each finished write's buffer: left in its heap, these piled up
-    to 1.2 GB at 40 years of data. Peak memory itself is measured by tests/stress.py."""
+    """The worker returns every buffer, including saves replaced while waiting in its
+    queue: left in its heap, these piled up to 1.2 GB at 40 years of data. Peak memory
+    itself is measured by tests/stress.py. The burst also checks the newest save lands
+    last, though ordering is guaranteed by the queue's structure, not by this test."""
     run = OfflineRun(browser)
     run.ctx.add_init_script("""
         window.__returned = [];
@@ -2223,12 +2225,13 @@ def storage_worker_hands_back(browser):
     p = run.new_page()
     run.boot()
     p.wait_for_timeout(1000)
-    p.evaluate("window.__returned.length = 0; import('./js/db.js').then(db => { for (let i = 0; i < 3; i++) db.setState('worker_probe', String(i)); })")
-    p.wait_for_function('window.__returned.length >= 3', timeout=30_000)
+    p.evaluate("window.__returned.length = 0; import('./js/db.js').then(db => { for (let i = 0; i < 10; i++) db.setState('worker_probe', String(i)); })")
+    p.wait_for_function('window.__returned.length >= 10', timeout=60_000)
+    p.wait_for_timeout(500)
     sizes = p.evaluate('window.__returned')
-    check(len(sizes) == 3 and all(size > 20_000_000 for size in sizes), f'worker hands back each written buffer, whole ({sizes})')
+    check(len(sizes) == 10 and all(size > 20_000_000 for size in sizes), f'worker hands back every buffer, written or replaced while waiting, whole ({len(sizes)} returned)')
     run.reload()
-    check(p.evaluate("import('./js/db.js').then(db => db.getState('worker_probe'))") == '2', 'the last of those writes persisted')
+    check(p.evaluate("import('./js/db.js').then(db => db.getState('worker_probe'))") == '9', 'the last of 10 rapid writes persisted')
     run.check_no_errors('worker')
     run.close()
 

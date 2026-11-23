@@ -12,9 +12,7 @@ Created 2026-11-04, at `cc95ec5`. Ordered into a path on 2026-11-22. When an ite
 
 | To-do | Why it matters | Size | Source |
 |---|---|---|---|
-| **Queue writes in the storage worker** | `storage-worker.js` handles messages concurrently with no queue, so an older save could in principle finish after a newer one and overwrite the latest edit. Not seen in testing ("reassuring, not proof"). Serialize writes and keep only the newest pending one. The only open item that could lose data. | Small | `docs/STRESS_TEST_RESULTS.md`, "Other results", write ordering; `js/storage-worker.js`, `saveToStorage()` |
-
-**Decision for Wayne, same code:** **save frequency.** From about year 10 of data, autosave blocks typing on a CPU 4× slower than the test machine, mostly because it exports the whole database. Saving less often means fewer stutters, though each one stays as long and a crash could lose a little more text. Source: `docs/STRESS_TEST_RESULTS.md`, "Candidate remedies", remedy 4.
+| **Restore waits for the storage worker** | `restoreCoreDb()` writes core.db from the main thread, outside the worker's queue. A save already being written when Restore is confirmed could land after the restore, before the reload, so the restore seems not to have taken. The backup file is still there to try again, so no edits are lost. Have restore wait until the worker is idle, then write. | Small | `js/db.js` (`restoreCoreDb()`); `docs/BUILD_6.1_ACTUAL_STATE.md` §16 |
 
 ## 2. Rebuild all six translation files once
 
