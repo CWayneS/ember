@@ -4,7 +4,7 @@
 
 ## What is Ember?
 
-Ember is a Bible study app that runs in your browser or as an installed desktop app. It contains six full Bible translations, original-language (Hebrew/Greek) word study tools, cross-references, reading plans, and a complete note-taking system — with no account, no subscription, and no internet connection required after the first load. Everything you write stays on your device. Nothing is sent anywhere.
+Ember is a Bible study app that runs in your browser or as an installed desktop app. It contains six full Bible translations (five installed at first, one more a click away), original-language (Hebrew/Greek) word study tools, cross-references, reading plans, and a complete note-taking system — with no account, no subscription, and no internet connection required after the first load. Everything you write stays on your device. Nothing is sent anywhere.
 
 ---
 
@@ -18,7 +18,7 @@ If you'd rather not install it, it works just as well in a browser tab.
 
 ### First launch
 
-The first time Ember loads, it downloads the core database and all six bundled translations (roughly 65–70 MB total) and saves them to your device. After that, everything runs locally. Original-language data for the Language tab (about 64 MB) and the Hebrew lexicon (about 4 MB) download once, quietly in the background, a moment after that first launch finishes, so they don't slow the launch down. If you open the Language tab while it's still arriving, the tab says so and fills in when it's done. If you were offline for that moment, it downloads the next time you're connected, and until then the Language tab tells you it's waiting. Psalm titles that come from this data simply don't appear until it has arrived.
+The first time Ember loads, it downloads the core database and the five default translations (roughly 60–65 MB total) and saves them to your device. After that, everything runs locally. Original-language data for the Language tab (about 64 MB) and the Hebrew lexicon (about 4 MB) download once, quietly in the background, a moment after that first launch finishes, so they don't slow the launch down. If you open the Language tab while it's still arriving, the tab says so and fills in when it's done. If you were offline for that moment, it downloads the next time you're connected, and until then the Language tab tells you it's waiting. Psalm titles that come from this data simply don't appear until it has arrived.
 
 You'll land on Genesis 1 with empty study panels on the left. The loading screen disappears when the app is ready.
 
@@ -45,7 +45,20 @@ At the top of the reader you'll find, from left to right:
 
 ### Switching translations
 
-Each reading pane's top row reads like "KJV Genesis 1 ‹ ›". Click "KJV Genesis 1" to open the selector — it opens with a row of translation buttons (KJV, ASV, WEB, YLT, Darby, BSB) across the top. Click one to switch that pane to that translation without leaving your current chapter. If you're using split reader, each pane keeps its own translation independently.
+Each reading pane's top row reads like "KJV Genesis 1 ‹ ›". Click "KJV Genesis 1" to open the selector — it opens with a row of translation buttons (KJV, ASV, WEB, YLT, BSB) across the top. Click one to switch that pane to that translation without leaving your current chapter. If you're using split reader, each pane keeps its own translation independently.
+
+### Adding and removing translations
+
+The **+** at the end of the translation row opens your Translations shelf: every translation Ember offers, with a line about each and its size.
+
+- **Add** downloads a translation (about 8 MB each) and puts it in the row. Ember checks the file before using it. Darby starts on the shelf rather than installed.
+- **Remove** takes one off your device to free the space. Your notes, highlights and bookmarks are tied to verses, not translations, so they're untouched, and you can add it back any time. A pane that was showing it switches to KJV at the same chapter.
+- **KJV is always installed**, so every pane has something to fall back to.
+- **Restore default translations** appears if you've removed any of the five defaults, and brings them all back.
+
+Adding needs an internet connection; reading and removing don't. Offline, the shelf lists what you have and says so.
+
+If you restore a backup made on another computer, you keep every translation this one already has, and any extra ones the backup lists download the next time you're online.
 
 ### Reading in two panes side by side
 

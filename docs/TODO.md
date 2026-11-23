@@ -18,11 +18,12 @@ Done 2026-11-22: Scripture search on FTS4, and WEB rebuilt from eBible's USFM (`
 
 ## 3. Translation add-ons, then updating installed data
 
+Translation add-ons done 2026-11-23: every translation but KJV removable, Darby on the shelf, `data/translations/catalog.json` with a sha256 per file (`docs/BUILD_6.1_ACTUAL_STATE.md` §18). **Still to do on Wayne's install:** remove Darby through the shelf, as its first real test.
+
 | To-do | Why it matters | Size | Source |
 |---|---|---|---|
-| **Translation add-ons** | Make every translation but KJV removable, move Darby to a downloadable add-on, and add a Translations shelf. Specced, not built. Give each catalog entry a version or sha256 as well, for the next item. | Medium–Large | `docs/Translation_Addons_Spec.md` |
 | **Version-aware reseeding** | `seedTranslations()` only checks that a file is present and whole, so a fixed or rebuilt translation never reaches an existing install. Compare each installed file with its catalog version and download the new one when they differ. Needed before launch, or the first data fix after launch reaches no one. Cover `language.db` and `lexicon-hebrew.db` the same way. | Medium | `js/db.js` (`seedTranslations()`, `downloadReferenceDbInBackground()`); README "Future" |
-| **Getting a deleted bundled plan back** | Deleted bundled plans stay deleted (they're listed in `bundled_installs`). The only way back is importing the plan's JSON from `data/plans/`, which a user doesn't have. A "Restore bundled plans" action could take a plan off the list and seed it again. Same pattern as "Restore default translations", so build them together. | Small | `seedBundledPlans()` in `js/db.js` |
+| **Getting a deleted bundled plan back** | Deleted bundled plans stay deleted (they're listed in `bundled_installs`). The only way back is importing the plan's JSON from `data/plans/`, which a user doesn't have. A "Restore bundled plans" action could take a plan off the list and seed it again. "Restore default translations" (the Translations shelf, `js/translation-shelf.js`) is the pattern to follow. | Small | `seedBundledPlans()` in `js/db.js` |
 
 **Scope question:** updates to cross-references or Nave's live in `core.db`, which also holds the user's notes. It can't be swapped like a translation file, so updating those tables needs its own approach. Fine to defer, but decide it consciously.
 

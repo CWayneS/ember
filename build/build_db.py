@@ -4,7 +4,7 @@ build_db.py — Build script for data/core.db  (Build 2 schema)
 
 Produces core.db containing:
   - books            (66 rows, canonical metadata incl. genre)
-  - translations     (manifest: 6 bundled translations)
+  - translations     (manifest: the 5 default translations; Darby is an add-on)
   - cross_references (OpenBible ranked dataset, ~345,500 rows)
   - topics           (Nave's Topical Bible)
   - topic_verses     (Nave's verse mappings, BBCCCVVV keys)
@@ -137,9 +137,9 @@ CREATE TABLE IF NOT EXISTS books (
 );
 
 -- ── Translation manifest ──────────────────────────────────────────────────────
--- One row per installed translation. Bundled translations are seeded here
--- at build time (is_bundled = 1). User-added translations append rows at
--- install time (is_bundled = 0, future feature).
+-- One row per translation installed on this device (Translation_Addons_Spec
+-- Item 2). The default set is seeded here at build time; Add inserts a row,
+-- Remove deletes one. is_bundled is no longer read: new rows write 0.
 
 CREATE TABLE IF NOT EXISTS translations (
     id           INTEGER PRIMARY KEY,
@@ -199,12 +199,14 @@ CREATE INDEX IF NOT EXISTS idx_topic_verses_verse ON topic_verses(verse_id);
 # ---------------------------------------------------------------------------
 
 # filenames use lowercase to match OPFS path: translations/{filename}
+# The default set a fresh install starts with. IDs are permanent and must agree
+# with scripts/build_translation_catalog.py. ID 5 is reserved for Darby, which
+# is in data/translations/catalog.json as an add-on but not installed by default.
 TRANSLATIONS = [
     (1, 'kjv.db',   'King James Version',        'KJV',   '1611', 'Public Domain'),
     (2, 'asv.db',   'American Standard Version',  'ASV',   '1901', 'Public Domain'),
     (3, 'web.db',   'Verse-only World English Bible', 'WEB',   '2000', 'Public Domain'),
     (4, 'ylt.db',   "Young's Literal Translation", 'YLT',   '1862', 'Public Domain'),
-    (5, 'darby.db', 'Darby Translation',           'Darby', '1890', 'Public Domain'),
     (6, 'bsb.db',   'Berean Standard Bible',       'BSB',   '2023', 'Public Domain'),
 ]
 
@@ -629,7 +631,9 @@ def verify(conn):
     check('books rows', conn.execute('SELECT COUNT(*) FROM books').fetchone()[0], 66)
 
     # translations manifest
-    check('translations rows', conn.execute('SELECT COUNT(*) FROM translations').fetchone()[0], 6)
+    check('translations rows', conn.execute('SELECT COUNT(*) FROM translations').fetchone()[0], 5)
+    ids = [r[0] for r in conn.execute('SELECT id FROM translations ORDER BY id')]
+    check('translation ids (Darby, 5, is an add-on)', ids, [1, 2, 3, 4, 6])
     filenames = [r[0] for r in conn.execute('SELECT filename FROM translations ORDER BY id')]
     print(f'     filenames: {filenames}')
 

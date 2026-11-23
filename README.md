@@ -79,7 +79,8 @@ ember/
 │   ├── language.db            # Original-language interlinear text, Greek lexicon, Greek/Hebrew grammar,
 │   │                           #   Hebrew word pieces and Ketiv (Language tab)
 │   ├── lexicon-hebrew.db      # Hebrew lexicon: Strong's, Brown-Driver-Briggs, and the links between them
-│   ├── translations/          # Per-translation SQLite files (kjv.db, asv.db, web.db, ylt.db, darby.db, bsb.db)
+│   ├── translations/          # Per-translation SQLite files (kjv.db, asv.db, web.db, ylt.db, bsb.db installed by
+│   │                          # default; darby.db an add-on) and catalog.json, every translation the shelf offers
 │   ├── templates/, plans/     # Bundled study templates and reading plans
 │   └── translations-prep/, stepbible-prep/, lexicon-prep/  # Build-script staging dirs. The raw source downloads
 │                               # and each dir's own `output/` copy of the built .db are gitignored — the shipped
@@ -87,6 +88,7 @@ ember/
 │                               # are the tracked ones
 ├── scripts/
 │   ├── build_translation.py   # Builds each translation's .db file
+│   ├── build_translation_catalog.py # Writes data/translations/catalog.json (sha256, size, verse count) from the built files
 │   ├── build_crossrefs.py     # Ingests OpenBible cross-references into core.db
 │   ├── build_language.py      # Builds language.db from STEPBible-Data
 │   ├── build_lexicon_hebrew.py # Builds lexicon-hebrew.db from Open Scriptures (pinned, sha256-checked sources)
@@ -110,7 +112,7 @@ ember/
 
 Ember has shipped through **Build 6**. Current functionality:
 
-- **Scripture reading** — 6 bundled translations (KJV, ASV, WEB, YLT, Darby, BSB), all 66 books, with split-pane side-by-side reading
+- **Scripture reading** — 6 translations (KJV, ASV, WEB, YLT and BSB by default; Darby on the Translations shelf, where any but KJV can be added or removed), all 66 books, with split-pane side-by-side reading
 - **Verse selection** — single verse or range selection, driving every contextual study tool
 - **Notes** — create, edit, and delete notes anchored to specific verses or ranges, with tagging and autocomplete
 - **Bookmarks** — save and label specific verses for quick return
@@ -142,6 +144,8 @@ python scripts/build_translation.py KJV data/translations-prep/data/translations
 # ...repeat for ASV, YLT, Darby (scrollmapper), BSB (TSV file), and WEB (eBible's USFM zip, sha256-pinned:
 # data/translations-prep/web-usfm/engwebp_usfm.zip from https://ebible.org/Scriptures/engwebp_usfm.zip).
 # The same sources always give a byte-identical file.
+# Then regenerate the catalog from the built files (tests/verify.py translations checks it):
+python scripts/build_translation_catalog.py
 
 # Language tab data (original-language text, Strong's, morphology, Greek lexicon).
 # Builds into data/stepbible-prep/output/; --ship also copies it to data/language.db
@@ -259,7 +263,7 @@ STEPBible-Data's license permits inclusion in software without requesting permis
 | `docs/Technical_Spec_Build_1.md` | Build 1 technical specification — schema, module specs, code |
 | `docs/Build_N_Spec.md` (per build) | Per-build specifications |
 | `docs/Psalm_Title_Fix_Spec.md`, `docs/Grammar_Decode_Spec_DRAFT.md`, `docs/Language_Panel_Word_Inspector_Spec.md`, `docs/Hebrew_Word_Anatomy_Spec.md` | Standalone feature specs between numbered builds |
-| `docs/Translation_Addons_Spec.md` | Draft: every translation but KJV removable, Darby moved to a downloadable add-on, and a Translations shelf (not yet built) |
+| `docs/Translation_Addons_Spec.md` | Every translation but KJV removable, Darby moved to a downloadable add-on, and a Translations shelf (built; see `docs/BUILD_6.1_ACTUAL_STATE.md` §18) |
 | `docs/Hebrew_Lexicon_Spec.md`, `docs/HEBREW_LEXICON_REPORT.md` | The Hebrew lexicon's spec, and the build's record: data checks, sizes, and every decision that changed the spec |
 | `docs/HEBREW_ANATOMY_DATA_REPORT.md` | The Hebrew Word Anatomy build's record: the language.db rebuild (sources, checks, sizes) and every decision that changed the spec |
 | `docs/BUILD_N_ACTUAL_STATE.md` (per build) | Ground-truth audit of each build's shipped code, derived from source, not planning docs. Latest: `docs/BUILD_6.1_ACTUAL_STATE.md` (post-Build-6 Language tab rework + September 2026 architecture-review pass; its §12–13 addenda cover the November 2026 offline, stress-test and long-list work, §14 the Hebrew lexicon) |

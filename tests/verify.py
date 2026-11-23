@@ -27,6 +27,9 @@ Usage (from the repo root):
    python3 tests/verify.py controls      # reader and panel controls: side-by-side default, Keep and the
                                          #   remembered reference tab, verse per line, "KJV Genesis 1" nav
                                          #   row, the phone notice; each saved across a reload
+   python3 tests/verify.py translations  # translation add-ons: catalog against the files, Add and Remove through
+                                         #   the shelf, bad downloads, offline, orphans, restoring a backup
+                                         #   from a machine with a different set, user tables keyed by verse
    python3 tests/verify.py boots         # warm-boot time to "app live": prints samples and the median
    python3 tests/verify.py dbsnapshot out.json          # results of ~36 db.js calls as JSON
    python3 tests/verify.py dbcompare before.json after.json
@@ -2862,9 +2865,475 @@ def scenario_controls(browser):
     return FAILURES
 
 
+# ---------------------------------------------------------------- translation add-ons
+
+TRANSLATIONS_DIR = os.path.join(ROOT, 'data', 'translations')
+SCRATCH = os.path.join(ROOT, 'tests', 'stress-data')  # gitignored
+DEFAULT_SET = ['KJV', 'ASV', 'WEB', 'YLT', 'BSB']
+
+TRANSLATION_STATE_JS = """async () => {
+    const db = await import('./js/db.js');
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle('translations', { create: true });
+    const files = [];
+    for await (const [name] of dir.entries()) files.push(name);
+    return {
+        manifest: db.getInstalledTranslations().map(t => t.abbreviation),
+        open: db.getTranslations().map(t => t.abbreviation),
+        files: files.sort(),
+    };
+}"""
+
+ROW_JS = """[...document.querySelectorAll('#translation-row .translation-btn:not(.translation-shelf-btn)')].map(b => b.textContent)"""
+LABEL_JS = "document.querySelector('#reader-pane-a .translation-label').textContent"
+
+
+def translation_state(p):
+    return p.evaluate(TRANSLATION_STATE_JS)
+
+
+def wait_until(p, predicate, timeout_ms=30_000):
+    waited = 0
+    while not predicate() and waited < timeout_ms:
+        p.wait_for_timeout(100)
+        waited += 100
+    return predicate()
+
+
+def open_shelf(p):
+    if not p.evaluate("!document.getElementById('book-overlay').classList.contains('hidden')"):
+        p.click('#reader-pane-a .pane-book-btn')
+    if p.evaluate("document.getElementById('translation-shelf').classList.contains('hidden')"):
+        p.click('#translation-shelf-btn')
+    p.wait_for_function("!document.querySelector('#translation-shelf .translation-shelf-note')"
+                        " || document.querySelector('#translation-shelf .translation-shelf-note').textContent.startsWith('Connect')")
+
+
+def shelf_item(p, translation_id):
+    return f'#translation-shelf [data-translation-id="{translation_id}"]'
+
+
+def catalog_entries():
+    with open(os.path.join(TRANSLATIONS_DIR, 'catalog.json')) as handle:
+        return {entry['abbreviation']: entry for entry in json.load(handle)['translations']}
+
+
+def translations_catalog_matches_files():
+    """A rebuilt translation with a stale catalog would fail every Add of it."""
+    import hashlib
+    for abbreviation, entry in catalog_entries().items():
+        path = os.path.join(TRANSLATIONS_DIR, entry['filename'])
+        data = open(path, 'rb').read()
+        conn = sqlite3.connect(f'file:{path}?mode=ro', uri=True)
+        count = conn.execute('SELECT COUNT(*) FROM verses WHERE verse > 0').fetchone()[0]
+        meta = dict(conn.execute('SELECT key, value FROM meta'))
+        conn.close()
+        check(entry['sha256'] == hashlib.sha256(data).hexdigest() and entry['size_bytes'] == len(data)
+              and entry['verse_count'] == count and entry['abbreviation'] == meta['abbreviation'],
+              f'catalog matches {entry["filename"]} (sha256, size, {count} verses, meta)')
+    tiers = {a: e['tier'] for a, e in catalog_entries().items()}
+    check(tiers == {'KJV': 'locked', 'ASV': 'default', 'WEB': 'default', 'YLT': 'default', 'Darby': 'available', 'BSB': 'default'},
+          f'catalog tiers ({tiers})')
+    core = sqlite3.connect(f'file:{os.path.join(ROOT, "data", "core.db")}?mode=ro', uri=True)
+    shipped = [r[0] for r in core.execute('SELECT abbreviation FROM translations ORDER BY id')]
+    core.close()
+    check(shipped == DEFAULT_SET, f'shipped core.db lists the default five, no Darby ({shipped})')
+
+
+def darby_john_3_16():
+    conn = sqlite3.connect(f'file:{os.path.join(TRANSLATIONS_DIR, "darby.db")}?mode=ro', uri=True)
+    text = conn.execute('SELECT text FROM verses WHERE book = 43 AND chapter = 3 AND verse = 16').fetchone()[0]
+    conn.close()
+    return text
+
+
+def translations_add_remove(browser):
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    state = translation_state(p)
+    check(state['manifest'] == DEFAULT_SET and state['open'] == DEFAULT_SET,
+          f'fresh install: the default five installed and open ({state["manifest"]})')
+    check(state['files'] == ['asv.db', 'bsb.db', 'kjv.db', 'web.db', 'ylt.db'], f'fresh install: no darby.db in OPFS ({state["files"]})')
+    p.click('#reader-pane-a .pane-book-btn')
+    check(p.evaluate(ROW_JS) == DEFAULT_SET, f'translation row shows the five ({p.evaluate(ROW_JS)})')
+
+    # Add Darby through the shelf
+    open_shelf(p)
+    check(p.locator(f'{shelf_item(p, 1)} .translation-shelf-remove').count() == 0
+          and 'Always installed' in p.inner_text(shelf_item(p, 1)), 'shelf: KJV has no Remove, says "Always installed"')
+    check(p.locator(f'{shelf_item(p, 5)} .translation-shelf-add').count() == 1, 'shelf: Darby offers Add')
+    check(p.locator('.translation-shelf-restore').count() == 0, 'shelf: no "Restore defaults" while all defaults are installed')
+    p.click(f'{shelf_item(p, 5)} .translation-shelf-add')
+    check(wait_until(p, lambda: 'Darby' in translation_state(p)['open']), 'Add Darby: open after the download')
+    state = translation_state(p)
+    check('darby.db' in state['files'] and 'Darby' in state['manifest'], 'Add Darby: file in OPFS and row in the manifest')
+    check('Darby' in p.evaluate(ROW_JS), 'Add Darby: appears in the translation row')
+    check(p.locator(f'{shelf_item(p, 5)} .translation-shelf-remove').count() == 1, 'shelf: Darby now offers Remove')
+
+    # Read John 3 in Darby, then remove it while it's showing
+    p.keyboard.press('Escape')
+    app = run.app
+    app.navigate(43, 3)
+    p.click('#reader-pane-a .pane-book-btn')
+    p.click('#translation-row .translation-btn:has-text("Darby")')
+    p.keyboard.press('Escape')
+    text = p.inner_text('#reader-pane-a .verse[data-verse-id="43003016"]')
+    check(p.evaluate(LABEL_JS) == 'Darby' and darby_john_3_16()[:40] in text, f'John 3:16 renders in Darby ({text[:50]!r})')
+    open_shelf(p)
+    p.click(f'{shelf_item(p, 5)} .translation-shelf-remove')
+    p.wait_for_selector('.plan-metadata-dialog')
+    check(p.inner_text('.plan-metadata-dialog h2') == 'Remove Darby Translation?', 'Remove asks first, by name')
+    p.click('.plan-metadata-confirm')
+    p.wait_for_timeout(1000)
+    check(p.evaluate(LABEL_JS) == 'KJV', f'Remove Darby while showing: pane is KJV ({p.evaluate(LABEL_JS)})')
+    check(p.inner_text('#reader-pane-a .pane-location') == 'John 3', 'Remove Darby: same chapter')
+    check(p.evaluate("JSON.parse(localStorage.getItem('ember.pane.left.state')).translationId") == 1, 'Remove Darby: pane state saved as KJV')
+    check(p.evaluate("!document.getElementById('translation-shelf').classList.contains('hidden')")
+          and p.evaluate("!document.getElementById('book-overlay').classList.contains('hidden')"),
+          'confirming in the dialog leaves the shelf and the book picker open')
+    state = translation_state(p)
+    check('darby.db' not in state['files'] and 'Darby' not in state['manifest'] and 'Darby' not in p.evaluate(ROW_JS),
+          f'Remove Darby: file, row and button gone ({state})')
+    run.reload()
+    check('Darby' not in translation_state(p)['manifest'], 'Remove Darby: still gone after an online reload')
+
+    # A default removed stays removed, and "Restore default translations" brings it back
+    p.evaluate("import('./js/db.js').then(db => db.removeTranslation(2))")
+    run.reload()
+    state = translation_state(p)
+    check('ASV' not in state['manifest'] and 'asv.db' not in state['files'], f'removed ASV stays removed after an online boot ({state["manifest"]})')
+    open_shelf(p)
+    p.click('.translation-shelf-restore')
+    check(wait_until(p, lambda: 'ASV' in translation_state(p)['open']), 'Restore default translations: ASV is back')
+    check(p.locator('.translation-shelf-restore').count() == 0, 'Restore defaults: the button goes once all are back')
+    p.keyboard.press('Escape')
+
+    # KJV can't be removed by a function call either
+    refused = p.evaluate("import('./js/db.js').then(db => db.removeTranslation(1)).then(() => 'removed', e => e.message)")
+    check(refused != 'removed' and 'KJV' in translation_state(p)['manifest'], f'removeTranslation(1) refuses ({refused})')
+    run.check_no_errors('add and remove')
+    run.close()
+
+
+def translations_bad_downloads(browser):
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    darby = catalog_entries()['Darby']
+    asv = catalog_entries()['ASV']
+    asv_bytes = open(os.path.join(TRANSLATIONS_DIR, 'asv.db'), 'rb').read()
+    add_js = """async (entry) => {
+        const db = await import('./js/db.js');
+        try { await db.addTranslation(entry); return 'added'; } catch (e) { return e.message; }
+    }"""
+
+    def left_nothing(label, result):
+        state = translation_state(p)
+        check(result != 'added' and 'Darby' not in state['manifest'] and 'darby.db' not in state['files'],
+              f'{label}: refused, no row and no file ({result})')
+
+    p.route('**/data/translations/darby.db', lambda route: route.fulfill(status=404, body='missing'))
+    left_nothing('HTTP 404', p.evaluate(add_js, darby))
+    p.unroute('**/data/translations/darby.db')
+
+    p.route('**/data/translations/darby.db', lambda route: route.fulfill(status=200, body=asv_bytes))
+    left_nothing('wrong file (sha256 differs)', p.evaluate(add_js, darby))
+    left_nothing('wrong file (meta differs, sha256 made to match)', p.evaluate(add_js, {**darby, 'sha256': asv['sha256']}))
+    p.unroute('**/data/translations/darby.db')
+    left_nothing('verse count differs', p.evaluate(add_js, {**darby, 'verse_count': 31_101}))
+
+    # A catalog whose sha256 is wrong: the shelf shows why Add failed
+    def bad_catalog(route):
+        catalog = json.load(open(os.path.join(TRANSLATIONS_DIR, 'catalog.json')))
+        for entry in catalog['translations']:
+            if entry['id'] == 5: entry['sha256'] = '0' * 64
+        route.fulfill(status=200, content_type='application/json', body=json.dumps(catalog))
+    p.route('**/data/translations/catalog.json', bad_catalog)
+    open_shelf(p)
+    p.click(f'{shelf_item(p, 5)} .translation-shelf-add')
+    p.wait_for_selector(f'{shelf_item(p, 5)} .translation-shelf-error')
+    left_nothing('catalog sha256 wrong, through the shelf', p.inner_text(f'{shelf_item(p, 5)} .translation-shelf-error'))
+    p.unroute('**/data/translations/catalog.json')
+    p.keyboard.press('Escape')
+    run.check_no_errors('bad downloads')
+    run.close()
+
+
+def translations_offline_and_boot(browser):
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    run.worker_ready()
+
+    # Offline: the shelf lists what's installed, Add is off, Remove works, reading works
+    run.ctx.set_offline(True)
+    run.reload()
+    open_shelf(p)
+    note = p.inner_text('#translation-shelf .translation-shelf-note')
+    items = p.eval_on_selector_all('#translation-shelf .translation-shelf-item', 'items => items.map(i => i.dataset.translationId)')
+    check(note == 'Connect to the internet to add translations.' and items == ['1', '2', '3', '4', '6'],
+          f'offline shelf: installed only, with the reason ({items}, {note!r})')
+    check(p.locator('#translation-shelf .translation-shelf-add').count() == 0, 'offline shelf: nothing to Add')
+    p.click(f'{shelf_item(p, 4)} .translation-shelf-remove')
+    p.click('.plan-metadata-confirm')
+    p.wait_for_timeout(1000)
+    check('YLT' not in translation_state(p)['manifest'] and 'ylt.db' not in translation_state(p)['files'], 'offline: Remove YLT works')
+    p.keyboard.press('Escape')
+    p.click('#reader-pane-a .pane-book-btn')
+    p.click('#translation-row .translation-btn:has-text("BSB")')
+    p.keyboard.press('Escape')
+    check(p.locator('#reader-pane-a .verse').count() > 0 and p.evaluate(LABEL_JS) == 'BSB', 'offline: installed translations render')
+    refused = p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        try { await db.addTranslation({ id: 5, filename: 'darby.db', abbreviation: 'Darby' }); return 'added'; }
+        catch (e) { return e.message; }
+    }""")
+    check('offline' in refused, f'offline: addTranslation says why ({refused})')
+    run.ctx.set_offline(False)
+
+    # An orphan file is cleaned up at boot; other names are left alone
+    p.evaluate("""async () => {
+        const root = await navigator.storage.getDirectory();
+        const dir = await root.getDirectoryHandle('translations');
+        for (const name of ['zz-orphan.db', 'kjv.db.crswap']) {
+            const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
+            await writable.write(new Uint8Array([1, 2, 3]));
+            await writable.close();
+        }
+    }""")
+    # A pane saved on a translation that isn't installed falls back to KJV, label and all
+    p.evaluate("""() => {
+        const state = JSON.parse(localStorage.getItem('ember.pane.left.state'));
+        localStorage.setItem('ember.pane.left.state', JSON.stringify({ ...state, translationId: 5 }));
+    }""")
+    run.reload()
+    files = translation_state(p)['files']
+    check('zz-orphan.db' not in files and 'kjv.db.crswap' in files, f'orphan .db removed at boot, other names kept ({files})')
+    check(p.evaluate(LABEL_JS) == 'KJV' and p.evaluate("JSON.parse(localStorage.getItem('ember.pane.left.state')).translationId") == 1,
+          'pane saved on an uninstalled translation: KJV, with a KJV label')
+    run.check_no_errors('offline and boot')
+    run.close()
+
+
+def make_backup(p, path):
+    with p.expect_download() as download:
+        p.evaluate("import('./js/db.js').then(db => db.exportBackup())")
+    download.value.save_as(path)
+
+
+def restore_backup(run, path, expect_reload=True):
+    p = run.page
+    with p.expect_file_chooser() as chooser:
+        p.evaluate("import('./js/backup.js').then(m => m.restoreFromBackup())")
+    chooser.value.set_files(path)
+    p.wait_for_selector('.plan-metadata-dialog')
+    if expect_reload:
+        with p.expect_navigation(timeout=60_000):
+            p.click('.plan-metadata-confirm')
+        p.wait_for_selector('#loading.hidden', state='attached', timeout=60_000)
+        p.wait_for_selector('#reader-pane-a .verse', timeout=30_000)
+    else:
+        p.click('.plan-metadata-confirm')
+        p.wait_for_timeout(1500)
+
+
+def study_marks_on_john_3_16(p):
+    """Note, highlight and bookmark on John 3:16 in each open translation."""
+    found = {}
+    for abbreviation in translation_state(p)['open']:
+        p.click('#reader-pane-a .pane-book-btn')
+        p.click(f'#translation-row .translation-btn:text-is("{abbreviation}")')
+        p.keyboard.press('Escape')
+        found[abbreviation] = p.evaluate("""() => {
+            const verse = document.querySelector('#reader-pane-a .verse[data-verse-id="43003016"]');
+            return !!verse && !!verse.querySelector('.note-indicator') && verse.classList.contains('verse-bookmarked')
+                && verse.classList.contains('markup-highlight-yellow');
+        }""")
+    return found
+
+
+def translations_backups(browser):
+    os.makedirs(SCRATCH, exist_ok=True)
+    backup_path = os.path.join(SCRATCH, 'translations-backup.db')
+
+    # Machine A: KJV, ASV and Darby, with a note, a highlight and a bookmark on John 3:16
+    a = OfflineRun(browser)
+    a.boot()
+    a.page.evaluate("""async (darby) => {
+        const db = await import('./js/db.js');
+        await db.addTranslation(darby);
+        for (const id of [3, 4, 6]) await db.removeTranslation(id);
+        db.saveNote('zzmoved note', [{ verseStart: 43003016 }], [], null);
+        db.createMarkup(43003016, null, 'highlight', 'yellow');
+        db.addBookmark(43003016, 'moved');
+    }""", catalog_entries()['Darby'])
+    check(translation_state(a.page)['manifest'] == ['KJV', 'ASV', 'Darby'], 'machine A: KJV, ASV, Darby')
+    make_backup(a.page, backup_path)
+    a.close()
+
+    # Machine B, online: keeps its five and gains Darby
+    b = OfflineRun(browser)
+    b.boot()
+    b.app.navigate(43, 3)
+    restore_backup(b, backup_path)
+    state = translation_state(b.page)
+    check(state['manifest'] == ['KJV', 'ASV', 'WEB', 'YLT', 'Darby', 'BSB'] and state['open'] == state['manifest'],
+          f'restore onto other set, online: all six installed and open ({state["manifest"]})')
+    check(all(f in state['files'] for f in ['web.db', 'ylt.db', 'bsb.db', 'darby.db']), f'WEB, YLT, BSB kept; Darby downloaded ({state["files"]})')
+    b.app.navigate(43, 3)
+    marks = study_marks_on_john_3_16(b.page)
+    check(len(marks) == 6 and all(marks.values()), f'note, highlight, bookmark on John 3:16 in every translation ({marks})')
+    b.check_no_errors('restore, online')
+
+    # Same set: restoring B's own backup downloads nothing and deletes nothing
+    same_path = os.path.join(SCRATCH, 'translations-backup-same.db')
+    make_backup(b.page, same_path)
+    requests = []
+    b.page.on('request', lambda r: requests.append(r.url) if '/data/translations/' in r.url and r.url.endswith('.db') else None)
+    restore_backup(b, same_path)
+    state = translation_state(b.page)
+    check(requests == [] and len(state['files']) == 6 and len(state['manifest']) == 6,
+          f'restore of the same set: nothing downloaded or deleted ({requests}, {state["files"]})')
+
+    # Merge failure: a backup with no translations table is refused before anything is written
+    broken_path = os.path.join(SCRATCH, 'translations-backup-broken.db')
+    import shutil
+    shutil.copy(same_path, broken_path)
+    conn = sqlite3.connect(broken_path)
+    conn.execute('DROP TABLE translations')
+    conn.commit(); conn.close()
+    core_before = b.page.evaluate("""async () => {
+        const root = await navigator.storage.getDirectory();
+        const bytes = new Uint8Array(await (await (await root.getFileHandle('core.db')).getFile()).arrayBuffer());
+        return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].join(',');
+    }""")
+    alerts = []
+    b.page.on('dialog', lambda dialog: (alerts.append(dialog.message), dialog.accept()))
+    navigations = []
+    b.page.on('framenavigated', lambda frame: navigations.append(frame.url) if frame == b.page.main_frame else None)
+    restore_backup(b, broken_path, expect_reload=False)
+    core_after = b.page.evaluate("""async () => {
+        const root = await navigator.storage.getDirectory();
+        const bytes = new Uint8Array(await (await (await root.getFileHandle('core.db')).getFile()).arrayBuffer());
+        return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].join(',');
+    }""")
+    check(alerts and 'Restore failed' in alerts[0] and navigations == [] and core_before == core_after,
+          f'merge failure: error shown, no reload, core.db unchanged ({alerts}, {navigations})')
+    b.app.errors = [e for e in b.app.errors if 'restoreFromBackup: write failed' not in e]
+    b.check_no_errors('restore, same set and merge failure')
+    b.close()
+
+    # Machine C, offline: its five still work; Darby is listed but hidden until it can download
+    c = OfflineRun(browser)
+    c.boot()
+    c.worker_ready()
+    c.ctx.set_offline(True)
+    restore_backup(c, backup_path)
+    state = translation_state(c.page)
+    check(state['manifest'] == ['KJV', 'ASV', 'WEB', 'YLT', 'Darby', 'BSB'] and state['open'] == DEFAULT_SET
+          and 'darby.db' not in state['files'], f'restore offline: Darby listed, hidden, not downloaded ({state})')
+    c.page.click('#reader-pane-a .pane-book-btn')
+    check(c.page.evaluate(ROW_JS) == DEFAULT_SET, 'restore offline: the row shows the five')
+    c.page.keyboard.press('Escape')
+    c.page.evaluate("""() => {
+        const state = JSON.parse(localStorage.getItem('ember.pane.left.state'));
+        localStorage.setItem('ember.pane.left.state', JSON.stringify({ ...state, translationId: 5 }));
+    }""")
+    c.reload()
+    check(c.page.evaluate(LABEL_JS) == 'KJV', 'restore offline: a pane saved as Darby shows KJV with a KJV label')
+    c.ctx.set_offline(False)
+    c.reload()
+    state = translation_state(c.page)
+    check('Darby' in state['open'] and 'darby.db' in state['files'], f'back online: Darby downloads and appears ({state["open"]})')
+    c.check_no_errors('restore, offline')
+    c.close()
+    for path in (backup_path, same_path, broken_path):
+        os.remove(path)
+
+
+def translations_schema(browser):
+    """User data is keyed by verse, never by translation: no user table has a
+    translation column, so adding or removing one can't touch it."""
+    run = OfflineRun(browser)
+    run.boot()
+    columns = run.page.evaluate("""() => {
+        const core = window.__emberTest.databases[0];
+        const tables = ['notes', 'note_anchors', 'markups', 'bookmarks', 'tags', 'tag_assignments', 'studies',
+                        'plans', 'plan_days', 'plan_day_scripture', 'study_templates', 'template_steps'];
+        const found = {};
+        for (const table of tables) {
+            const result = core.exec(`PRAGMA table_info(${table})`)[0];
+            found[table] = result ? result.values.map(row => row[1]) : null;
+        }
+        return found;
+    }""")
+    missing = [t for t, cols in columns.items() if cols is None]
+    with_translation = {t: c for t, c in columns.items() if c and any('translation' in name for name in c)}
+    check(not with_translation, f'no user-data table has a translation column ({with_translation})')
+    print(f'  (tables not present, unchecked: {missing})' if missing else '', end='')
+    run.close()
+
+
+def translations_upgrade(browser):
+    """An install from before add-ons (Wayne's): six rows, all is_bundled = 1, darby.db in
+    OPFS. No migration: Darby stays installed, and Remove through the shelf works."""
+    os.makedirs(SCRATCH, exist_ok=True)
+    old_core = os.path.join(SCRATCH, 'translations-old-core.db')
+    import shutil
+    shutil.copy(os.path.join(ROOT, 'data', 'core.db'), old_core)
+    conn = sqlite3.connect(old_core)
+    conn.execute("INSERT INTO translations (id, filename, name, abbreviation, year, license, installed_at, is_bundled) "
+                 "VALUES (5, 'darby.db', 'Darby Translation', 'Darby', '1890', 'Public Domain', 0, 1)")
+    conn.commit(); conn.close()
+    old_bytes = open(old_core, 'rb').read()
+    os.remove(old_core)
+
+    run = OfflineRun(browser)
+    p = run.page
+    p.route('**/data/core.db', lambda route: route.fulfill(status=200, body=old_bytes))
+    run.boot()
+    p.unroute('**/data/core.db')
+    state = translation_state(p)
+    check(state['manifest'] == ['KJV', 'ASV', 'WEB', 'YLT', 'Darby', 'BSB'] and state['open'] == state['manifest']
+          and 'darby.db' in state['files'], f'pre-add-ons install: all six installed and open ({state})')
+    p.click('#reader-pane-a .pane-book-btn')
+    check('Darby' in p.evaluate(ROW_JS), 'pre-add-ons install: Darby in the row')
+    sizes = lambda: p.evaluate("""async () => {
+        const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle('translations');
+        const out = {};
+        for await (const [name, handle] of dir.entries()) out[name] = (await handle.getFile()).lastModified;
+        return out;
+    }""")
+    before = sizes()
+    open_shelf(p)
+    p.click(f'{shelf_item(p, 5)} .translation-shelf-remove')
+    p.click('.plan-metadata-confirm')
+    p.wait_for_timeout(1000)
+    run.reload()
+    state = translation_state(p)
+    after = sizes()
+    check('Darby' not in state['manifest'] and 'darby.db' not in state['files'], f'pre-add-ons install: Darby removed through the shelf, gone after reload ({state})')
+    check(after == {k: v for k, v in before.items() if k != 'darby.db'}, 'pre-add-ons install: no other translation file touched')
+    run.check_no_errors('upgrade')
+    run.close()
+
+
+def scenario_translations(browser):
+    translations_catalog_matches_files()
+    translations_add_remove(browser)
+    translations_upgrade(browser)
+    translations_bad_downloads(browser)
+    translations_offline_and_boot(browser)
+    translations_backups(browser)
+    translations_schema(browser)
+    return FAILURES
+
+
 BROWSER_SCENARIOS = {'offline': scenario_offline, 'lexicon': scenario_lexicon,
                      'storage': scenario_storage, 'boots': scenario_boots,
-                     'controls': scenario_controls}
+                     'controls': scenario_controls,
+                     'translations': scenario_translations}
 
 
 def main():

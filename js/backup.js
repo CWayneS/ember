@@ -6,7 +6,7 @@
 // validation and the actual destructive write, mirroring how plans.js owns
 // its own confirm dialogs and calls into db.js purely for data operations.
 
-import { looksLikeCoreDb, restoreCoreDb } from './db.js';
+import { looksLikeCoreDb, restoreCoreDb, mergeInstalledTranslations } from './db.js';
 import { openConfirmDialog } from './dialogs.js';
 
 // Opens a .db file picker. On selection: reads the file, runs the minimal
@@ -56,8 +56,11 @@ export function restoreFromBackup() {
         });
         if (!confirmed) return;
 
+        // The backup's translations list gains every translation this machine
+        // has, so restoring never removes one (Translation_Addons_Spec Item 5a).
+        // If that fails, nothing is written: no unmerged restore.
         try {
-            await restoreCoreDb(bytes);
+            await restoreCoreDb(mergeInstalledTranslations(bytes));
         } catch (e) {
             console.error('restoreFromBackup: write failed:', e);
             alert('Restore failed — the backup could not be written. Your current data was not changed.');

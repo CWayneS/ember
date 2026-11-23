@@ -7,7 +7,7 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - Single HTML page (index.html) with ES modules
 - SQLite databases accessed via sql.js:
   - data/core.db — books, cross-references, Nave's topics; on first run it's copied to OPFS and the user-data tables (notes, tags, bookmarks, markups, plans) are added there
-  - data/translations/*.db — one per translation (KJV, ASV, Darby, WEB, YLT, BSB)
+  - data/translations/*.db — one per translation (KJV, ASV, WEB, YLT, BSB installed by default; Darby an add-on). data/translations/catalog.json lists them all with sha256, size and verse count; regenerate it with scripts/build_translation_catalog.py after any translation rebuild. core.db's `translations` table means "installed on this device"
   - data/language.db — original-language words, Greek lexicon (TBESG), Greek and Hebrew morphology (TEGMC, TEHMC), Hebrew word pieces and Ketiv/variants; read-only; downloaded to OPFS in the background after launch, opened only when the Language tab or a titled Psalm needs it; built by scripts/build_language.py (`--ship` to copy to data/; decisions in docs/HEBREW_ANATOMY_DATA_REPORT.md)
   - data/lexicon-hebrew.db — Hebrew lexicon: Strong's, Brown-Driver-Briggs, and the links between them ranked by OSHB word counts; read-only; downloaded in the background like language.db, opened only on the first Hebrew Lexicon tap; built by scripts/build_lexicon_hebrew.py from pinned, sha256-checked Open Scriptures sources, byte-identical on rebuild (`--ship`; decisions in docs/HEBREW_LEXICON_REPORT.md). After rebuilding it, clear its OPFS copy to see the change locally
 - OPFS for persistent storage, IndexedDB as fallback; writes go through a storage worker
@@ -23,6 +23,7 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - js/db.js — Database init, queries, persistence
 - js/storage-worker.js — Off-thread OPFS / IndexedDB writes
 - js/reader.js — Scripture rendering, chapter navigation
+- js/translation-shelf.js — Translations shelf: add and remove translations from data/translations/catalog.json
 - js/selection.js — Verse selection
 - js/notes.js — Study documents with inline note editing
 - js/tags.js — Tag autocomplete for note blocks

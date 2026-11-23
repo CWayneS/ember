@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "translations": [
+    {
+      "id": 1,
+      "filename": "kjv.db",
+      "name": "King James Version",
+      "abbreviation": "KJV",
+      "year": "1611",
+      "license": "Public Domain",
+      "tier": "locked",
+      "size_bytes": 7933952,
+      "verse_count": 31102,
+      "sha256": "e5a838dc237ec7ae4d769102ac40b93e0d471ab7bdf02abcc667e4f88b248f41",
+      "description": "The historic standard. Archaic, familiar, widely cross-referenced."
+    },
+    {
+      "id": 2,
+      "filename": "asv.db",
+      "name": "American Standard Version",
+      "abbreviation": "ASV",
+      "year": "1901",
+      "license": "Public Domain",
+      "tier": "default",
+      "size_bytes": 7962624,
+      "verse_count": 31102,
+      "sha256": "f53b0b6aed2a891d614a518d308f071c6225bb28a0b8897a3fe15e591adbdf5a",
+      "description": "The 1901 scholarly revision in the KJV line."
+    },
+    {
+      "id": 3,
+      "filename": "web.db",
+      "name": "Verse-only World English Bible",
+      "abbreviation": "WEB",
+      "year": "2000",
+      "license": "Public Domain",
+      "tier": "default",
+      "size_bytes": 7741440,
+      "verse_count": 31098,
+      "sha256": "a22a94cf3808e2c9551201bed3bf7aaa1cfc4c026f99b9da1aab7bb0e9b6c564",
+      "description": "Modern English, public domain, actively maintained."
+    },
+    {
+      "id": 4,
+      "filename": "ylt.db",
+      "name": "Young's Literal Translation",
+      "abbreviation": "YLT",
+      "year": "1862",
+      "license": "Public Domain",
+      "tier": "default",
+      "size_bytes": 7892992,
+      "verse_count": 31102,
+      "sha256": "c974daa2f31e223eef7eaa87110ef3a71584f39aad76d055197f8fad3db496e9",
+      "description": "Hyper-literal. Follows the original word order and tenses closely; built for word study."
+    },
+    {
+      "id": 5,
+      "filename": "darby.db",
+      "name": "Darby Translation",
+      "abbreviation": "Darby",
+      "year": "1890",
+      "license": "Public Domain",
+      "tier": "available",
+      "size_bytes": 7880704,
+      "verse_count": 31102,
+      "sha256": "98b96ef62200ba8ad9bab5511e2dca77c482e00e579a1fd726c7975a346e8594",
+      "description": "1890, literal-leaning, careful with Greek tense and the article."
+    },
+    {
+      "id": 6,
+      "filename": "bsb.db",
+      "name": "Berean Standard Bible",
+      "abbreviation": "BSB",
+      "year": "2023",
+      "license": "Public Domain",
+      "tier": "default",
+      "size_bytes": 7532544,
+      "verse_count": 31102,
+      "sha256": "f308ffc323147d6c2de1878305076e5ffbd77e57f21150595a7498673efe3ea2",
+      "description": "Modern and essentially literal; public domain since 2023."
+    }
+  ]
+}

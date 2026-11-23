@@ -442,3 +442,55 @@ All twelve suites pass.
 
 **Existing installs** keep their old translation files in OPFS, since seeding never replaces a whole file. On them, Scripture search still uses LIKE and WEB is still the old text, until `translations/*.db` is cleared from OPFS. Version-aware reseeding (TODO step 3) is what will reach other installs.
 
+
+## 18. ADDENDUM — 2026-11-23, translation add-ons
+
+Built from `docs/Translation_Addons_Spec.md` (TODO step 3, first item). Every translation but KJV can be removed, Darby moved from the default set to the shelf, and a Translations shelf adds and removes them.
+
+**Data.**
+- `data/translations/catalog.json` is new. It lists all six translations: ID, filename, name, abbreviation, year, license, tier (`locked`, `default` or `available`), `size_bytes`, `verse_count` (`verse > 0`; WEB's is 31,098), `sha256`, and a one-line description. `scripts/build_translation_catalog.py` (new) writes it from the shipped files. Only the tiers and descriptions are typed by hand; the descriptions are the spec's drafts, for Wayne to edit.
+- `build/build_db.py`: the shipped manifest has KJV, ASV, WEB, YLT and BSB (IDs 1, 2, 3, 4, 6). ID 5 is kept for Darby. Its check now expects 5 rows and those IDs.
+- `data/core.db` is rebuilt. Compared with the previous file, the schema and every other table (books, cross_references, topics, topic_verses) are identical. Only the `translations` rows changed: Darby is gone and `installed_at` is new.
+- `darby.db` stays in `data/translations/`. `sw.js` passes `data/` through as before, so `catalog.json` is never cached.
+
+**`js/db.js`.**
+- The manifest now means "installed on this device". `is_bundled` is no longer read, and new rows write 0.
+- Boot runs these steps in order:
+  1. `ensureLockedTranslation()` puts KJV's row back if it's missing.
+  2. `seedTranslations()` handles every row. Offline, or when a fetch fails, it logs a warning and waits for the next boot.
+  3. `removeOrphanTranslationFiles()` deletes any `.db` in `translations/` that has no row, and leaves other names alone.
+  4. `openTranslationHandles()` opens every row.
+- `getTranslations()` returns only rows with an open handle. That is what the reader shows. `getInstalledTranslations()` returns every row, for the shelf.
+- **Add.** `addTranslation(entry, { onProgress })` fetches with `cache: 'no-cache'`. `installTranslationBytes()` checks the bytes in memory before writing anything: SHA-256 first, then `meta.abbreviation`, then the verse count. It then writes the file to OPFS, inserts the row, keeps the handle open and saves. A failure leaves nothing behind. A failed fetch (`TypeError`) is reported as offline even when `navigator.onLine` says true, which it did in testing.
+- **Remove.** `removeTranslation(id)` throws for `LOCKED_TRANSLATION_ID`. Otherwise it deletes the row, closes the handle, saves, and fires `translations-changed`. It then waits for the storage worker to write that save (`waitForStorageWorker()`, from §16) before it deletes the file. An interrupted Remove therefore leaves at worst an orphan file, which the next boot cleans up.
+- **Restore.** `mergeInstalledTranslations(bytes)` adds each live row to the backup's manifest with `INSERT OR IGNORE`. `backup.js` restores the merged bytes. If the merge throws, the restore stops with the usual error.
+
+**UI.**
+- `js/translation-shelf.js` (new): a + at the end of the book picker's translation row opens the shelf, which follows the spec's Item 6. It sits at z-index 250: above the book picker (200), below dialogs (400). The + is one element that `reader.js` moves back into the row each time it redraws it.
+- `reader.js`:
+  - The translation list is re-read on `translations-changed`.
+  - `fallBackFromMissingTranslations()` moves to KJV any pane whose translation isn't open, both at init and after a change. This fixes the old case where the label said one translation and the text was KJV.
+- `dialogs.js`: a click inside a dialog no longer reaches the document's click listeners. Before, confirming in a dialog opened from the book picker closed the picker and the shelf behind it.
+- The reader's help popover has a line about the +.
+- `sw.js`: `translation-shelf.js` is precached, and `CACHE_NAME` is now `ember-v32`.
+
+**Tests.** `tests/verify.py translations` (new) covers every case in the spec's Item 8:
+- The catalog checked against the files, and the shipped manifest.
+- Add and Remove through the shelf, including Remove while a pane shows the translation.
+- Removed stays removed, and Restore defaults.
+- KJV can't be removed.
+- Bad downloads: a 404, the wrong file, a wrong sha256, meta or verse count, and a bad catalog through the shelf.
+- Offline: the shelf, Remove and reading.
+- Orphan files.
+- A saved pane on an uninstalled ID.
+- An install from before add-ons (six rows, all `is_bundled = 1`, `darby.db` in OPFS): Darby stays installed, and Remove through the shelf works without touching the other files.
+- Restoring a backup between machines with different sets, online and offline.
+- Restoring a backup with the same set.
+- A merge failure.
+- No user table has a translation column.
+
+Its throwaway backups go in the gitignored `tests/stress-data/`.
+
+All twelve suites pass: `translations` plus smoke, popovers, sw, controls, export, notes, indicators, storage, offline, lexicon and hebrew.
+
+**Existing installs (Wayne's):** no migration. Darby stays in the manifest and in OPFS, and can now be removed through the shelf. That is the first real test.

@@ -32,9 +32,20 @@ let _savedDuringRestore = false;
 let _SQL           = null; // cached sql.js module — reused by restore's validation step
 
 // Translation handles — keyed by integer translation ID (1 = KJV, 2 = ASV, …).
-// Populated during initDatabase(); read-only after that. Never handed out:
-// every query against a translation goes through a function in this file.
+// Populated during initDatabase(), then changed only by addTranslation() and
+// removeTranslation(). Never handed out: every query against a translation
+// goes through a function in this file.
 const _translationDbs = new Map();
+
+// KJV is always installed and can't be removed: it's the fallback for any pane
+// whose translation goes away. The catalog's tier for ID 1 must agree.
+export const LOCKED_TRANSLATION_ID = 1;
+const LOCKED_TRANSLATION_ROW = [1, 'kjv.db', 'King James Version', 'KJV', '1611', 'Public Domain'];
+
+const TRANSLATION_CATALOG_URL = './data/translations/catalog.json';
+
+// Fired on document after a translation is added or removed (reader.js redraws).
+export const TRANSLATIONS_CHANGED_EVENT = 'translations-changed';
 
 function getStorageWorker() {
     if (!_storageWorker) {
@@ -112,11 +123,13 @@ export async function initDatabase() {
     // Same for built-in study templates, by name.
     await seedBundledTemplates();
 
-    // Seed translation files into OPFS on first install; later loads only re-seed
-    // a file that isn't whole.
+    // The translations manifest means "installed on this device"
+    // (Translation_Addons_Spec Items 2 and 5). KJV is always in it; any row whose
+    // file is missing or not whole downloads when online; a file with no row is
+    // left over from an interrupted Remove and is deleted.
+    ensureLockedTranslation();
     await seedTranslations();
-
-    // Open sql.js Database handles for all bundled translations.
+    await removeOrphanTranslationFiles();
     await openTranslationHandles(SQL);
 
     return db;
@@ -126,10 +139,27 @@ export async function initDatabase() {
 // Translation seeding + handle management
 // ============================================================
 
-// On first install: fetch each bundled translation file from ./data/translations/
-// and write it into OPFS under translations/{filename}.
-// On subsequent loads: all files already exist in OPFS — this is a fast no-op.
-// If OPFS is unavailable, openTranslationHandles falls back to network fetch.
+// Guards against a restored or damaged core.db without KJV's row.
+function ensureLockedTranslation() {
+    db.run(
+        `INSERT OR IGNORE INTO translations
+             (id, filename, name, abbreviation, year, license, installed_at, is_bundled)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+        [...LOCKED_TRANSLATION_ROW, Math.floor(Date.now() / 1000)]
+    );
+    if (db.getRowsModified() > 0) saveToStorage(db.export());
+}
+
+function getManifestRows() {
+    return queryAll(db, 'SELECT id, filename FROM translations ORDER BY id');
+}
+
+// For every manifest row: fetch the file from ./data/translations/ into OPFS
+// under translations/{filename} if it isn't there and whole. On a first install
+// that's the default set; afterwards it's a fast no-op, except for a row a
+// restored backup brought that this machine lacks, which arrives here on the
+// next online boot. If OPFS is unavailable, openTranslationHandles falls back
+// to network fetch.
 async function seedTranslations() {
     if (!('storage' in navigator && 'getDirectory' in navigator.storage)) {
         return;
@@ -144,7 +174,7 @@ async function seedTranslations() {
         return;
     }
 
-    const rows = queryAll(db, 'SELECT id, filename FROM translations WHERE is_bundled = 1 ORDER BY id');
+    const rows = getManifestRows();
 
     const loadingEl = document.getElementById('loading');
     let seeded = 0;
@@ -157,14 +187,19 @@ async function seedTranslations() {
             if (await isCompleteSqliteFile(await existing.getFile())) continue;
         } catch (_) {}
 
-        // Not yet seeded — fetch and write.
+        // Not yet seeded — fetch and write. Offline, it waits for an online boot;
+        // until then the translation is hidden (see getTranslations()).
+        if (navigator.onLine === false) {
+            console.warn(`seedTranslations: offline, ${filename} will download on the next online boot`);
+            continue;
+        }
         seeded++;
         if (loadingEl) {
             loadingEl.textContent = `Installing translations… ${seeded} of ${rows.length}`;
         }
 
         try {
-            const response = await fetch(`./data/translations/${filename}`);
+            const response = await fetch(`./data/translations/${filename}`, { cache: 'no-cache' });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const buffer   = await response.arrayBuffer();
             const handle   = await transDir.getFileHandle(filename, { create: true });
@@ -172,7 +207,13 @@ async function seedTranslations() {
             await writable.write(buffer);
             await writable.close();
         } catch (e) {
-            console.error(`seedTranslations: failed to seed ${filename}:`, e);
+            // A failed fetch (TypeError) is no connection, an expected state:
+            // navigator.onLine can still say true then. It downloads next boot.
+            if (e instanceof TypeError) {
+                console.warn(`seedTranslations: ${filename} could not be fetched, will try on the next boot:`, e.message);
+            } else {
+                console.error(`seedTranslations: failed to seed ${filename}:`, e);
+            }
         }
     }
 
@@ -181,11 +222,45 @@ async function seedTranslations() {
     }
 }
 
-// Open a sql.js Database handle for every bundled translation.
+// Any .db file in OPFS translations/ with no manifest row is deleted: the
+// leftover of a Remove interrupted between its manifest and file steps. Other
+// names (a browser's .crswap, say) are left alone.
+async function removeOrphanTranslationFiles() {
+    const transDir = await getTranslationsDir();
+    if (!transDir) return;
+    const installed = new Set(getManifestRows().map(row => row.filename));
+    const orphans = [];
+    try {
+        for await (const [name, handle] of transDir.entries()) {
+            if (handle.kind === 'file' && name.endsWith('.db') && !installed.has(name)) orphans.push(name);
+        }
+        for (const name of orphans) {
+            await transDir.removeEntry(name);
+            console.log(`Removed ${name}: no longer installed.`);
+        }
+    } catch (e) {
+        console.warn('removeOrphanTranslationFiles:', e);
+    }
+}
+
+// The OPFS translations/ directory, or null without OPFS.
+async function getTranslationsDir({ create = false } = {}) {
+    if (!('storage' in navigator && 'getDirectory' in navigator.storage)) return null;
+    try {
+        const root = await navigator.storage.getDirectory();
+        return await root.getDirectoryHandle('translations', { create });
+    } catch (_) {
+        return null;
+    }
+}
+
+// Open a sql.js Database handle for every installed translation.
 // Reads from OPFS; falls back to a direct network fetch if OPFS is unavailable
 // (e.g. in browsers without OPFS support — handles are in-memory only in that case).
+// A row whose file can't be loaded (offline, right after a restore) gets no
+// handle, which keeps it out of the reader until its download succeeds.
 async function openTranslationHandles(SQL) {
-    const rows = queryAll(db, 'SELECT id, filename FROM translations WHERE is_bundled = 1 ORDER BY id');
+    const rows = getManifestRows();
 
     for (const { id, filename } of rows) {
         try {
@@ -196,7 +271,11 @@ async function openTranslationHandles(SQL) {
                 console.warn(`openTranslationHandles: no data for ${filename}`);
             }
         } catch (e) {
-            console.error(`openTranslationHandles: failed to open ${filename}:`, e);
+            if (navigator.onLine === false || e instanceof TypeError) {
+                console.warn(`openTranslationHandles: ${filename} is not downloaded yet and can't be fetched now`);
+            } else {
+                console.error(`openTranslationHandles: failed to open ${filename}:`, e);
+            }
         }
     }
 
@@ -219,9 +298,204 @@ async function loadTranslationBuffer(filename) {
     }
 
     // Network fallback: fetch fresh each time (read-only, so safe).
+    if (navigator.onLine === false) throw new Error('the browser is offline');
     const response = await fetch(`./data/translations/${filename}`);
     if (!response.ok) throw new Error(`HTTP ${response.status} fetching ${filename}`);
     return await response.arrayBuffer();
+}
+
+// ============================================================
+// Adding and removing translations (Translation_Addons_Spec Items 3 and 4)
+// ============================================================
+
+// The list of every translation Ember offers, installed or not. Online only:
+// nothing offline depends on it, since an installed translation's details are
+// in the manifest. Not cached by the browser, so a rebuilt file's new sha256
+// is what Add checks against.
+export async function fetchTranslationCatalog() {
+    if (navigator.onLine === false) throw new Error('the browser is offline');
+    const response = await fetch(TRANSLATION_CATALOG_URL, { cache: 'no-cache' });
+    if (!response.ok) throw new Error(`HTTP ${response.status} fetching the translation catalog`);
+    const catalog = await response.json();
+    return catalog.translations;
+}
+
+// Downloads a catalog translation, checks it, and installs it. Rejects with a
+// message fit to show if it can't; nothing is left behind when it does.
+// `onProgress(received, total)` follows the download; total is the catalog's
+// size_bytes, or null if the entry has none.
+export async function addTranslation(entry, { onProgress } = {}) {
+    if (navigator.onLine === false) {
+        throw new Error('You’re offline. Connect to the internet to add a translation.');
+    }
+    let bytes;
+    try {
+        const response = await fetch(`./data/translations/${entry.filename}`, { cache: 'no-cache' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        bytes = await readResponseWithProgress(response, entry.size_bytes, onProgress);
+    } catch (e) {
+        console.warn(`addTranslation: download of ${entry.filename} failed:`, e);
+        // A failed fetch (TypeError) means no connection, whatever navigator.onLine says.
+        throw new Error(e instanceof TypeError
+            ? `${entry.abbreviation} could not be downloaded: you seem to be offline. Connect to the internet and try again.`
+            : `${entry.abbreviation} could not be downloaded. Try again later.`);
+    }
+    await installTranslationBytes(entry, bytes);
+}
+
+// The total is the catalog's size, not Content-Length: a host that compresses
+// the response sends the compressed size there, which would read "7.5 of 2.9 MB".
+async function readResponseWithProgress(response, total, onProgress) {
+    total = total || null;
+    if (!response.body || !onProgress) return new Uint8Array(await response.arrayBuffer());
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+    onProgress(0, total);
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        onProgress(received, total);
+    }
+    const bytes = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+    return bytes;
+}
+
+// Checks `bytes` against the catalog entry, writes the file to OPFS, then
+// registers it. Takes bytes rather than a URL so a future "import your own
+// translation file" path can call it with a local file. The checks run on the
+// bytes in memory, before anything is written, so a bad file never reaches disk.
+export async function installTranslationBytes(entry, bytes) {
+    const database = await openCheckedTranslation(entry, bytes);
+    try {
+        const transDir = await getTranslationsDir({ create: true });
+        if (transDir) {
+            try {
+                const handle   = await transDir.getFileHandle(entry.filename, { create: true });
+                const writable = await handle.createWritable();
+                await writable.write(bytes);
+                await writable.close();
+            } catch (e) {
+                await transDir.removeEntry(entry.filename).catch(() => {});
+                throw e;
+            }
+        }
+        // Without OPFS the handle lives in memory, and later boots fetch the file
+        // over the network (loadTranslationBuffer), as for the default set.
+    } catch (e) {
+        database.close();
+        console.error(`installTranslationBytes: could not store ${entry.filename}:`, e);
+        throw new Error(`${entry.abbreviation} could not be saved on this device. Nothing was changed.`);
+    }
+
+    // The row comes from the catalog entry, not the file: the entry is what the
+    // file was just checked against, and its ID is permanent.
+    db.run(
+        `INSERT OR REPLACE INTO translations
+             (id, filename, name, abbreviation, year, license, installed_at, is_bundled)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+        [entry.id, entry.filename, entry.name, entry.abbreviation, entry.year ?? null,
+         entry.license ?? null, Math.floor(Date.now() / 1000)]
+    );
+    _translationDbs.get(entry.id)?.close();
+    _translationDbs.set(entry.id, database);
+    saveToStorage(db.export());
+    document.dispatchEvent(new CustomEvent(TRANSLATIONS_CHANGED_EVENT));
+}
+
+// Opens `bytes` as a sql.js database and confirms it is the translation the
+// catalog describes: its meta abbreviation, its SHA-256, and its verse count
+// (verse > 0 only: KJV, ASV and Darby carry Psalm title rows as verse 0, and
+// WEB has fewer verses than the rest, so the count is never a constant).
+// Returns the open database, or closes it and throws.
+async function openCheckedTranslation(entry, bytes) {
+    const failed = (reason) => {
+        console.warn(`addTranslation: ${entry.filename} failed its check: ${reason}`);
+        return new Error(`The downloaded ${entry.abbreviation} file didn’t check out, so it wasn’t installed. Try again later.`);
+    };
+
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+    const sha256 = [...digest].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    if (sha256 !== entry.sha256) throw failed(`sha256 ${sha256} is not the catalog's ${entry.sha256}`);
+
+    let database;
+    try {
+        database = new _SQL.Database(bytes);
+        const abbreviation = queryValue(database, "SELECT value FROM meta WHERE key = 'abbreviation'");
+        if (abbreviation !== entry.abbreviation) {
+            throw failed(`meta abbreviation ${abbreviation} is not ${entry.abbreviation}`);
+        }
+        const verseCount = queryValue(database, 'SELECT COUNT(*) FROM verses WHERE verse > 0', [], 0);
+        if (verseCount !== entry.verse_count) {
+            throw failed(`${verseCount} verses, not the catalog's ${entry.verse_count}`);
+        }
+        return database;
+    } catch (e) {
+        database?.close();
+        throw e.message.startsWith('The downloaded') ? e : failed(e.message);
+    }
+}
+
+// Removes an installed translation. Works offline. The reader moves any pane
+// showing it to KJV when TRANSLATIONS_CHANGED_EVENT fires, before anything can
+// read from the closed handle.
+//
+// The manifest row goes before the file, and the save that drops it must be on
+// disk before the file is deleted: a tab closed in between then leaves a file
+// with no row, which the next boot deletes. The other way round would leave a
+// row with no file, and the next online boot would download it again.
+export async function removeTranslation(id) {
+    if (id === LOCKED_TRANSLATION_ID) throw new Error('KJV is always installed and can’t be removed.');
+    const row = queryOne(db, 'SELECT filename FROM translations WHERE id = ?', [id]);
+    if (!row) return;
+
+    db.run('DELETE FROM translations WHERE id = ?', [id]);
+    _translationDbs.get(id)?.close();
+    _translationDbs.delete(id);
+    saveToStorage(db.export());
+    document.dispatchEvent(new CustomEvent(TRANSLATIONS_CHANGED_EVENT));
+
+    await waitForStorageWorker();
+    const transDir = await getTranslationsDir();
+    try {
+        await transDir?.removeEntry(row.filename);
+    } catch (e) {
+        if (e.name !== 'NotFoundError') console.warn(`removeTranslation: ${row.filename} stays until the next boot:`, e);
+    }
+}
+
+// A restore brings study data across, never removes a translation from this
+// machine (Translation_Addons_Spec Item 5a). Before the restore's write, every
+// row in the live manifest is added to the backup's: same ID means same
+// translation, so a row already there is skipped, and the UNIQUE filename makes
+// an inconsistent one skip too. Translations only the backup lists download on
+// the next online boot. Returns the merged bytes; throws if they can't be made,
+// and the restore must then stop rather than go ahead unmerged.
+export function mergeInstalledTranslations(bytes) {
+    const live = queryAll(db,
+        'SELECT id, filename, name, abbreviation, year, license, installed_at, is_bundled FROM translations ORDER BY id');
+    const restored = new _SQL.Database(bytes);
+    try {
+        for (const row of live) {
+            restored.run(
+                `INSERT OR IGNORE INTO translations
+                     (id, filename, name, abbreviation, year, license, installed_at, is_bundled)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [row.id, row.filename, row.name, row.abbreviation, row.year, row.license, row.installed_at, row.is_bundled]
+            );
+            const kept = queryValue(restored, 'SELECT filename FROM translations WHERE id = ?', [row.id]);
+            if (kept !== row.filename) {
+                console.warn(`mergeInstalledTranslations: kept the backup's row for ${kept ?? row.filename}; skipped this machine's ${row.abbreviation} (ID ${row.id})`);
+            }
+        }
+        return restored.export();
+    } finally {
+        restored.close();
+    }
 }
 
 // ============================================================
@@ -229,8 +503,8 @@ async function loadTranslationBuffer(filename) {
 // lexicon-hebrew.db (Hebrew_Lexicon_Spec)
 // ============================================================
 //
-// Unlike translations (opened eagerly for all 6 at init — small files, always
-// needed), these are read-only reference data most sessions may never open
+// Unlike translations (every installed one opened eagerly at init — small files,
+// always needed), these are read-only reference data most sessions may never open
 // (~64 MB and ~4 MB). Getting one onto the device and opening it are separate
 // steps: startReferenceDbDownloads() streams each file into OPFS shortly after
 // launch, so it is there before the user next goes offline, but nothing loads
@@ -1339,8 +1613,17 @@ export function chapterExistsInTranslation(translationId, bookId, chapter) {
     ) !== null;
 }
 
+// Translations the reader can show: installed and open. A manifest row whose
+// file couldn't be loaded (offline, right after a restore) is left out until
+// its download succeeds.
 export function getTranslations() {
-    return queryAll(db, 'SELECT id, name, abbreviation FROM translations ORDER BY id');
+    return getInstalledTranslations().filter(t => _translationDbs.has(t.id));
+}
+
+// Every row in the manifest: what this device has installed, open or not.
+// The Translations shelf lists these when the catalog can't be fetched.
+export function getInstalledTranslations() {
+    return queryAll(db, 'SELECT id, filename, name, abbreviation, year, license FROM translations ORDER BY id');
 }
 
 export function getBooks() {

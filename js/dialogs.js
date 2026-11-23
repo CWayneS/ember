@@ -118,6 +118,10 @@ function buildDialog({ title, confirmLabel, cancelLabel, danger = false }) {
         cancelBtn.addEventListener('click', onCancel);
         confirmBtn.addEventListener('click', onConfirm);
         overlay.addEventListener('click', (e) => { if (e.target === overlay) onCancel(); });
+        // A click in the dialog is not a click outside whatever opened it (the
+        // book picker, the Translations shelf), so it mustn't reach the
+        // document-level listeners that would close those underneath it.
+        overlay.addEventListener('click', (e) => e.stopPropagation());
         document.addEventListener('keydown', onKeydown, true);
     }
 

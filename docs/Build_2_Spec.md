@@ -490,6 +490,8 @@ The script lives in `scripts/` or `tools/`, not in the app's `js/` directory. It
 
 ## Item 4: Multi-Translation
 
+> **Superseded in part by `docs/Translation_Addons_Spec.md`** (built 2026-11-23): Darby is now an add-on rather than bundled, any translation but KJV can be removed, and the manifest means "installed on this device".
+
 ### What
 
 Add support for multiple Bible translations in Ember. Ship with six bundled public-domain translations, each as its own SQLite file. Provide a translation selection row above books in the book picker. Each split-view pane holds its own translation state. Per-pane state persists across reload.

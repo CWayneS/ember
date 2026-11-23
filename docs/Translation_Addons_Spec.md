@@ -1,6 +1,6 @@
 # Ember Bible Study — Translation Add-Ons Spec
 
-**Status:** Draft, 2026-11-22.
+**Status:** Built 2026-11-23; see `docs/BUILD_6.1_ACTUAL_STATE.md` §18. Drafted 2026-11-22.
 **Ground rule:** the code wins where it and this spec disagree. Every "current state" claim below was checked against `js/db.js`, `js/reader.js`, `sw.js` and `build/build_db.py` as of November 2026. Re-check before building.
 
 ---

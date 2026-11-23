@@ -1,6 +1,7 @@
 // reader.js — Scripture rendering and navigation
 
-import { getChapter, getBooks, getBook, getTranslations, chapterExistsInTranslation, getNoteCountsForChapter, getMarkupsForChapter, getBookmarksForChapter, getOriginalWordsForVerses, warnLanguageUnavailable, plainGloss } from './db.js';
+import { getChapter, getBooks, getBook, getTranslations, LOCKED_TRANSLATION_ID, TRANSLATIONS_CHANGED_EVENT, chapterExistsInTranslation, getNoteCountsForChapter, getMarkupsForChapter, getBookmarksForChapter, getOriginalWordsForVerses, warnLanguageUnavailable, plainGloss } from './db.js';
+import { getTranslationShelfButton } from './translation-shelf.js';
 
 // ============================================================
 // Per-pane state — persisted to localStorage
@@ -48,11 +49,40 @@ function savePaneState(paneId) {
     } catch (_) {}
 }
 
-// Translations list — loaded once on first use, never changes during a session.
+// Translations the reader can show (installed and open), cached until a
+// translation is added or removed (TRANSLATIONS_CHANGED_EVENT).
 let _translationsCache = null;
 function getTranslationsList() {
     if (!_translationsCache) _translationsCache = getTranslations();
     return _translationsCache;
+}
+
+// A pane whose translation isn't open goes to KJV at the same place: one that
+// was removed, one a restored backup lists that hasn't downloaded yet, or a
+// saved pane state from another machine. Returns the panes it changed.
+function fallBackFromMissingTranslations() {
+    const open = new Set(getTranslationsList().map(t => t.id));
+    const changed = [];
+    for (const paneId of ['a', 'b']) {
+        if (open.has(panes[paneId].translationId)) continue;
+        panes[paneId].translationId = LOCKED_TRANSLATION_ID;
+        savePaneState(paneId);
+        changed.push(paneId);
+    }
+    return changed;
+}
+
+function onTranslationsChanged() {
+    _translationsCache = null;
+    for (const paneId of fallBackFromMissingTranslations()) {
+        if (visiblePaneIds().includes(paneId)) {
+            renderPane(paneId, panes[paneId].bookId, panes[paneId].chapter);
+        }
+    }
+    for (const paneId of ['a', 'b']) updateTranslationLabel(paneId);
+    if (!document.getElementById('book-overlay').classList.contains('hidden')) {
+        renderTranslationRow(overlayPane);
+    }
 }
 
 // ============================================================
@@ -82,6 +112,8 @@ export function initReader() {
     // Restore per-pane state from localStorage before first render.
     loadPaneState('a');
     loadPaneState('b');
+    fallBackFromMissingTranslations();
+    document.addEventListener(TRANSLATIONS_CHANGED_EVENT, onTranslationsChanged);
 
     for (const id of ['a', 'b']) {
         navEl(id, '.pane-book-btn').addEventListener('click', () => openBookOverlay(id));
@@ -535,12 +567,14 @@ function renderTranslationRow(paneId) {
         });
         container.appendChild(btn);
     }
+    // The shelf's + button is one element, moved back in on every redraw.
+    container.appendChild(getTranslationShelfButton());
 }
 
 // Validates that (bookId, chapter) exists in the target translation.
 // Falls back to chapter 1 if the chapter is missing entirely.
 // (Shared English versification means this should never trigger for the
-//  six bundled translations, but the logic is here as insurance.)
+//  catalog's translations, but the logic is here as insurance.)
 function findValidReference(translationId, bookId, chapter) {
     if (chapterExistsInTranslation(translationId, bookId, chapter)) {
         return { bookId, chapter };
