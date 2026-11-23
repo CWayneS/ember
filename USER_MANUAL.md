@@ -20,6 +20,8 @@ If you'd rather not install it, it works just as well in a browser tab.
 
 The first time Ember loads, it downloads the core database and the five default translations (roughly 60–65 MB total) and saves them to your device. After that, everything runs locally. Original-language data for the Language tab (about 64 MB) and the Hebrew lexicon (about 4 MB) download once, quietly in the background, a moment after that first launch finishes, so they don't slow the launch down. If you open the Language tab while it's still arriving, the tab says so and fills in when it's done. If you were offline for that moment, it downloads the next time you're connected, and until then the Language tab tells you it's waiting. Psalm titles that come from this data simply don't appear until it has arrived.
 
+When a corrected version of a translation or of the original-language data is published, Ember fetches it quietly in the background the next time you open it while online, and uses it from the time after that. Your notes are never touched by this.
+
 You'll land on Genesis 1 with empty study panels on the left. The loading screen disappears when the app is ready.
 
 ---

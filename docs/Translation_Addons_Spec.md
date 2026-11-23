@@ -76,7 +76,7 @@ A new file, `data/translations/catalog.json`, lists every translation Ember offe
 
 - `tier` is `locked`, `default` or `available`.
 - `size_bytes` comes from the real file in `data/translations/`. Fill it from the build script or by hand, but never estimate it.
-- `sha256` is the hex SHA-256 of the real file. Add uses it to check the download (Item 3). It is also there for version-aware reseeding, a separate item in `docs/TODO.md` step 3, outside this spec: a file whose hash no longer matches its catalog entry is one that has changed. Like the other fields, take it from the file after the final build, never by hand.
+- `sha256` is the hex SHA-256 of the real file. Add uses it to check the download (Item 3). It is also what version-aware reseeding (built 2026-11-23, `docs/BUILD_6.1_ACTUAL_STATE.md` §19) compares against: a file whose hash no longer matches its catalog entry is one that has changed. Like the other fields, take it from the file after the final build, never by hand.
 - `verse_count` is the file's real `SELECT COUNT(*) FROM verses WHERE verse > 0`, used by Add's check (Item 3). Take it from the file, never assume it: it is 31,102 for every shipped translation except WEB, which has 31,098 (it leaves out Luke 17:36, Acts 8:37, 15:34 and 24:7, and puts the Romans doxology at 14:24–26 instead of 16:25–27).
 - `description` is one line for the shelf. Draft lines (Wayne to edit):
   - **KJV:** The historic standard. Archaic, familiar, widely cross-referenced.
@@ -269,7 +269,7 @@ In `initDatabase()`, around the existing seeding:
 ## Out of Scope
 
 - **Importing your own translation file.** The install-and-check function is written to be reused for it later. **ID note for that work:** imported translations can't take IDs from the catalog, or two machines could give the same ID to different translations and a moved backup would point at the wrong one. Give imports their own ID range (for example, 10000 and up, assigned per install) and match them across machines by content (`meta` plus a file hash), not by ID alone.
-- **Updating an installed translation's text in place.** Still not a supported operation: `seedTranslations()` only checks that a file is present and whole, never its version. That's planned as "Version-aware translation and data reseeding" in `docs/TODO.md`'s Roadmap. Until then, to see changed translation data locally, clear the OPFS copy. (An August 2026 note, `OPFS_Reseed_Gap.md`, said this; it was never in the repo and isn't needed.)
+- **Updating an installed translation's text in place.** Out of scope here; built afterwards as version-aware reseeding (`docs/BUILD_6.1_ACTUAL_STATE.md` §19): an installed file whose sha256 differs from its catalog entry is replaced in the background.
 - **Non-English versification.** All catalog translations share English versification.
 - **Cross-translation search.**
 - **New add-on translations beyond Darby.** The catalog makes adding one a data change, decided separately.

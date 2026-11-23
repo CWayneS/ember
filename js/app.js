@@ -1,6 +1,6 @@
 // app.js — Entry point
 
-import { initDatabase, requestPersistentStorageIfDue, startReferenceDbDownloads } from './db.js';
+import { initDatabase, requestPersistentStorageIfDue, startReferenceDbDownloads, checkForDataUpdates } from './db.js';
 
 import { initReader } from './reader.js';
 
@@ -84,6 +84,9 @@ async function init() {
         document.getElementById('loading').classList.add('hidden');
 
         startReferenceDbDownloads();
+        // Online, replace any installed data file the server has a newer version of
+        // (used from the next launch).
+        checkForDataUpdates();
         requestPersistentStorageIfDue();
 
         // Register service worker for production only.

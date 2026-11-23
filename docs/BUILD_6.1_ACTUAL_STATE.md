@@ -494,3 +494,45 @@ Its throwaway backups go in the gitignored `tests/stress-data/`.
 All twelve suites pass: `translations` plus smoke, popovers, sw, controls, export, notes, indicators, storage, offline, lexicon and hebrew.
 
 **Existing installs (Wayne's):** no migration. Darby stays in the manifest and in OPFS, and can now be removed through the shelf. That is the first real test.
+
+## 19. ADDENDUM — 2026-11-23, version-aware reseeding
+
+TODO step 3, second item. No separate spec; the decisions are recorded here. Before this, seeding only checked that a file was there and whole, so a fixed or rebuilt file never reached an install that already had one.
+
+**What it does.** `checkForDataUpdates()` in `js/db.js` runs once per launch, about 5 seconds after the app is live (`app.js`), online only.
+1. It fetches both catalogs with `no-cache`: `data/translations/catalog.json` and the new `data/reference-catalog.json` (filename, size, sha256 for `language.db` and `lexicon-hebrew.db`).
+2. For each installed translation, then each reference file, it compares the installed file's SHA-256 with the catalog's.
+3. When they differ, it downloads the new file and checks it in memory. A translation gets the same checks as Add (`openCheckedTranslation`: sha256, `meta.abbreviation`, verse count). A reference file gets its sha256 and the SQLite header check.
+4. Only then does it write the file over the installed copy with `createWritable`.
+
+The running session keeps the copy it loaded into memory, so the new file is used from the next launch.
+
+**Decisions.**
+- **In the background, after launch, never during boot.** A changed `language.db` is 64 MB; boot shouldn't wait for it.
+- **One file at a time.** Checking a file means holding all of it in memory.
+- **Skipped:** a file that's missing or not whole (seeding and the reference downloader handle those), a reference file with a download in flight, and a translation removed since the check (the manifest is re-read just before writing). A failed download or check keeps the old file, with one warning per file per session.
+- **The installed version is recorded per machine, in `localStorage`, never in `core.db`.** The key is `ember.installedFiles`, holding `{ sha256, size, lastModified }` per OPFS path. A backup carries `core.db` to other machines, whose files may be other versions.
+- **Every write path sets or clears its file's record:** seeding, Add, Remove, orphan removal, the reference downloader and the updater. A record whose size or lastModified no longer matches the file is ignored. A file with no usable record is hashed once. That covers every install from before this, and Firefox's "Clear site data", which clears `localStorage` but leaves OPFS. A launch with nothing changed hashes nothing.
+- **Reference updates aren't registered as downloads.** Otherwise the Language tab would say "downloading" while the old file is still usable.
+- **Not covered:** `core.db`'s reference tables (cross-references, Nave's). They share a file with the user's notes, so they can't be swapped like this (TODO step 3's scope question).
+
+**Build scripts.** `scripts/build_translation_catalog.py` is renamed `scripts/build_catalogs.py` and also writes `data/reference-catalog.json`. `build_language.py --ship` and `build_lexicon_hebrew.py --ship` run it after copying, so a shipped rebuild can't leave a catalog stale.
+
+**Tests.** `tests/verify.py updates` (new) checks:
+- the reference catalog against the files
+- a fresh install updates nothing
+- a later launch hashes and fetches nothing (SHA-256 calls counted by an init script)
+- with no records, each of the 7 installed files is hashed once and none is fetched
+- a changed ASV is downloaded and written once, and its new text shows after a reload
+- a download that doesn't match its catalog entry leaves the old YLT byte-identical
+- a removed BSB is never fetched
+- a changed `lexicon-hebrew.db` is replaced
+- offline does nothing
+
+`EMBER_BROWSER=firefox` runs any browser scenario in Playwright's Firefox. `updates` and `translations` both pass there.
+
+**`sw.js`:** `CACHE_NAME` → `ember-v33`.
+
+**Wayne's install:** the first online launch after this hashes every installed file once. It then replaces any file older than the shipped one: the translation files from before §17's rebuild, unless they were already cleared. No more clearing OPFS by hand after a rebuild.
+
+All thirteen suites pass (the twelve above plus `updates`); `updates` and `translations` also pass in Firefox.

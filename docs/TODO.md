@@ -14,18 +14,19 @@ Done 2026-11-22: the storage worker queues its writes, and restore waits for it 
 
 ## 2. Rebuild all six translation files once
 
-Done 2026-11-22: Scripture search on FTS4, and WEB rebuilt from eBible's USFM (`docs/BUILD_6.1_ACTUAL_STATE.md` §17). **Still to do on Wayne's install:** clear `translations/*.db` from OPFS (in Firefox with `removeEntry()`; "Clear site data" leaves OPFS alone), so the new files are seeded.
+Done 2026-11-22: Scripture search on FTS4, and WEB rebuilt from eBible's USFM (`docs/BUILD_6.1_ACTUAL_STATE.md` §17). The new files now reach Wayne's install by themselves (step 3's updater): no OPFS clearing needed.
 
 ## 3. Translation add-ons, then updating installed data
 
 Translation add-ons done 2026-11-23: every translation but KJV removable, Darby on the shelf, `data/translations/catalog.json` with a sha256 per file (`docs/BUILD_6.1_ACTUAL_STATE.md` §18). **Still to do on Wayne's install:** remove Darby through the shelf, as its first real test.
 
+Version-aware reseeding done 2026-11-23: after launch, online, any installed translation, `language.db` or `lexicon-hebrew.db` whose sha256 differs from its catalog entry is replaced in the background and used from the next launch (`docs/BUILD_6.1_ACTUAL_STATE.md` §19).
+
 | To-do | Why it matters | Size | Source |
 |---|---|---|---|
-| **Version-aware reseeding** | `seedTranslations()` only checks that a file is present and whole, so a fixed or rebuilt translation never reaches an existing install. Compare each installed file with its catalog version and download the new one when they differ. Needed before launch, or the first data fix after launch reaches no one. Cover `language.db` and `lexicon-hebrew.db` the same way. | Medium | `js/db.js` (`seedTranslations()`, `downloadReferenceDbInBackground()`); README "Future" |
 | **Getting a deleted bundled plan back** | Deleted bundled plans stay deleted (they're listed in `bundled_installs`). The only way back is importing the plan's JSON from `data/plans/`, which a user doesn't have. A "Restore bundled plans" action could take a plan off the list and seed it again. "Restore default translations" (the Translations shelf, `js/translation-shelf.js`) is the pattern to follow. | Small | `seedBundledPlans()` in `js/db.js` |
 
-**Scope question:** updates to cross-references or Nave's live in `core.db`, which also holds the user's notes. It can't be swapped like a translation file, so updating those tables needs its own approach. Fine to defer, but decide it consciously.
+**Deferred (Wayne, 2026-11-23):** updates to cross-references or Nave's. They live in `core.db`, which also holds the user's notes, so it can't be swapped like a translation file and needs its own approach. Take it up when there's an actual fix to ship to those tables.
 
 ## 4. Get ready to go public
 

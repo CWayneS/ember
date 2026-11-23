@@ -206,6 +206,7 @@ async function seedTranslations() {
             const writable = await handle.createWritable();
             await writable.write(buffer);
             await writable.close();
+            forgetInstalledFile(`translations/${filename}`);
         } catch (e) {
             // A failed fetch (TypeError) is no connection, an expected state:
             // navigator.onLine can still say true then. It downloads next boot.
@@ -236,6 +237,7 @@ async function removeOrphanTranslationFiles() {
         }
         for (const name of orphans) {
             await transDir.removeEntry(name);
+            forgetInstalledFile(`translations/${name}`);
             console.log(`Removed ${name}: no longer installed.`);
         }
     } catch (e) {
@@ -375,14 +377,12 @@ export async function installTranslationBytes(entry, bytes) {
         const transDir = await getTranslationsDir({ create: true });
         if (transDir) {
             try {
-                const handle   = await transDir.getFileHandle(entry.filename, { create: true });
-                const writable = await handle.createWritable();
-                await writable.write(bytes);
-                await writable.close();
+                await writeOpfsFile(transDir, entry.filename, bytes);
             } catch (e) {
                 await transDir.removeEntry(entry.filename).catch(() => {});
                 throw e;
             }
+            await recordInstalledFile(`translations/${entry.filename}`, entry.sha256);
         }
         // Without OPFS the handle lives in memory, and later boots fetch the file
         // over the network (loadTranslationBuffer), as for the default set.
@@ -418,8 +418,7 @@ async function openCheckedTranslation(entry, bytes) {
         return new Error(`The downloaded ${entry.abbreviation} file didn’t check out, so it wasn’t installed. Try again later.`);
     };
 
-    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-    const sha256 = [...digest].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    const sha256 = await sha256Hex(bytes);
     if (sha256 !== entry.sha256) throw failed(`sha256 ${sha256} is not the catalog's ${entry.sha256}`);
 
     let database;
@@ -463,6 +462,7 @@ export async function removeTranslation(id) {
     const transDir = await getTranslationsDir();
     try {
         await transDir?.removeEntry(row.filename);
+        forgetInstalledFile(`translations/${row.filename}`);
     } catch (e) {
         if (e.name !== 'NotFoundError') console.warn(`removeTranslation: ${row.filename} stays until the next boot:`, e);
     }
@@ -496,6 +496,197 @@ export function mergeInstalledTranslations(bytes) {
     } finally {
         restored.close();
     }
+}
+
+// ============================================================
+// Updating installed data files (version-aware reseeding)
+// ============================================================
+//
+// Seeding only ever checks that a file is there and whole, so a fixed or rebuilt
+// file on the server would never reach an install that already has one. After
+// launch, online, checkForDataUpdates() compares each installed file's SHA-256
+// with its catalog entry (data/translations/catalog.json for translations,
+// data/reference-catalog.json for language.db and lexicon-hebrew.db) and
+// downloads, checks and writes the new one when they differ. It never runs
+// during boot, and sql.js holds each database in memory, so a replaced file is
+// used from the next launch. One file at a time: checking a 64 MB file means
+// holding all of it in memory.
+//
+// Which version each installed file is gets recorded per machine, in
+// localStorage, never in core.db: a backup carries core.db to other machines,
+// whose files may differ. Each record is { sha256, size, lastModified } by OPFS
+// path. Every write of a file sets or forgets its record; a record whose size or
+// lastModified no longer matches the file is ignored too. A file with no usable
+// record is hashed once, in the background: that is every file on an install
+// from before this, and every file after "Clear site data" in Firefox, which
+// clears localStorage but leaves OPFS.
+
+const INSTALLED_FILES_KEY = 'ember.installedFiles';
+const REFERENCE_CATALOG_URL = './data/reference-catalog.json';
+const DATA_UPDATE_DELAY_MS = 5000; // after the reference downloads have started
+
+let _dataUpdateCheck = null;
+const _dataUpdateWarned = new Set();
+
+async function sha256Hex(bytes) {
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+    return [...digest].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function readInstalledFiles() {
+    try {
+        return JSON.parse(localStorage.getItem(INSTALLED_FILES_KEY)) ?? {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function writeInstalledFiles(records) {
+    try { localStorage.setItem(INSTALLED_FILES_KEY, JSON.stringify(records)); } catch (_) {}
+}
+
+function forgetInstalledFile(path) {
+    const records = readInstalledFiles();
+    if (!(path in records)) return;
+    delete records[path];
+    writeInstalledFiles(records);
+}
+
+async function recordInstalledFile(path, sha256) {
+    const file = await getOpfsFileAt(path);
+    if (!file) return forgetInstalledFile(path);
+    const records = readInstalledFiles();
+    records[path] = { sha256, size: file.size, lastModified: file.lastModified };
+    writeInstalledFiles(records);
+}
+
+// `path` is 'language.db' or 'translations/kjv.db'. The File, or null.
+async function getOpfsFileAt(path) {
+    try {
+        let directory = await navigator.storage.getDirectory();
+        const parts = path.split('/');
+        for (const part of parts.slice(0, -1)) directory = await directory.getDirectoryHandle(part);
+        return await (await directory.getFileHandle(parts.at(-1))).getFile();
+    } catch (_) {
+        return null;
+    }
+}
+
+// The installed file's SHA-256, from its record if that still matches the file,
+// otherwise by hashing it (and recording the result). Null when the file is
+// missing or not whole: seeding and the reference downloads deal with those.
+async function installedSha256(path) {
+    const file = await getOpfsFileAt(path);
+    if (!file || !await isCompleteSqliteFile(file)) return null;
+    const record = readInstalledFiles()[path];
+    if (record && record.size === file.size && record.lastModified === file.lastModified) return record.sha256;
+    const sha256 = await sha256Hex(await file.arrayBuffer());
+    const records = readInstalledFiles();
+    records[path] = { sha256, size: file.size, lastModified: file.lastModified };
+    writeInstalledFiles(records);
+    return sha256;
+}
+
+async function writeOpfsFile(directory, filename, bytes) {
+    const handle   = await directory.getFileHandle(filename, { create: true });
+    const writable = await handle.createWritable();
+    await writable.write(bytes);
+    await writable.close();
+}
+
+async function fetchCheckedBytes(url) {
+    const response = await fetch(url, { cache: 'no-cache' });
+    if (!response.ok) throw new Error(`HTTP ${response.status} fetching ${url}`);
+    return new Uint8Array(await response.arrayBuffer());
+}
+
+// Starts the check once, a while after launch. Returns the same promise to
+// every caller (tests wait on it): it resolves to the list of paths replaced,
+// and never rejects.
+export function checkForDataUpdates({ delayMs = DATA_UPDATE_DELAY_MS } = {}) {
+    if (!_dataUpdateCheck) {
+        _dataUpdateCheck = new Promise(resolve => setTimeout(resolve, delayMs))
+            .then(runDataUpdates)
+            .catch(e => {
+                console.warn('Data update check stopped:', e);
+                return [];
+            });
+    }
+    return _dataUpdateCheck;
+}
+
+async function runDataUpdates() {
+    if (navigator.onLine === false || !canDownloadToOpfs()) return [];
+    let translations, references;
+    try {
+        translations = await fetchTranslationCatalog();
+        const response = await fetch(REFERENCE_CATALOG_URL, { cache: 'no-cache' });
+        if (!response.ok) throw new Error(`HTTP ${response.status} fetching the reference catalog`);
+        references = (await response.json()).files;
+    } catch (e) {
+        // No connection, most likely: the next online launch tries again.
+        console.warn('Data update check skipped:', e.message);
+        return [];
+    }
+
+    const updated = [];
+    for (const entry of translations) {
+        if (!isTranslationInstalled(entry.id)) continue;
+        const path = `translations/${entry.filename}`;
+        await updateIfChanged(path, entry.sha256, () => updateTranslationFile(entry), updated);
+    }
+    for (const source of [LANGUAGE_DB, HEBREW_LEXICON_DB]) {
+        const entry = references.find(file => file.filename === source.file);
+        if (!entry || _opfsDownloads.has(source.file)) continue;
+        await updateIfChanged(source.file, entry.sha256, () => updateReferenceFile(source, entry), updated);
+    }
+    if (updated.length) console.log(`Updated ${updated.join(', ')}; in use from the next launch.`);
+    return updated;
+}
+
+async function updateIfChanged(path, catalogSha256, update, updated) {
+    try {
+        const installed = await installedSha256(path);
+        if (!installed || installed === catalogSha256) return;
+        if (await update()) updated.push(path);
+    } catch (e) {
+        // The old file stays. One warning per file per session.
+        if (_dataUpdateWarned.has(path)) return;
+        _dataUpdateWarned.add(path);
+        console.warn(`Could not update ${path}; keeping the installed copy:`, e.message);
+    }
+}
+
+function isTranslationInstalled(id) {
+    return queryOne(db, 'SELECT 1 FROM translations WHERE id = ?', [id]) !== null;
+}
+
+// Checked like Add (sha256, meta, verse count) before it's written. Returns
+// false if the translation was removed meanwhile, so nothing is written.
+async function updateTranslationFile(entry) {
+    const bytes = await fetchCheckedBytes(`./data/translations/${entry.filename}`);
+    const database = await openCheckedTranslation(entry, bytes);
+    database.close();
+    if (!isTranslationInstalled(entry.id)) return false;
+    await writeOpfsFile(await getTranslationsDir({ create: true }), entry.filename, bytes);
+    await recordInstalledFile(`translations/${entry.filename}`, entry.sha256);
+    return true;
+}
+
+// Checked by sha256 and the SQLite header before it's written. Only a file
+// already whole gets here, so the downloader (which only fetches a missing or
+// partial one) never runs on it meanwhile; one in flight was skipped above.
+// Not registered as a download, which would show the Language tab's
+// "downloading" message while the old file is still perfectly usable.
+async function updateReferenceFile(source, entry) {
+    const bytes = await fetchCheckedBytes(source.url);
+    const sha256 = await sha256Hex(bytes);
+    if (sha256 !== entry.sha256) throw new Error(`downloaded sha256 ${sha256} is not the catalog's ${entry.sha256}`);
+    if (!await isCompleteSqliteFile(new Blob([bytes]))) throw new Error('downloaded file is not a whole SQLite file');
+    if (_opfsDownloads.has(source.file)) return false;
+    await writeOpfsFile(await navigator.storage.getDirectory(), source.file, bytes);
+    await recordInstalledFile(source.file, entry.sha256);
+    return true;
 }
 
 // ============================================================
@@ -658,6 +849,7 @@ function downloadToOpfs(filename, url) {
         const handle   = await root.getFileHandle(filename, { create: true });
         const writable = await handle.createWritable();
         await response.body.pipeTo(writable);
+        forgetInstalledFile(filename);
         if (!await getCompleteOpfsFile(filename)) throw new Error(`${filename} arrived incomplete`);
     })().finally(() => _opfsDownloads.delete(filename));
 

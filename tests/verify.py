@@ -30,6 +30,9 @@ Usage (from the repo root):
    python3 tests/verify.py translations  # translation add-ons: catalog against the files, Add and Remove through
                                          #   the shelf, bad downloads, offline, orphans, restoring a backup
                                          #   from a machine with a different set, user tables keyed by verse
+   python3 tests/verify.py updates       # installed data files replaced when the catalog's sha256 changes: hashed
+                                         #   once, then never again; bad downloads, removed translations, offline
+                                         #   (EMBER_BROWSER=firefox runs any browser scenario in Firefox)
    python3 tests/verify.py boots         # warm-boot time to "app live": prints samples and the median
    python3 tests/verify.py dbsnapshot out.json          # results of ~36 db.js calls as JSON
    python3 tests/verify.py dbcompare before.json after.json
@@ -3330,10 +3333,178 @@ def scenario_translations(browser):
     return FAILURES
 
 
+# ---------------------------------------------------------------- updating installed data files
+
+DIGEST_HOOK_JS = """
+window.__digestCalls = 0;
+const realDigest = SubtleCrypto.prototype.digest;
+SubtleCrypto.prototype.digest = function (...args) { window.__digestCalls++; return realDigest.apply(this, args); };
+"""
+
+UPDATE_CHECK_JS = "import('./js/db.js').then(db => db.checkForDataUpdates())"
+
+OPFS_SHA_JS = """async (path) => {
+    let directory = await navigator.storage.getDirectory();
+    const parts = path.split('/');
+    for (const part of parts.slice(0, -1)) directory = await directory.getDirectoryHandle(part);
+    const bytes = await (await (await directory.getFileHandle(parts.at(-1))).getFile()).arrayBuffer();
+    return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
+}"""
+
+
+def sha256_of(data):
+    import hashlib
+    return hashlib.sha256(data).hexdigest()
+
+
+def edited_copy(source, name, sql):
+    """A copy of a shipped .db with one change, as a rebuild would make."""
+    import shutil
+    os.makedirs(SCRATCH, exist_ok=True)
+    path = os.path.join(SCRATCH, name)
+    shutil.copy(source, path)
+    conn = sqlite3.connect(path)
+    conn.execute(sql)
+    conn.commit(); conn.close()
+    data = open(path, 'rb').read()
+    os.remove(path)
+    return data
+
+
+class UpdateRun(OfflineRun):
+    """A profile that counts SHA-256 calls and logs every .db and catalog request."""
+
+    def __init__(self, browser):
+        super().__init__(browser)
+        self.ctx.add_init_script(DIGEST_HOOK_JS)
+        self.data_requests = []
+        self.new_page()
+
+    def new_page(self):
+        page = super().new_page()
+        if hasattr(self, 'data_requests'):
+            page.on('request', lambda r: self.data_requests.append(r.url.split('/data/')[1])
+                    if '/data/' in r.url and (r.url.endswith('.db') or r.url.endswith('.json')) else None)
+        return page
+
+    def check_updates(self):
+        """Reloads, then waits for that launch's update check. Returns
+        (paths replaced, SHA-256 calls, .db files requested)."""
+        self.data_requests.clear()
+        self.reload()
+        updated = self.page.evaluate(UPDATE_CHECK_JS)
+        db_requests = sorted(r for r in self.data_requests if r.endswith('.db'))
+        return updated, self.page.evaluate('window.__digestCalls'), db_requests
+
+    def route_catalogs(self, translations=None, references=None):
+        """Serve the catalogs with some entries changed: {filename: bytes}."""
+        def patched(path, key, changes):
+            catalog = json.load(open(path))
+            for entry in catalog[key]:
+                if entry['filename'] in changes:
+                    entry['sha256'] = sha256_of(changes[entry['filename']])
+                    entry['size_bytes'] = len(changes[entry['filename']])
+            return json.dumps(catalog)
+        self.page.unroute('**/data/translations/catalog.json')
+        self.page.unroute('**/data/reference-catalog.json')
+        if translations:
+            body = patched(os.path.join(TRANSLATIONS_DIR, 'catalog.json'), 'translations', translations)
+            self.page.route('**/data/translations/catalog.json',
+                            lambda route: route.fulfill(status=200, content_type='application/json', body=body))
+        if references:
+            body2 = patched(os.path.join(ROOT, 'data', 'reference-catalog.json'), 'files', references)
+            self.page.route('**/data/reference-catalog.json',
+                            lambda route: route.fulfill(status=200, content_type='application/json', body=body2))
+
+
+def reference_catalog_matches_files():
+    catalog = json.load(open(os.path.join(ROOT, 'data', 'reference-catalog.json')))
+    for entry in catalog['files']:
+        data = open(os.path.join(ROOT, 'data', entry['filename']), 'rb').read()
+        check(entry['sha256'] == sha256_of(data) and entry['size_bytes'] == len(data),
+              f'reference catalog matches {entry["filename"]}')
+
+
+def scenario_updates(browser):
+    reference_catalog_matches_files()
+    run = UpdateRun(browser)
+    p = run.page
+    run.boot()
+    check(run.wait_for_download(), 'language.db downloaded')
+    first = p.evaluate(UPDATE_CHECK_JS)
+    check(first == [], f'fresh install: nothing to update ({first})')
+
+    updated, digests, requests = run.check_updates()
+    check(updated == [] and digests == 0 and requests == [],
+          f'matching catalog: no file hashed or fetched on a later launch ({updated}, {digests} hashes, {requests})')
+
+    # An install from before this (no records): each file hashed once, nothing fetched
+    p.evaluate("localStorage.removeItem('ember.installedFiles')")
+    updated, digests, requests = run.check_updates()
+    check(updated == [] and digests == 7 and requests == [],
+          f'no records yet: each of the 7 files hashed once, none fetched ({updated}, {digests} hashes, {requests})')
+
+    # A changed translation is downloaded, checked, written, and read from the next launch
+    asv_path = os.path.join(TRANSLATIONS_DIR, 'asv.db')
+    new_asv = edited_copy(asv_path, 'asv-new.db',
+                          "UPDATE verses SET text = 'zzupdated ' || text WHERE book = 43 AND chapter = 3 AND verse = 16")
+    run.route_catalogs(translations={'asv.db': new_asv})
+    p.route('**/data/translations/asv.db', lambda route: route.fulfill(status=200, body=new_asv))
+    updated, digests, requests = run.check_updates()
+    check(updated == ['translations/asv.db'] and requests == ['translations/asv.db'],
+          f'changed ASV: downloaded and replaced ({updated}, {requests})')
+    check(p.evaluate(OPFS_SHA_JS, 'translations/asv.db') == sha256_of(new_asv), 'changed ASV: the OPFS file is the new one')
+    updated, digests, requests = run.check_updates()
+    check(updated == [] and digests == 0 and requests == [], f'changed ASV: not fetched again ({updated}, {digests}, {requests})')
+    run.app.navigate(43, 3)
+    p.click('#reader-pane-a .pane-book-btn')
+    p.click('#translation-row .translation-btn:has-text("ASV")')
+    p.keyboard.press('Escape')
+    check('zzupdated' in p.inner_text('#reader-pane-a .verse[data-verse-id="43003016"]'), 'changed ASV: the new text shows')
+    p.unroute('**/data/translations/asv.db')
+
+    # A download that doesn't match its catalog entry leaves the installed file alone
+    ylt_path = os.path.join(TRANSLATIONS_DIR, 'ylt.db')
+    ylt_before = p.evaluate(OPFS_SHA_JS, 'translations/ylt.db')
+    new_ylt = edited_copy(ylt_path, 'ylt-new.db', "UPDATE verses SET text = 'zz' || text WHERE book = 1 AND chapter = 1 AND verse = 1")
+    run.route_catalogs(translations={'asv.db': new_asv, 'ylt.db': new_ylt})  # the server still sends the old ylt.db
+    updated, digests, requests = run.check_updates()
+    check(updated == [] and requests == ['translations/ylt.db'] and p.evaluate(OPFS_SHA_JS, 'translations/ylt.db') == ylt_before,
+          f'bad download: fetched, refused, old YLT kept ({updated}, {requests})')
+
+    # A removed translation is never fetched
+    p.evaluate("import('./js/db.js').then(db => db.removeTranslation(6))")
+    run.route_catalogs(translations={'asv.db': new_asv, 'bsb.db': b'a different version'})
+    updated, digests, requests = run.check_updates()
+    check('translations/bsb.db' not in requests and updated == [], f'removed BSB: never fetched ({requests})')
+
+    # A changed reference database
+    new_lexicon = edited_copy(os.path.join(ROOT, 'data', 'lexicon-hebrew.db'), 'lexicon-new.db',
+                              "CREATE TABLE zz_update_marker (x)")
+    run.route_catalogs(translations={'asv.db': new_asv}, references={'lexicon-hebrew.db': new_lexicon})
+    p.route('**/data/lexicon-hebrew.db', lambda route: route.fulfill(status=200, body=new_lexicon))
+    updated, digests, requests = run.check_updates()
+    check(updated == ['lexicon-hebrew.db'] and p.evaluate(OPFS_SHA_JS, 'lexicon-hebrew.db') == sha256_of(new_lexicon),
+          f'changed lexicon-hebrew.db: replaced ({updated}, {requests})')
+    p.unroute('**/data/lexicon-hebrew.db')
+
+    # Offline: nothing. (Routes off first: in Firefox a routed page can't reload
+    # offline through the service worker.)
+    run.route_catalogs()
+    run.worker_ready()
+    run.ctx.set_offline(True)
+    updated, digests, requests = run.check_updates()
+    check(updated == [] and digests == 0, f'offline: no check ({updated}, {digests} hashes)')
+    run.ctx.set_offline(False)
+    run.check_no_errors('updates')
+    run.close()
+    return FAILURES
+
+
 BROWSER_SCENARIOS = {'offline': scenario_offline, 'lexicon': scenario_lexicon,
                      'storage': scenario_storage, 'boots': scenario_boots,
                      'controls': scenario_controls,
-                     'translations': scenario_translations}
+                     'translations': scenario_translations, 'updates': scenario_updates}
 
 
 def main():
@@ -3347,7 +3518,7 @@ def main():
     server = start_server()
     try:
         with sync_playwright() as pw:
-            browser = pw.chromium.launch()
+            browser = (pw.firefox if os.environ.get('EMBER_BROWSER') == 'firefox' else pw.chromium).launch()
             if args[0] in BROWSER_SCENARIOS:
                 print(f'== {args[0]}')
                 failures = BROWSER_SCENARIOS[args[0]](browser)

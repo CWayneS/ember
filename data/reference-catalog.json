@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "files": [
+    {
+      "filename": "language.db",
+      "size_bytes": 64413696,
+      "sha256": "4ef40609f280f1755acf0149edc3833c0fac8f965c8fbed19e654177e5928c5c"
+    },
+    {
+      "filename": "lexicon-hebrew.db",
+      "size_bytes": 4403200,
+      "sha256": "1e5f9af59709873e6d9a7b153885d6e0385e831c86c457d384a0d3cfca085a3e"
+    }
+  ]
+}

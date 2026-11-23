@@ -1183,6 +1183,9 @@ def build(raw_dir=RAW_DIR, output_db=OUTPUT_DB, ship=False):
     if ship:
         shutil.copyfile(output_db, SHIPPED_DB)
         print(f"Copied to {SHIPPED_DB}")
+        # The catalog's sha256 is how installs learn the file changed.
+        import subprocess
+        subprocess.run([sys.executable, str(Path(__file__).with_name('build_catalogs.py'))], check=True)
     else:
         print(f"Not copied to {SHIPPED_DB} (pass --ship to ship this build)")
 

@@ -88,7 +88,8 @@ ember/
 │                               # are the tracked ones
 ├── scripts/
 │   ├── build_translation.py   # Builds each translation's .db file
-│   ├── build_translation_catalog.py # Writes data/translations/catalog.json (sha256, size, verse count) from the built files
+│   ├── build_catalogs.py      # Writes data/translations/catalog.json and data/reference-catalog.json (sha256, size, verse count)
+│   │                          # from the built files; installs replace any file whose sha256 no longer matches
 │   ├── build_crossrefs.py     # Ingests OpenBible cross-references into core.db
 │   ├── build_language.py      # Builds language.db from STEPBible-Data
 │   ├── build_lexicon_hebrew.py # Builds lexicon-hebrew.db from Open Scriptures (pinned, sha256-checked sources)
@@ -145,10 +146,10 @@ python scripts/build_translation.py KJV data/translations-prep/data/translations
 # data/translations-prep/web-usfm/engwebp_usfm.zip from https://ebible.org/Scriptures/engwebp_usfm.zip).
 # The same sources always give a byte-identical file.
 # Then regenerate the catalog from the built files (tests/verify.py translations checks it):
-python scripts/build_translation_catalog.py
+python scripts/build_catalogs.py
 
 # Language tab data (original-language text, Strong's, morphology, Greek lexicon).
-# Builds into data/stepbible-prep/output/; --ship also copies it to data/language.db
+# Builds into data/stepbible-prep/output/; --ship also copies it to data/language.db and rewrites the catalogs
 python scripts/build_language.py --ship
 
 # Hebrew lexicon (Strong's and Brown-Driver-Briggs) from Open Scriptures, at pinned commits.
@@ -231,7 +232,6 @@ Build 1 (core reading + notes) → Build 1.5 (polish) → Build 2 (cross-referen
 - In-app template creator, with template sharing
 - Dictionary lookup (Webster's 1913)
 - Full LSJ Greek lexicon (TFLSJ) as an expandable detail, pending bundle-size headroom
-- Version-aware translation/data reseeding for existing installs
 - Landing page and public distribution
 
 ## Data & Attribution

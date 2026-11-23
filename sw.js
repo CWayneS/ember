@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v32'; // bumped: translation add-ons (translation-shelf.js new; db.js, reader.js, backup.js, dialogs.js, index.html, style.css)
+const CACHE_NAME = 'ember-v33'; // bumped: updating installed data files (db.js, app.js)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:

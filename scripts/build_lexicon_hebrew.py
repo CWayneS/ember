@@ -31,8 +31,9 @@ those bytes without changing any content.
 
 The build stops, and does not ship, if a count moves far from
 docs/Hebrew_Lexicon_Spec.md's Findings or the file exceeds 10 MB (Item 9).
-After shipping, clear lexicon-hebrew.db from a dev install's OPFS and let it
-re-seed.
+--ship also rewrites data/reference-catalog.json (scripts/build_catalogs.py), so
+installs, a dev install included, replace their copy in the background after
+their next online launch and use it from the launch after that.
 """
 
 import argparse
@@ -981,6 +982,8 @@ def build(raw_dir, output, ship):
     if ship:
         shutil.copyfile(output, SHIPPED_DB)
         print(f'\nShipped to {SHIPPED_DB}')
+        # The catalog's sha256 is how installs learn the file changed.
+        subprocess.run([sys.executable, str(Path(__file__).with_name('build_catalogs.py'))], check=True)
     else:
         print(f'\nBuilt {output}; rerun with --ship to copy it to {SHIPPED_DB}')
 
