@@ -4,7 +4,7 @@
 
 **Prerequisite:** Build 6 complete and shipped. This spec covers Greek only; Hebrew (TEHMC) is a distinct follow-up, since Hebrew's morphology-code structure (prefix-carry compounds) differs meaningfully from Greek's.
 
-**Status:** Implemented (Greek) — shipped in commit 8169e14 (2026-09-13). The accordion UI was later replaced by the Word Inspector's tier 2 block (0471217, 2026-09-15). Hebrew (TEHMC) remains deferred.
+**Status:** Implemented (Greek) — shipped in commit 8169e14 (2026-09-13). The accordion UI was later replaced by the Word Inspector's tier 2 block (0471217, 2026-09-15). Hebrew (TEHMC) shipped later, 2026-10-25 in commit 6368515, under `Hebrew_Word_Anatomy_Spec.md`.
 
 ---
 

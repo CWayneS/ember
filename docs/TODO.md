@@ -42,6 +42,7 @@ After the rebuild, clear `translations/*.db` from OPFS on Wayne's install.
 **Help**
 
 - **Update the stale Help text.** Do it after the features above, since the shelf and the new search change what Help has to explain. See `FEATURE_INVENTORY.md` items 67a and 148a, and `docs/BUILD_6.1_ACTUAL_STATE.md` §7.
+- **Make "More help" work.** The link in the reader, notes and reference help popovers is a placeholder that does nothing (`preventDefault` only). See `FEATURE_INVENTORY.md` item 154.
 - **A Help entry** explaining Strong's vs. BDB. From "Deferred to Follow-Up Specs" in `docs/Hebrew_Lexicon_Spec.md` (Open Question 5).
 
 **Testing**
@@ -75,11 +76,37 @@ After the rebuild, clear `translations/*.db` from OPFS on Wayne's install.
 4. **Link the Greek lexicon's Old Testament references.** 6,647 references in TBESG cite the Septuagint, so they stay text: its book names ("1Ki" = 1 Samuel) and verse numbers (most Psalms one lower) differ from English Bibles. Linking them needs an LXX-to-English map, like `hebrew-versification.js` for BDB. Medium. Source: FEATURE_INVENTORY item 142ak; `js/greek-lexicon.js`.
 5. **Dictionary lookup (Webster's 1913)**, then **TFLSJ** (full LSJ Greek lexicon), pending bundle-size headroom and reusing the lexicon's loading pattern. From "Future" in `README.md` and `docs/Hebrew_Lexicon_Spec.md`.
 6. **The 14 ghost rows** (Ketiv-only words), which need their own display design. From "Deferred to Follow-Up Specs" in `docs/Hebrew_Word_Anatomy_Spec.md`.
+7. **Devotional content for reading plans.** `plan_days` has `devotional_title`, `devotional_body` and `reflection_questions_json`, and import and export carry them, but no plan fills them and nothing displays them. Waits on someone writing the content, then needs a place in the plan view. See `docs/BUILD_3_ACTUAL_STATE.md` §7.
+
+## From the proposal
+
+Features `docs/Bible_Study_Software_Proposal_v6.md` describes that no build or spec has taken on yet. They're the design's long-range horizon, not planned work: each needs a spec before it's built. Checked against the code on 2026-11-22.
+
+**Essential tier, not built**
+
+- **Note visibility** (private or shareable, with a study default). `notes.visibility` exists and defaults to `'private'`; nothing sets or shows it. Proposal §4.
+- **Themes** as a second kind of tag. Proposal §5.
+- **User-made passage links**, alongside the cross-references. Proposal §6.
+- **Book- and chapter-level notes**, and the book overview surface. The Info tab shows book information only. Proposal §1.
+- **Workflows**: a reading plan linked to a study template, one session per day. Proposal §9 and the template-session additions in `docs/Add_To_Proposal_And_Tech_Spec.md`.
+- **Session summaries and continuity**: session records, the daily summary card, "continue or advance". `notes.template_session_id` points at a `session_records` table that was never created. Proposal §10.
+- **Dragging** tags, cross-references or verses into a note. Proposal "Interaction Model".
+
+**Add-on tier, not built**
+
+- Memory verses (spaced repetition). Proposal §18.
+- Study journal and analytics. Proposal §19.
+- Commentary (Matthew Henry's Concise). Proposal §14.
+- Theological concept mapping. Proposal §15.
+- Literary and structural analysis. Proposal §16.
+- Historical and cultural context layers. Proposal §17.
+- Multi-device sync and sharing. Proposal §20.
 
 ## When needed
 
 - **Speed up markup lookups.** `getMarkupsForChapter()` still uses the old one-sided overlap test. Psalm 119 renders in 93 ms at 40 years of data, so this can wait until the numbers say otherwise. Small. Source: `docs/BUILD_6.1_ACTUAL_STATE.md` §12.
 - **Re-checking Open Scriptures' progress.** A rebuild needs the pinned commits and sha256 values updated in `scripts/build_lexicon_hebrew.py`, and its exact-count checks reviewed. After launch, ship the result through step 3's update path. From `docs/Hebrew_Lexicon_Spec.md`.
+- **Merge the per-panel settings into the global settings popover.** Left on purpose: do it when a truly global preference is added or the panel ⚙ buttons go away, and unify the two stores of saved preferences at the same time. See `docs/BUILD_6.1_ACTUAL_STATE.md` §10, "Explicitly not done".
 - **Decision for Wayne: stress thresholds.** The thresholds are the spec's proposed starting points, left for you to adjust once you'd seen real numbers. Source: `docs/STRESS_TEST_RESULTS.md`, intro and "Thresholds after the fixes".
 
 **Not recommended on current numbers:** splitting user data into its own database (remedy 5) or replacing sql.js (remedy 6). The reasoning is in "My read now that 1 to 3 are done", under "Candidate remedies" in `docs/STRESS_TEST_RESULTS.md`. `PRAGMA locking_mode=EXCLUSIVE` was tested and not adopted; see "Long lists, fixed" in the same file.

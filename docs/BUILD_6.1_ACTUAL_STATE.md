@@ -243,7 +243,7 @@ Unchanged from Build 6. One divergence path was closed: `notes.js` caches `verse
 - Help popover copy is stale (`FEATURE_INVENTORY.md` 67a, 148a: "⬤ button", "Related (coming soon)", no Language/Plans mention) — left for the upcoming Help build.
 - `manifest.json` references icon files that do not exist in `icons/`.
 - PWA install prompt is DOM + styles only; no `beforeinstallprompt` handler.
-- Hebrew morphology decode (TEHMC) — no source file, no code; Hebrew tier 2 shows the raw code.
+- Hebrew morphology decode (TEHMC) — no source file, no code; Hebrew tier 2 shows the raw code. **Since done:** shipped 2026-10-25 in `6368515` with the Hebrew word anatomy (`decodeHebrewMorphCode()` in `grammar-decode.js`); record in `HEBREW_ANATOMY_DATA_REPORT.md`.
 - Devotional plan-day columns and the "more than one plan can be `active`" quirk — see `BUILD_5_ACTUAL_STATE.md` §7.
 
 ### Schema with no runtime code
