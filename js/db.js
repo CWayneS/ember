@@ -12,10 +12,12 @@ const NOTES_FTS_REPAIRED_KEY = 'notes_fts_repaired';
 const LONG_ANCHOR_SPAN = 5000;
 const IS_LONG_ANCHOR   = `COALESCE(verse_end, verse_start) - verse_start > ${LONG_ANCHOR_SPAN}`;
 
-const BUNDLED_PLAN_FILES = [
-    'mcheyne-1year.json',
-    'bible-in-a-year-canonical.json',
-    'bible-in-a-year-chronological.json'
+// Each bundled plan's file and the plan_id inside it, so the app can tell
+// which bundled plans are missing without fetching the files.
+const BUNDLED_PLANS = [
+    { id: 'mcheyne-1year',                 file: 'mcheyne-1year.json' },
+    { id: 'bible-in-a-year-canonical',     file: 'bible-in-a-year-canonical.json' },
+    { id: 'bible-in-a-year-chronological', file: 'bible-in-a-year-chronological.json' },
 ];
 
 const BUNDLED_TEMPLATE_FILES = [
@@ -1305,22 +1307,21 @@ function recordBundledAlreadyPresent() {
 
 // Seed the bundled reading plans from data/plans/ on every online boot, so a
 // newly bundled plan reaches existing installs. A plan on the bundled_installs
-// list is skipped, even if the user has since deleted it.
+// list is skipped before its file is fetched, even if the user has since
+// deleted it; the Plans tab's "Restore bundled plans" is the way back.
 async function seedBundledPlans() {
     if (navigator.onLine === false) return;
-    for (const filename of BUNDLED_PLAN_FILES) {
+    for (const { id, file: filename } of BUNDLED_PLANS) {
+        if (isBundledInstalled('plan', id)) continue;
         let plan;
         try {
-            const response = await fetch(`./data/plans/${filename}`);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            plan = await response.json();
+            plan = await fetchBundledPlan(id, filename);
         } catch (e) {
             logSeedLoadFailure(`seedBundledPlans: failed to load ${filename}:`, e);
             continue;
         }
 
         const meta = plan.plan_metadata;
-        if (isBundledInstalled('plan', meta.id)) continue;
         let result;
         try {
             recordBundledInstalled('plan', meta.id);
@@ -1338,6 +1339,51 @@ async function seedBundledPlans() {
             `${result.approximateCount} approximate ranges, ${result.unresolvedCount} unresolved refs)`
         );
     }
+}
+
+async function fetchBundledPlan(id, filename) {
+    const response = await fetch(`./data/plans/${filename}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const plan = await response.json();
+    if (plan.plan_metadata?.id !== id) throw new Error(`${filename} holds plan "${plan.plan_metadata?.id}", not "${id}"`);
+    return plan;
+}
+
+// Bundled plans not installed now: deleted by the user (they stay on the
+// bundled_installs list, so seeding skips them), or never seeded. A plan the
+// user imported with the same plan_id counts as installed.
+export function getMissingBundledPlanCount() {
+    const installed = new Set(queryAll(db, 'SELECT plan_id FROM plans').map(row => row.plan_id));
+    return BUNDLED_PLANS.filter(plan => !installed.has(plan.id)).length;
+}
+
+// Installs every missing bundled plan again, fresh (Day 1, not started).
+// Needs a connection, since the plans come from data/plans/. Returns how many
+// were restored; throws with a message fit to show if none could be.
+export async function restoreBundledPlans() {
+    if (navigator.onLine === false) {
+        throw new Error('You’re offline. Connect to the internet to restore the bundled plans.');
+    }
+    const installed = new Set(queryAll(db, 'SELECT plan_id FROM plans').map(row => row.plan_id));
+    const missing = BUNDLED_PLANS.filter(plan => !installed.has(plan.id));
+    let restored = 0;
+    for (const { id, file } of missing) {
+        try {
+            const plan = await fetchBundledPlan(id, file);
+            insertPlan(plan.plan_metadata, plan.days, 'bundled');
+            recordBundledInstalled('plan', id);
+            restored++;
+        } catch (e) {
+            console.warn(`restoreBundledPlans: ${file} not restored:`, e);
+        }
+    }
+    if (restored) saveToStorage(db.export());
+    if (restored < missing.length) {
+        throw new Error(restored
+            ? `Restored ${restored} of ${missing.length} plans. Check your connection and try again for the rest.`
+            : 'The bundled plans could not be downloaded. Check your connection and try again.');
+    }
+    return restored;
 }
 
 // Insert a study template (study_templates + template_steps rows) and persist.

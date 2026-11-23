@@ -536,3 +536,27 @@ The running session keeps the copy it loaded into memory, so the new file is use
 **Wayne's install:** the first online launch after this hashes every installed file once. It then replaces any file older than the shipped one: the translation files from before §17's rebuild, unless they were already cleared. No more clearing OPFS by hand after a rebuild.
 
 All thirteen suites pass (the twelve above plus `updates`); `updates` and `translations` also pass in Firefox.
+
+## 20. ADDENDUM — 2026-11-23, restore bundled plans
+
+TODO step 3, last item. A deleted bundled plan stays deleted, because it stays on the `bundled_installs` list. Before this, the only way back was importing its JSON from `data/plans/`, which a user doesn't have.
+
+- **`js/db.js`:**
+  - `BUNDLED_PLAN_FILES` became `BUNDLED_PLANS`, a list of `{ id, file }`. The app can now tell which bundled plans are missing without fetching anything.
+  - `seedBundledPlans()` now skips a listed plan before fetching its file, so a boot with every plan listed fetches no plan JSON. It used to fetch all three every online boot. It also checks that the file's `plan_id` is the one expected.
+  - `getMissingBundledPlanCount()` counts the bundled plans not in `plans`. A plan imported with the same `plan_id` counts as installed.
+  - `restoreBundledPlans()` fetches each missing plan and installs it fresh (Day 1, not started), keeping it listed. It needs a connection. If any plan can't be restored, it throws a message to show.
+- **`js/plans.js`:** "Restore N bundled plans" appears under the plan cards (and under the empty-state line) only while a plan is missing. On failure, a line under the button says why.
+- **Templates are not covered.** The app has no way to delete one.
+- **`sw.js`:** `CACHE_NAME` → `ember-v34`. The comment about plan JSON fetching is updated.
+- **Tests:** `tests/verify.py storage` (`storage_restore_bundled_plans`) checks that:
+  - there's no button while all three plans are installed
+  - deleting two gives "Restore 2 bundled plans"
+  - offline, a line says why and nothing is restored
+  - online, all three come back as not started
+  - they're kept after a reload
+  - no plan file is fetched at boot once all are listed
+
+TODO step 3 is finished.
+
+All thirteen suites pass.

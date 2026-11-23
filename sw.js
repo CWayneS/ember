@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v33'; // bumped: updating installed data files (db.js, app.js)
+const CACHE_NAME = 'ember-v34'; // bumped: restore bundled plans (db.js, plans.js, style.css)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:
@@ -14,9 +14,10 @@ const CACHE_NAME = 'ember-v33'; // bumped: updating installed data files (db.js,
 // data/language.db (~64 MB) and data/lexicon-hebrew.db (~4 MB) are the same
 // story — seeded into OPFS by db.js (during first boot / in the background just
 // after it) and served from there.
-// The bundled plan/template JSON is fetched on every online boot so a newly
-// bundled plan reaches existing installs, but anything it holds is already in
-// core.db after the first boot, so offline boots simply skip it.
+// The bundled template JSON is fetched on every online boot, and a bundled
+// plan's JSON whenever that plan isn't on the bundled_installs list yet (or the
+// Plans tab restores it), so a newly bundled one reaches existing installs; but
+// anything it holds is already in core.db after that, so offline boots skip it.
 const PRECACHE = [
     './',
     './index.html',

@@ -22,9 +22,7 @@ Translation add-ons done 2026-11-23: every translation but KJV removable, Darby 
 
 Version-aware reseeding done 2026-11-23: after launch, online, any installed translation, `language.db` or `lexicon-hebrew.db` whose sha256 differs from its catalog entry is replaced in the background and used from the next launch (`docs/BUILD_6.1_ACTUAL_STATE.md` §19).
 
-| To-do | Why it matters | Size | Source |
-|---|---|---|---|
-| **Getting a deleted bundled plan back** | Deleted bundled plans stay deleted (they're listed in `bundled_installs`). The only way back is importing the plan's JSON from `data/plans/`, which a user doesn't have. A "Restore bundled plans" action could take a plan off the list and seed it again. "Restore default translations" (the Translations shelf, `js/translation-shelf.js`) is the pattern to follow. | Small | `seedBundledPlans()` in `js/db.js` |
+Restore bundled plans done 2026-11-23: the Plans tab offers "Restore N bundled plans" while one is missing (`docs/BUILD_6.1_ACTUAL_STATE.md` §20). Step 3 is finished.
 
 **Deferred (Wayne, 2026-11-23):** updates to cross-references or Nave's. They live in `core.db`, which also holds the user's notes, so it can't be swapped like a translation file and needs its own approach. Take it up when there's an actual fix to ship to those tables.
 

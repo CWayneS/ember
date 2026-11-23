@@ -3292,6 +3292,32 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     background: var(--accent-hover);
 }
 
+.plans-restore-bundled {
+    display: block;
+    margin-top: 8px;
+    padding: 0;
+    background: none;
+    font-size: var(--size-small);
+    color: var(--accent);
+    cursor: pointer;
+}
+
+.plans-restore-bundled:hover {
+    text-decoration: underline;
+}
+
+.plans-restore-bundled:disabled {
+    color: var(--text-muted);
+    cursor: default;
+    text-decoration: none;
+}
+
+.plans-restore-message {
+    font-size: var(--size-small);
+    color: var(--danger);
+    margin: 4px 0 0;
+}
+
 .plan-card {
     display: flex;
     align-items: center;

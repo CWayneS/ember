@@ -1,6 +1,6 @@
 // plans.js — Reading plan import (JSON + CSV) and the Plans tab UI
 
-import { insertPlan, getPlans, deletePlan, getPlanDetail, restartPlan } from './db.js';
+import { insertPlan, getPlans, deletePlan, getPlanDetail, restartPlan, getMissingBundledPlanCount, restoreBundledPlans } from './db.js';
 import { activatePlan } from './template-bar.js';
 import { openConfirmDialog } from './dialogs.js';
 
@@ -71,12 +71,40 @@ function renderReadingPlansList() {
         empty.className   = 'notes-empty';
         empty.textContent = 'No reading plans installed. Use the Import button to add a plan.';
         container.appendChild(empty);
-        return;
     }
 
     for (const plan of plans) {
         container.appendChild(buildPlanCard(plan));
     }
+
+    appendRestoreBundledPlans(container);
+}
+
+// A deleted bundled plan stays deleted (seeding skips it), so this is the way
+// back: shown only while one is missing, it installs each again from Day 1.
+function appendRestoreBundledPlans(container) {
+    const missing = getMissingBundledPlanCount();
+    if (!missing) return;
+
+    const restore = document.createElement('button');
+    restore.type        = 'button';
+    restore.className   = 'plans-restore-bundled';
+    restore.textContent = missing === 1 ? 'Restore 1 bundled plan' : `Restore ${missing} bundled plans`;
+    restore.addEventListener('click', async () => {
+        restore.disabled    = true;
+        restore.textContent = 'Restoring…';
+        try {
+            await restoreBundledPlans();
+            renderReadingPlansList();
+        } catch (e) {
+            renderReadingPlansList();
+            const message = document.createElement('p');
+            message.className   = 'plans-restore-message';
+            message.textContent = e.message;
+            container.appendChild(message);
+        }
+    });
+    container.appendChild(restore);
 }
 
 function buildPlanCard(plan) {

@@ -21,7 +21,8 @@ Usage (from the repo root):
                                          #   entry rendered, lazy open, offline message, single download
    python3 tests/verify.py offline       # language.db background download, offline use, failure and
                                          #   recovery states, single request, interrupted downloads
-   python3 tests/verify.py storage       # search index after edits and its one-time repair, anchor lookups
+   python3 tests/verify.py storage       # search index after edits and its one-time repair, restoring deleted
+                                         #   bundled plans, anchor lookups
                                          #   against a plain scan, empty and damaged core.db, persistent
                                          #   storage request and settings line
    python3 tests/verify.py controls      # reader and panel controls: side-by-side default, Keep and the
@@ -2471,9 +2472,56 @@ def storage_anchor_lookups(browser):
     run.close()
 
 
+def storage_restore_bundled_plans(browser):
+    """Deleted bundled plans stay deleted until the Plans tab restores them, fresh."""
+    run = OfflineRun(browser)
+    p = run.page
+    run.boot()
+    run.worker_ready()
+    plan_ids = lambda: p.evaluate(BUNDLED_STATE_JS)['plans']
+    button = '#plans-list .plans-restore-bundled'
+    p.click('#reference-tabs [data-tab="plans"]')
+    check(p.locator(button).count() == 0, 'restore plans: no button while all three are installed')
+
+    p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        for (const plan of db.getPlans()) {
+            if (plan.plan_id !== 'bible-in-a-year-canonical') db.deletePlan(plan.id);
+        }
+    }""")
+    p.click('#reference-tabs [data-tab="plans"]')
+    check(p.inner_text(button) == 'Restore 2 bundled plans', f'restore plans: offered for the two deleted ({p.inner_text(button)!r})')
+
+    run.ctx.set_offline(True)
+    p.evaluate("Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false })")
+    p.click(button)
+    p.wait_for_selector('#plans-list .plans-restore-message')
+    check('offline' in p.inner_text('#plans-list .plans-restore-message') and plan_ids() == ['bible-in-a-year-canonical'],
+          'restore plans offline: says why, restores nothing')
+    p.evaluate("delete navigator.onLine")
+    run.ctx.set_offline(False)
+
+    p.click(button)
+    p.wait_for_function("!document.querySelector('#plans-list .plans-restore-bundled')")
+    check(len(plan_ids()) == 3, f'restore plans: all three installed ({plan_ids()})')
+    statuses = p.evaluate("import('./js/db.js').then(db => db.getPlans().map(plan => plan.status))")
+    check(statuses == ['not_started'] * 3, f'restore plans: restored ones start fresh ({statuses})')
+    check(p.locator('#plans-list .plan-card').count() == 3, 'restore plans: the list shows three cards')
+
+    requests = []
+    p.on('request', lambda r: requests.append(r.url) if '/data/plans/' in r.url else None)
+    p.wait_for_timeout(500)
+    run.reload()
+    check(len(plan_ids()) == 3 and len(p.evaluate(BUNDLED_STATE_JS)['listed']) == 6, 'restore plans: kept after reload, all still listed')
+    check(requests == [], f'every bundled plan listed: no plan file fetched at boot ({requests})')
+    run.check_no_errors('restore bundled plans')
+    run.close()
+
+
 def scenario_storage(browser):
     storage_search_index(browser)
     storage_bundled_installs(browser)
+    storage_restore_bundled_plans(browser)
     storage_anchor_lookups(browser)
     storage_worker_hands_back(browser)
     storage_restore_after_saves(browser)
