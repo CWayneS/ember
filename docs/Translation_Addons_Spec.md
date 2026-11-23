@@ -67,6 +67,7 @@ A new file, `data/translations/catalog.json`, lists every translation Ember offe
       "tier": "locked",
       "size_bytes": 0,
       "verse_count": 31102,
+      "sha256": "…",
       "description": "The historic standard. Archaic, familiar, widely cross-referenced."
     }
   ]
@@ -75,6 +76,7 @@ A new file, `data/translations/catalog.json`, lists every translation Ember offe
 
 - `tier` is `locked`, `default` or `available`.
 - `size_bytes` comes from the real file in `data/translations/`. Fill it from the build script or by hand, but never estimate it.
+- `sha256` is the hex SHA-256 of the real file. Add uses it to check the download (Item 3). It is also there for version-aware reseeding, a separate item in `docs/TODO.md` step 3, outside this spec: a file whose hash no longer matches its catalog entry is one that has changed. Like the other fields, take it from the file after the final build, never by hand.
 - `verse_count` is the file's real `SELECT COUNT(*) FROM verses WHERE verse > 0`, used by Add's check (Item 3). Take it from the file, never assume it: it is 31,102 for every shipped translation except WEB, which has 31,098 (it leaves out Luke 17:36, Acts 8:37, 15:34 and 24:7, and puts the Romans doxology at 14:24–26 instead of 16:25–27).
 - `description` is one line for the shelf. Draft lines (Wayne to edit):
   - **KJV:** The historic standard. Archaic, familiar, widely cross-referenced.
@@ -108,6 +110,7 @@ A new file, `data/translations/catalog.json`, lists every translation Ember offe
 3. Write it to OPFS `translations/{filename}` with `createWritable()`, the same pattern `seedTranslations()` uses.
 4. **Check before registering it.** Open it with sql.js and confirm:
    - `meta.abbreviation` matches the catalog entry
+   - the downloaded bytes' SHA-256 (`crypto.subtle.digest`) equals the catalog entry's `sha256`
    - `SELECT COUNT(*) FROM verses WHERE verse > 0` equals the catalog entry's `verse_count`. Don't hard-code 31,102: WEB has 31,098, so a fixed count would reject it and "Restore default translations" would fail. Count `verse > 0` only: KJV, ASV and Darby carry 116 `verse = 0` Psalm title rows, so a plain count is wrong for those three.
 5. If anything fails, `removeEntry()` the file, show a clear message, and leave the manifest untouched.
 6. On success, insert the manifest row (catalog metadata, `installed_at` = now), keep the open handle in `_translationDbs`, and save `core.db`.
@@ -203,7 +206,7 @@ In `initDatabase()`, around the existing seeding:
 
 - **`build_db.py`:** the shipped manifest drops Darby. KJV, ASV, WEB, YLT and BSB keep IDs 1, 2, 3, 4 and 6. Add a comment that ID 5 is reserved for Darby in the catalog.
 - **`build_translation.py`:** unchanged. Darby is still built, with its Psalm title placeholder rows.
-- **`catalog.json`:** new, under `data/translations/`, with `size_bytes` taken from the real files.
+- **`catalog.json`:** new, under `data/translations/`, with `size_bytes`, `verse_count` and `sha256` taken from the real files. Generate it with a script after the translation build rather than by hand, so a rebuilt file can't leave the catalog out of date.
 - **`sw.js`:** no change. `data/` is already pass-through. Confirm `catalog.json` is never cached (it sits under `data/`, so it shouldn't be).
 
 ---
@@ -216,7 +219,7 @@ In `initDatabase()`, around the existing seeding:
 - Remove Darby while a pane shows it: that pane switches to KJV at the same chapter, the label reads KJV, and the file and row are gone. Reload online: still gone.
 - Remove ASV, reload online: stays removed. Restore defaults: ASV is back.
 - KJV: no Remove button, and `removeTranslation(1)` refuses.
-- Failed or bad download (HTTP error, or a file whose `meta` doesn't match): no manifest row and no file left behind.
+- Failed or bad download (HTTP error, a file whose `meta` doesn't match, or one whose SHA-256 doesn't match the catalog): no manifest row and no file left behind.
 - Offline: shelf lists installed translations, Add is disabled, Remove works, installed translations render.
 - Orphan file in OPFS with no manifest row: gone after the next boot.
 - Pane state pointing at a removed ID: KJV after reload, with the correct label.
