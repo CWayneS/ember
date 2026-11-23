@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v29'; // bumped: restore waits for the storage worker (db.js, storage-worker.js)
+const CACHE_NAME = 'ember-v30'; // bumped: Scripture search on FTS4, Verse-only WEB name (db.js, global-settings.js)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:

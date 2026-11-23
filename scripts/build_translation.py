@@ -24,11 +24,11 @@ Usage (run from project root):
         --name "Berean Standard Bible" --year 2023
 
     python3 scripts/build_translation.py WEB \
-        data/translations-prep/web/ \
-        --name "World English Bible" --year 2000
+        data/translations-prep/web-usfm/engwebp_usfm.zip \
+        --name "Verse-only World English Bible" --year 2000
 
 Source type is auto-detected from the source path:
-  - Directory  → WEB per-chapter files (engwebp_NNN_BOOK_CC_read.txt)
+  - .zip file  → WEB USFM (eBible's engwebp_usfm.zip, sha256-pinned)
   - .txt file  → BSB TSV ("Book Chapter:Verse<TAB>Text", 3-line header)
   - .db file   → scrollmapper  ({ABBREV}_verses / {ABBREV}_books tables)
 
@@ -41,9 +41,14 @@ Psalm title placeholders (Psalm_Title_Fix_Spec.md):
   title text to source (see spec — sourcing was investigated and declined),
   so the rows are placeholders: they give the title a real, addressable
   verse_id ahead of Build 6, which populates them from TAHOT's English-
-  aligned gloss. WEB/YLT/BSB are untouched — their titles are already
+  aligned gloss. YLT/BSB are untouched — their titles are already
   present, merged into verse 1's text by their own source data, and that
-  representation is being kept as-is rather than split out.
+  representation is being kept as-is rather than split out. WEB's USFM marks
+  its titles separately, so they become verse 0 rows with WEB's own wording.
+
+Scripture search: verses_fts is FTS4 with the unicode61 tokenizer, which
+sql.js can read (it has no FTS5). Whole words, so "love" doesn't match
+"glove" or "beloved"; no stemming.
 """
 
 import argparse
@@ -266,46 +271,17 @@ def load_from_bsb_tsv(source_path: str) -> list[tuple]:
     return verses
 
 
-def _parse_web_chapter_file(filepath: str) -> list[str]:
-    """
-    Parse one WEB per-chapter file into a list of verse texts (in order).
+# WEB comes from eBible's USFM edition (Strong's-tagged, 66-book protocanon):
+#   https://ebible.org/Scriptures/engwebp_usfm.zip
+# eBible replaces that zip in place whenever WEB is revised, so the pinned
+# sha256 below changes with it. A mismatch means a new revision: compare the
+# rebuilt text against the shipped web.db before shipping it, then update the pin.
+WEB_USFM_SHA256 = "e36d23c5d28517a69faf91654cc6fc6657a298d9b6d66496166491f3ceab9749"
 
-    File structure (consistent across all 1,189 chapter files):
-      Line 1 (non-empty): Book title  e.g. "Genesis." or "The First Book of Moses..."
-      Line 2 (non-empty): Chapter heading  e.g. "Chapter 2." or "Psalm 119."
-      Lines 3+:           Verse text, one non-empty line per verse.
-
-    Strategy: scan for the first line that matches a chapter/section heading
-    pattern; everything after it is verse content.  This handles both the
-    short ("Genesis.") and long ("The First Book of Moses, Commonly Called
-    Genesis.") book-title variants without hard-coding line counts.
-    """
-    with open(filepath, encoding="utf-8-sig") as f:
-        lines = [l.rstrip("\n") for l in f]
-
-    non_empty = [l for l in lines if l.strip()]
-
-    heading_re = re.compile(
-        r'\b(?:Chapter|Psalm|Psalms)\s+\d+',
-        re.IGNORECASE,
-    )
-
-    for i, line in enumerate(non_empty):
-        if heading_re.search(line):
-            return [l for l in non_empty[i + 1:] if l.strip()]
-
-    # Fallback: skip first 2 non-empty lines (should not be reached)
-    print(f"  Warning: no chapter heading found in {filepath}, using fallback.",
-          file=sys.stderr)
-    return [l for l in non_empty[2:] if l.strip()]
-
-
-# The engwebp "_read" files strip verse numbers, so verses are numbered by
-# line. WEB leaves these four verses out entirely (no line, not even a
-# placeholder), so numbering must skip them or every later verse in the
-# chapter lands one number low. Found by comparing each chapter's verse count
-# with KJV: these are the only four chapters one short. Romans 14 and 16 also
-# differ, but that is WEB's own numbering (doxology at 14:24-26), not a gap.
+# WEB leaves these four verses out. The USFM keeps their \v markers, holding
+# only a footnote, so they come out empty and are dropped. verify() checks
+# that exactly these are absent. Romans 14 and 16 also differ from KJV, but
+# that is WEB's own numbering (doxology at 14:24-26), not a gap.
 WEB_OMITTED_VERSES = {
     (42, 17, 36),  # Luke 17:36
     (44,  8, 37),  # Acts 8:37
@@ -313,41 +289,141 @@ WEB_OMITTED_VERSES = {
     (44, 24,  7),  # Acts 24:7
 }
 WEB_EXPECTED_VERSE_COUNT = 31_098
+# Also footnote-only, and not a gap: it says WEB has the doxology at 14:24-26.
+WEB_FOOTNOTE_ONLY_MARKERS = WEB_OMITTED_VERSES | {(45, 16, 25)}
+
+# How each USFM marker found in the 66 books is treated. Any other marker
+# stops the build, so nothing unexamined reaches the verse text.
+USFM_PARAGRAPH = {"p", "q1", "q2", "b", "m", "mi", "pi1", "li1", "nb"}  # a space
+USFM_CHARACTER = {"w", "+w", "wj", "qs", "bk"}  # keep the words, drop the markup
+USFM_HEADING   = {"id", "ide", "h", "toc1", "toc2", "toc3", "mt1", "mt2", "mt3",
+                  "ms1", "cl",
+                  "sp"}  # Song of Songs speaker labels: headings, not Scripture
+USFM_NOTE      = re.compile(r'\\(f|x) .*?\\\1\*', re.DOTALL)  # footnotes, cross-references
+# An opening marker owns the one space after it ("Aren’\+w t" is "Aren’t").
+USFM_MARKER    = re.compile(r'\\(\+?[a-z]+[0-9]*)(?:(\*)|\s?)')
+USFM_CHAPTER_NUMBER = re.compile(r"\s*(\d+)")
+USFM_VERSE_NUMBER   = re.compile(r"\s*(\d+)\s")
 
 
-def load_from_web_dir(source_path: str) -> list[tuple]:
+def _parse_web_usfm_book(usfm: str, book_id: int) -> list[tuple]:
+    r"""
+    Parse one book's USFM into (book_id, chapter, verse, text) rows.
+
+    A \d (Psalm title) before a titled Psalm's first verse becomes verse 0.
+    Every other \d is one of Psalm 119's letter headings (ALEPH, BETH, ...),
+    which are dropped. Footnotes, cross-references and headings are dropped;
+    \w word|strong="..." keeps just the word.
     """
-    Parse WEB per-chapter text files from the engwebp distribution.
-    Filename pattern: engwebp_NNN_BOOK_CC_read.txt
-    Non-canonical book codes (Apocrypha) are silently skipped.
-    Verse numbers skip WEB_OMITTED_VERSES.
-    """
-    file_re = re.compile(r'^engwebp_\d+_([A-Z0-9]+)_(\d+)_read\.txt$')
-    verses: list[tuple] = []
+    usfm = USFM_NOTE.sub("", usfm)
+    rows: list[tuple] = []
+    chapter = 0
+    verse = None       # None: before the chapter's first verse
+    target = None      # the list text goes to, or None to discard it
+    buffers: dict[int, list[str]] = {}
+    in_word = False    # inside \w ... \w*: drop the |attributes
 
-    for filename in sorted(os.listdir(source_path)):
-        m = file_re.match(filename)
-        if not m:
+    def finish_chapter():
+        for verse_number, parts in buffers.items():
+            text = re.sub(r"\s+", " ", "".join(parts)).strip()
+            if text:
+                rows.append((book_id, chapter, verse_number, text))
+            elif (book_id, chapter, verse_number) not in WEB_FOOTNOTE_ONLY_MARKERS:
+                raise ValueError(f"empty verse {book_id} {chapter}:{verse_number}")
+
+    position = 0
+    for match in USFM_MARKER.finditer(usfm + "\\p"):
+        text = usfm[position:match.start()]
+        position = match.end()
+        marker, closing = match.group(1), match.group(2) is not None
+
+        if target is not None:
+            target.append(text.split("|", 1)[0] if in_word else text)
+
+        if marker in ("w", "+w"):
+            in_word = not closing
             continue
+        if marker in USFM_CHARACTER:
+            continue
+        if closing:
+            raise ValueError(f"unexpected closing marker \\{marker}*")
 
-        book_code = m.group(1)
-        chapter   = int(m.group(2))
+        # Block-level markers: the number of \c and \v comes first in the text after.
+        if marker == "c":
+            if chapter:
+                finish_chapter()
+            number = USFM_CHAPTER_NUMBER.match(usfm, position)
+            chapter, verse, buffers, target = int(number.group(1)), None, {}, None
+            position = number.end()
+        elif marker == "v":
+            number = USFM_VERSE_NUMBER.match(usfm, position)
+            verse = int(number.group(1))
+            if verse in buffers:
+                raise ValueError(f"verse {book_id} {chapter}:{verse} appears twice")
+            position = number.end()
+            target = buffers.setdefault(verse, [])
+        elif marker == "d":
+            if book_id != PSALMS_BOOK_ID:
+                raise ValueError(f"\\d outside Psalms ({book_id} {chapter})")
+            is_title = verse is None and chapter in PSALM_TITLE_CHAPTERS
+            target = buffers.setdefault(0, []) if is_title else None
+        elif marker in USFM_HEADING:
+            target = None
+        elif marker in USFM_PARAGRAPH:
+            if target is not None:
+                target.append(" ")
+            if verse is not None and target is None:
+                target = buffers[verse]  # a heading interrupted this verse
+        else:
+            raise ValueError(f"unknown USFM marker \\{marker} in book {book_id} {chapter}")
+    if chapter:
+        finish_chapter()
+    return rows
 
-        book_id = WEB_BOOK_CODES.get(book_code)
-        if book_id is None:
-            continue  # Apocryphal or unrecognized book — skip
 
-        filepath   = os.path.join(source_path, filename)
-        verse_texts = _parse_web_chapter_file(filepath)
+def load_from_web_usfm(source_path: str) -> list[tuple]:
+    """
+    Load WEB from eBible's USFM zip (engwebp_usfm.zip), read in place.
+    Files are named NN-CODEengwebp.usfm; front matter (FRT) and the
+    glossary (GLO) are skipped.
+    """
+    import hashlib
+    import zipfile
 
-        verse_num = 0
-        for text in verse_texts:
-            verse_num += 1
-            while (book_id, chapter, verse_num) in WEB_OMITTED_VERSES:
-                verse_num += 1
-            verses.append((book_id, chapter, verse_num, text))
+    digest = hashlib.sha256(Path(source_path).read_bytes()).hexdigest()
+    if digest != WEB_USFM_SHA256:
+        print(f"Error: {source_path} has sha256 {digest},\n"
+              f"  not the pinned {WEB_USFM_SHA256}.\n"
+              "  eBible replaces this zip when WEB is revised. Compare the new text with\n"
+              "  the shipped web.db, then update WEB_USFM_SHA256.", file=sys.stderr)
+        sys.exit(1)
 
-    return verses
+    verses: list[tuple] = []
+    seen_books = set()
+    with zipfile.ZipFile(source_path) as archive:
+        for name in sorted(archive.namelist()):
+            m = re.match(r'^\d+-([A-Z0-9]{3})engwebp\.usfm$', name)
+            if not m or m.group(1) in ("FRT", "GLO"):
+                continue
+            book_id = WEB_BOOK_CODES[m.group(1)]
+            seen_books.add(book_id)
+            verses += _parse_web_usfm_book(archive.read(name).decode("utf-8-sig"), book_id)
+
+    if seen_books != set(range(1, 67)):
+        print(f"Error: books missing from the zip: {sorted(set(range(1, 67)) - seen_books)}",
+              file=sys.stderr)
+        sys.exit(1)
+
+    titled = sorted(c for b, c, v, _ in verses if b == PSALMS_BOOK_ID and v == 0)
+    if titled != PSALM_TITLE_CHAPTERS:
+        print(f"Error: Psalm titles found for {len(titled)} chapters, expected the "
+              f"{len(PSALM_TITLE_CHAPTERS)} in PSALM_TITLE_CHAPTERS.\n"
+              f"  Extra: {sorted(set(titled) - set(PSALM_TITLE_CHAPTERS))}"
+              f"  Missing: {sorted(set(PSALM_TITLE_CHAPTERS) - set(titled))}",
+              file=sys.stderr)
+        sys.exit(1)
+
+    return sorted(verses, key=lambda row: (row[0], row[1], row[2]))
 
 
 # ── Psalm title placeholders (Psalm_Title_Fix_Spec.md) ───────────────────────
@@ -418,10 +494,10 @@ def create_output_db(output_path: str) -> sqlite3.Connection:
             value TEXT NOT NULL
         );
 
-        CREATE VIRTUAL TABLE verses_fts USING fts5(
+        CREATE VIRTUAL TABLE verses_fts USING fts4(
+            content="verses",
             text,
-            content=verses,
-            content_rowid=rowid
+            tokenize=unicode61
         );
     """)
     return conn
@@ -467,6 +543,28 @@ def populate_verses(conn: sqlite3.Connection, verses: list[tuple]) -> None:
 
 def rebuild_fts(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO verses_fts(verses_fts) VALUES('rebuild')")
+    conn.execute("INSERT INTO verses_fts(verses_fts) VALUES('optimize')")
+
+
+def compact(conn: sqlite3.Connection) -> None:
+    """VACUUM away the free pages 'optimize' leaves (about a quarter of the file).
+
+    verses has no INTEGER PRIMARY KEY, so SQLite allows VACUUM to renumber its
+    rowids, which would leave the external-content index pointing at the wrong
+    verses. So the rowids are compared before and after, and FTS4's own
+    integrity-check confirms the index still matches the text.
+    """
+    def rowids():
+        return conn.execute(
+            "SELECT group_concat(rowid || ':' || book || ':' || chapter || ':' || verse) "
+            "FROM (SELECT rowid, * FROM verses ORDER BY rowid)"
+        ).fetchone()[0]
+    before = rowids()
+    conn.commit()
+    conn.execute("VACUUM")
+    if rowids() != before:
+        raise SystemExit("Error: VACUUM renumbered verses' rowids; the FTS index would be wrong.")
+    conn.execute("INSERT INTO verses_fts(verses_fts) VALUES('integrity-check')")
 
 
 # ── Verification ──────────────────────────────────────────────────────────────
@@ -481,6 +579,25 @@ def verify(output_path: str, abbrev: str) -> bool:
     # what it says for translations that carry them (KJV/ASV/Darby).
     verse_count = conn.execute("SELECT COUNT(*) FROM verses WHERE verse > 0").fetchone()[0]
     title_count = conn.execute("SELECT COUNT(*) FROM verses WHERE verse = 0").fetchone()[0]
+    filled_titles = conn.execute("SELECT COUNT(*) FROM verses WHERE verse = 0 AND text != ''").fetchone()[0]
+
+    # Leftover markup from a source parser. Spacing is checked for WEB only,
+    # whose USFM parser is this script's own; the other sources' spacing is
+    # theirs and kept as it is.
+    spacing = ("OR text LIKE '%  %' OR text != trim(text) OR text GLOB '* [,.;:?!]*'"
+               if abbrev == "WEB" else "")
+    markup_left = conn.execute(
+        "SELECT book, chapter, verse, text FROM verses "
+        "WHERE text LIKE '%\\%' OR text LIKE '%|%' OR text LIKE '%strong=%' "
+        f"{spacing} LIMIT 5"
+    ).fetchall()
+    # Whole-word FTS: "love" must find a verse with "love" and no verse that
+    # only has "glove" or "beloved".
+    fts_word_ok = conn.execute(
+        "SELECT COUNT(*) FROM verses WHERE rowid IN "
+        "(SELECT rowid FROM verses_fts WHERE verses_fts MATCH 'love') "
+        "AND ' ' || lower(text) || ' ' NOT GLOB '*[^a-z]love[^a-z]*'"
+    ).fetchone()[0] == 0
     book_count  = conn.execute("SELECT COUNT(*) FROM books").fetchone()[0]
     meta        = dict(conn.execute("SELECT key, value FROM meta").fetchall())
     fts_hits    = conn.execute(
@@ -530,7 +647,10 @@ def verify(output_path: str, abbrev: str) -> bool:
 
     print(f"  Verses : {verse_count:,}  {verse_note}")
     if title_count:
-        print(f"  Titles : {title_count} Psalm title placeholder row(s) (verse=0)")
+        kind = "with WEB's own wording" if filled_titles else "placeholder(s), empty"
+        print(f"  Titles : {title_count} Psalm title row(s) (verse=0), {kind}")
+    print(f"  Markup : {'✓ none left' if not markup_left else '✗ ' + repr(markup_left)}")
+    print(f"  Words  : {'✓' if fts_word_ok else '✗'} 'love' matches whole words only")
     print(f"  Books  : {book_count}  {'✓' if book_count == 66 else '✗ expected 66'}")
     print(f"  Meta   : {meta}")
     print(f"  FTS    : {len(fts_hits)} hit(s) for 'faith'  {'✓' if fts_hits else '✗ no results'}")
@@ -538,7 +658,7 @@ def verify(output_path: str, abbrev: str) -> bool:
     print(f"  Jn  3:16 — {jn3_16[0][:80] if jn3_16 else '✗ MISSING'}")
     print(f"  Rom 8:28 — {rom8_28[0][:80] if rom8_28 else '✗ MISSING'}")
 
-    if not verse_ok or book_count != 66 or not fts_hits:
+    if not verse_ok or book_count != 66 or not fts_hits or markup_left or not fts_word_ok:
         ok = False
         print("\n  ✗ One or more checks FAILED.", file=sys.stderr)
     else:
@@ -557,7 +677,7 @@ def main() -> None:
         epilog=__doc__,
     )
     parser.add_argument("abbrev",    help="Translation abbreviation (KJV, ASV, WEB, …)")
-    parser.add_argument("source",    help="Source path: scrollmapper .db, BSB .txt, or WEB directory")
+    parser.add_argument("source",    help="Source path: scrollmapper .db, BSB .txt, or WEB USFM .zip")
     parser.add_argument("--name",    required=True, help="Full translation name")
     parser.add_argument("--year",    default="",    help="Publication year")
     parser.add_argument("--license", default="Public Domain", dest="license_",
@@ -569,9 +689,9 @@ def main() -> None:
 
     # ── Load verses ───────────────────────────────────────────────────────────
 
-    if os.path.isdir(source):
-        print(f"Loading {abbrev} from WEB directory: {source}")
-        verses = load_from_web_dir(source)
+    if source.endswith(".zip"):
+        print(f"Loading {abbrev} from WEB USFM: {source}")
+        verses = load_from_web_usfm(source)
     elif source.endswith((".txt", ".tsv")):
         print(f"Loading {abbrev} from BSB TSV: {source}")
         verses = load_from_bsb_tsv(source)
@@ -580,7 +700,7 @@ def main() -> None:
         verses = load_from_scrollmapper(source, abbrev)
     else:
         print(f"Error: cannot determine source type for '{source}'.\n"
-              "Expected: a directory (WEB), a .txt file (BSB), or a .db file.",
+              "Expected: a .zip file (WEB USFM), a .txt file (BSB), or a .db file.",
               file=sys.stderr)
         sys.exit(1)
 
@@ -602,6 +722,7 @@ def main() -> None:
 
     print("  Rebuilding FTS index …")
     rebuild_fts(conn)
+    compact(conn)
 
     conn.commit()
     conn.close()

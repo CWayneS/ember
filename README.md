@@ -139,7 +139,9 @@ python scripts/build_crossrefs.py
 
 # Translations — run once per translation, each with its own source and name
 python scripts/build_translation.py KJV data/translations-prep/data/translations-prep/scrollmapper/formats/sqlite/KJV.db --name "King James Version" --year 1611
-# ...repeat for ASV, YLT, Darby (scrollmapper), BSB (TSV file), and WEB (chapter-file directory)
+# ...repeat for ASV, YLT, Darby (scrollmapper), BSB (TSV file), and WEB (eBible's USFM zip, sha256-pinned:
+# data/translations-prep/web-usfm/engwebp_usfm.zip from https://ebible.org/Scriptures/engwebp_usfm.zip).
+# The same sources always give a byte-identical file.
 
 # Language tab data (original-language text, Strong's, morphology, Greek lexicon).
 # Builds into data/stepbible-prep/output/; --ship also copies it to data/language.db
@@ -171,7 +173,7 @@ To install as a PWA, use your browser's install option (usually in the address b
 
 ## Verifying Changes
 
-There is no unit test suite; the app is exercised live instead. `tests/verify.py` serves the repo, boots Ember in headless Chromium with a fresh profile, drives it with Playwright, and prints one pass/fail line per check plus any console errors (the known FTS5-to-LIKE fallback message is filtered out).
+There is no unit test suite; the app is exercised live instead. `tests/verify.py` serves the repo, boots Ember in headless Chromium with a fresh profile, drives it with Playwright, and prints one pass/fail line per check plus any console errors.
 
 ```bash
 pip install playwright && playwright install chromium
@@ -233,6 +235,8 @@ Build 1 (core reading + notes) → Build 1.5 (polish) → Build 2 (cross-referen
 Ember bundles data from several sources. The same information is shown in-app under **Settings → Data & Attribution**; the table below mirrors it exactly.
 
 The six bundled translations (KJV, ASV, WEB, YLT, Darby, BSB), Nave's Topical Bible, and the Brown-Driver-Briggs (1906) and Strong's (1890) Hebrew dictionaries are public domain and don't require attribution.
+
+The World English Bible appears as the **Verse-only World English Bible**: its verses without headings, footnotes or speaker labels. Its publisher asks that a changed text not be called the World English Bible, and "World English Bible" is a trademark of eBible.org. Ember changes no verse text, but the plainer name makes clear what is left out.
 
 | Source | License | Powers |
 |---|---|---|

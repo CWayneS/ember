@@ -269,6 +269,8 @@ Click into it to see the prefix shortcuts panel. Start typing (at least 2 charac
 - **Tag result** — opens a tag view tab
 - **Bookmark result** — navigates to that bookmark
 
+Scripture and notes search match whole words, so **love** finds "love" but not "glove" or "beloved". Every word you type must appear, in any order. Put words in quotes to find them as a phrase (**"in the beginning"**), and end a word with **\*** to find every word that starts with it (**love\*** finds loved, loving, lovely). In the WEB, a Psalm's title is searchable too.
+
 Press **Escape** or click outside the results to close the overlay.
 
 ### Prefix shortcuts

@@ -202,7 +202,7 @@ CREATE INDEX IF NOT EXISTS idx_topic_verses_verse ON topic_verses(verse_id);
 TRANSLATIONS = [
     (1, 'kjv.db',   'King James Version',        'KJV',   '1611', 'Public Domain'),
     (2, 'asv.db',   'American Standard Version',  'ASV',   '1901', 'Public Domain'),
-    (3, 'web.db',   'World English Bible',         'WEB',   '2000', 'Public Domain'),
+    (3, 'web.db',   'Verse-only World English Bible', 'WEB',   '2000', 'Public Domain'),
     (4, 'ylt.db',   "Young's Literal Translation", 'YLT',   '1862', 'Public Domain'),
     (5, 'darby.db', 'Darby Translation',           'Darby', '1890', 'Public Domain'),
     (6, 'bsb.db',   'Berean Standard Bible',       'BSB',   '2023', 'Public Domain'),

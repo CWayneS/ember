@@ -66,7 +66,7 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - Verse IDs use BBCCCVVV format, stored as integers (e.g., 1001001 = Genesis 1:1; 43001001 = John 1:1). Psalm titles are verse 0.
 - db.export() + saveToStorage() after every write operation to core.db
 - sql.js does not enforce ON DELETE CASCADE — delete child rows explicitly
-- sql.js has no FTS5 module: Scripture search falls back to LIKE; notes_fts is FTS4
+- sql.js has no FTS5 module: translations' verses_fts and core.db's notes_fts are FTS4. Search input goes through searchMatchExpression() in db.js, never straight to MATCH
 - Note anchors use range-aware queries through anchorsOverlapping() in db.js — see docs/ANCHOR_QUERIES.md
 - notes_fts is external-content: delete from it before changing a note's body in `notes`, never after
 - `.note-block` uses content-visibility: auto. In a skipped block, innerText is empty and overflow is clipped, so read a note's text at input time (see scheduleSave in js/notes.js). Update a block in place rather than rebuilding the study, or the scroll position moves

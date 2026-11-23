@@ -76,7 +76,7 @@ const SECTIONS = [
         render(container) {
             const desc = document.createElement('p');
             desc.className = 'settings-section-desc';
-            desc.textContent = 'Ember bundles data from several sources. The six Bible translations, Nave’s Topical Bible, and the Brown-Driver-Briggs (1906) and Strong’s (1890) Hebrew dictionaries are public domain. Three sources are licensed CC BY 4.0 and credited here as required:';
+            desc.textContent = 'Ember bundles data from several sources. The six Bible translations, Nave’s Topical Bible, and the Brown-Driver-Briggs (1906) and Strong’s (1890) Hebrew dictionaries are public domain. The World English Bible appears as the Verse-only World English Bible: its verses without headings, footnotes or speaker labels. “World English Bible” is a trademark of eBible.org. Three sources are licensed CC BY 4.0 and credited here as required:';
             container.appendChild(desc);
 
             const list = document.createElement('ul');

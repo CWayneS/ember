@@ -405,3 +405,38 @@ Record: `HEBREW_LEXICON_REPORT.md`. Spec: `Hebrew_Lexicon_Spec.md`. It supersede
 **`sw.js`:** `CACHE_NAME` → `ember-v29`.
 
 **Restore waits for the worker.** `restoreCoreDb()` writes core.db from the main thread, outside the queue. It now stops new saves, sends the worker `{ type: 'idle' }`, and writes only after the worker answers once every earlier save is written. On success, saves stay stopped until the reload, so nothing lands over the restored file. On failure, saves resume, and if any were held off meanwhile the live database is saved again. Before this, a save still being written, or one made during the restore, could land after it, and the restore seemed not to have taken. `tests/verify.py storage` (`storage_restore_after_saves`) restores while 5 saves are queued and saves again during and after. The old code failed it (the last save, `'after'`, was on disk after the reload); the new code passes.
+
+## 17. ADDENDUM — 2026-11-22, the six translation files rebuilt: FTS4 search, WEB from USFM
+
+All six `data/translations/*.db` were rebuilt once, for two changes. Wayne's decisions, 2026-11-22: WEB's Psalm titles go to verse 0; Psalm 119's letter headings and the Song of Songs speaker labels are dropped; search matches whole words with no stemming.
+
+**Scripture search on FTS4.** `verses_fts` is now `fts4(content="verses", text, tokenize=unicode61)`, which sql.js can read. The old FTS5 table never worked in the browser, so every search had fallen back to `LIKE '%…%'`, which also matched "glove" and "beloved". `unicode61` splits on curly apostrophes and quotes as well as straight ones, so "Solomon" finds "Solomon’s" and a typed `don't` finds WEB's "don’t". After `rebuild` and `optimize` the build VACUUMs, which removes about 2.7 MB of free pages per file. `verses` has no INTEGER PRIMARY KEY, so VACUUM is allowed to renumber rowids. The build compares every rowid before and after and runs FTS4's `integrity-check`, and stops if either fails. File sizes are within 3% of before (KJV 7,839,744 → 7,933,952 bytes; WEB 7,700,480 → 7,733,248). Two builds from the same sources are byte-identical.
+
+**`js/db.js`:** `searchMatchExpression()` turns the query into a MATCH that can't be malformed. Every word is quoted, so all the words must appear in any order, and OR, NOT, hyphens and stray quotes are just text. A "quoted phrase" must appear as written, and a trailing `*` makes a prefix (`"love*"`; `"love"*` would ignore it). Notes search uses the same expression, so one search box follows one set of rules; before this, a stray `"` or `(` made notes search log an error. Results come back in canonical order. The LIKE fallback remains only for a translation file built before FTS4 ("no such module"), remembered for the session. Any other error falls back for that one search.
+
+**WEB from eBible's USFM.** `load_from_web_usfm()` reads `engwebp_usfm.zip` in place (sha256-pinned; eBible replaces the zip in place when WEB is revised, and the error says so). It replaces the read-aloud parser, which numbered lines because that edition has no verse numbers. The parser is strict: any USFM marker it hasn't been told about stops the build. Footnotes and cross-references are removed whole, and an opening marker's following space is part of the marker (`Aren’\+w t` is "Aren’t"). A verse left empty must be one of the four WEB omits, or Romans 16:25, a footnote saying WEB has the doxology at 14:24–26; anything else stops the build. `verify()` now also fails on leftover markup in any translation, and on doubled, trailing or before-punctuation spaces in WEB.
+
+Compared with the old `web.db`, every verse has the same number, and the changes are:
+- 116 Psalm titles moved from the start of verse 1 to verse 0, in WEB's own wording. The reader already shows a non-empty verse 0 as the title row. The TAHOT gloss is only fetched for empty ones, so WEB titles need no `language.db`.
+- 22 Psalm 119 letter headings removed. The old text had each stuck to the end of the verse before it ("…Don’t utterly forsake me. BETH").
+- Song of Songs speaker labels removed from 4 verses (e.g. 1:4 "…into his rooms. Friends We will be glad…"). The other 29 fell between verses and were already absent.
+- 85 verses with word revisions since the 2020 text, about half "in the earth" → "on the earth"; others such as Mark 1:27 "A new teaching?" → "What can this new doctrine be?". 31 more with punctuation fixes only, mostly quotation marks. (The TODO's estimate was about 270.)
+
+The other five files' `verses`, `books` and `meta` are identical to before; only their index changed.
+
+**`tests/verify.py smoke`** (`check_scripture_search`) checks:
+- "love" gives whole words only
+- `love*` finds "loved"
+- a quoted phrase finds Gen 1:1 and John 1:1, and not in reverse order
+- stray quotes, hyphens and operators fail neither search
+- WEB Psalm 3:0 is the title and searchable, and 3:1 starts "LORD"
+- the reader's WEB title row shows that title
+
+All twelve suites pass.
+
+**Name: "Verse-only World English Bible".** eBible.org asks that a changed text not be called the World English Bible ("World English Bible" is its trademark). No verse text is changed, but headings, footnotes and speaker labels are left out, so Wayne chose the plainer name (2026-11-22). It is in `web.db`'s `meta` and in `core.db`'s `translations` row (`build/build_db.py`, and the shipped `data/core.db` updated to match). `createUserTables()` renames the row in older `core.db` files, restored backups included. The abbreviation stays WEB. Data & Attribution (in the app and in the README) says so.
+
+**`sw.js`:** `CACHE_NAME` → `ember-v30`.
+
+**Existing installs** keep their old translation files in OPFS, since seeding never replaces a whole file. On them, Scripture search still uses LIKE and WEB is still the old text, until `translations/*.db` is cleared from OPFS. Version-aware reseeding (TODO step 3) is what will reach other installs.
+

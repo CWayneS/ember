@@ -312,6 +312,51 @@ def check_grammar_decode(app):
 
 
 # ---------------------------------------------------------------- smoke
+def check_scripture_search(app):
+    """Scripture search runs on each translation's FTS4 index: whole words, a trailing *
+    for a prefix, quotes for a phrase, and no input can make the MATCH malformed, there
+    or in notes search, which builds its MATCH the same way."""
+    p = app.page
+    warnings = []
+    p.on('console', lambda msg: warnings.append(msg.text) if msg.type == 'warning' and 'FTS' in msg.text else None)
+    res = p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        const texts = (query, translation = 1) => db.search(query, translation).verses.map(v => v.text.toLowerCase());
+        const love = texts('love');
+        return {
+            love: love.length,
+            loveWhole: love.every(t => /(^|[^a-z])love([^a-z]|$)/.test(t)),
+            prefixFindsLoved: texts('loved*').length > 0 && texts('love*').some(t => /loved|loveth|lovely/.test(t)),
+            phrase: db.search('"in the beginning"', 1).verses.map(v => v.id),
+            reversedPhrase: db.search('"beginning the in"', 1).verses.length,
+            hostile: ['love"', '"', '-', 'NOT', 'faith OR', '(', '*', 'son-in-law', "don't"].map(q => texts(q, 3).length),
+            webTitle: db.search('"fled from Absalom"', 3).verses.map(v => v.id),
+            webVerse1: db.getChapter(3, 19, 3).slice(0, 2).map(v => [v.verse, v.text.slice(0, 20)]),
+        };
+    }""")
+    check(res['love'] > 0 and res['loveWhole'], f"'love' finds whole words only, not glove or beloved ({res['love']} results)")
+    check(res['prefixFindsLoved'], "'love*' finds loved")
+    check(1001001 in res['phrase'] and 43001001 in res['phrase'], f"a quoted phrase finds Gen 1:1 and John 1:1 ({res['phrase'][:5]})")
+    check(res['reversedPhrase'] == 0, 'a quoted phrase must appear in order')
+    check(not warnings, f'stray quotes, hyphens and operators never fail Scripture search ({res["hostile"]}, {warnings})')
+    # Notes search shares the same expression; a malformed one would log a console
+    # error, which every scenario fails on.
+    check(19003000 in res['webTitle'], f"WEB Psalm 3's title is its verse 0, and searchable ({res['webTitle']})")
+    check(res['webVerse1'][0][0] == 0 and res['webVerse1'][1] == [1, 'LORD, how my adversa'], f'WEB Psalm 3:1 starts with the psalm, not the title ({res["webVerse1"]})')
+
+    # The reader shows WEB's own title wording in the title row.
+    p.evaluate("import('./js/reader.js').then(r => r.navigateTo(19, 3))")
+    p.click('#reader-pane-a .pane-book-btn')
+    p.click('.translation-btn:has-text("WEB")')
+    p.keyboard.press('Escape')
+    p.wait_for_timeout(300)
+    title = p.evaluate("document.querySelector('#reader-pane-a .verse.verse-title')?.textContent")
+    check(title == 'A Psalm by David, when he fled from Absalom his son.', f'WEB Psalm 3 title row ({title!r})')
+    p.click('#reader-pane-a .pane-book-btn')
+    p.click('.translation-btn:has-text("KJV")')
+    p.keyboard.press('Escape')
+
+
 def scenario_smoke(app):
     p = app.page
     seed_user_data(app)
@@ -376,6 +421,7 @@ def scenario_smoke(app):
     p.wait_for_timeout(500)
     check(p.evaluate("document.querySelectorAll('.search-result-item').length") == 1, 'bookmark prefix search')
     p.keyboard.press('Escape')
+    check_scripture_search(app)
     # plans
     p.click('#reference-tabs [data-tab="plans"]')
     check(p.evaluate("document.querySelectorAll('.plan-card').length") == 3, 'three bundled plans')

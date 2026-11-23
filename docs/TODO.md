@@ -14,14 +14,7 @@ Done 2026-11-22: the storage worker queues its writes, and restore waits for it 
 
 ## 2. Rebuild all six translation files once
 
-Both items change the translation files through `scripts/build_translation.py`. Doing them together means one rebuild and one OPFS clear on Wayne's install. They come before step 3 because the add-ons catalog records each file's real size and verse count.
-
-| To-do | Why it matters | Size | Source |
-|---|---|---|---|
-| **Scripture search on FTS4** | Translations are built with an FTS5 `verses_fts` that sql.js can't read, so Scripture search always falls back to `LIKE`. `LIKE '%love%'` also matches "glove" and "beloved". FTS4 (already used for `notes_fts`) gives whole-word matching and optional stemming, with no sql.js rebuild. Decided over custom-compiling sql.js with FTS5. | Small–Medium | `scripts/build_translation.py` (`verses_fts`); `js/db.js` search fallback |
-| **Rebuild WEB from eBible's USFM** | WEB is built from eBible's audio-reading edition (2020 stable text), which has no verse numbers, so `scripts/build_translation.py` numbers lines and hard-codes the four verses WEB omits (`WEB_OMITTED_VERSES`). The USFM edition (`engwebp_usfm.zip`) carries real numbers: omitted verses are footnote-only `\v` markers. Compared 2026-11-22: every verse number matches. Switching drops the hard-coded list and brings in about 270 small revisions since 2020 (mostly "in the earth" → "on the earth"). **Decide first:** keep Psalm titles (`\d`) at the start of verse 1 and Song of Songs speaker labels (`\sp`) in the text, as today, or do otherwise. | Small–Medium | `scripts/build_translation.py` (`load_from_web_dir`); `docs/BUILD_6.1_ACTUAL_STATE.md` §15 |
-
-After the rebuild, clear `translations/*.db` from OPFS on Wayne's install.
+Done 2026-11-22: Scripture search on FTS4, and WEB rebuilt from eBible's USFM (`docs/BUILD_6.1_ACTUAL_STATE.md` §17). **Still to do on Wayne's install:** clear `translations/*.db` from OPFS (in Firefox with `removeEntry()`; "Clear site data" leaves OPFS alone), so the new files are seeded.
 
 ## 3. Translation add-ons, then updating installed data
 

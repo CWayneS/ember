@@ -597,6 +597,12 @@ function createUserTables() {
     try { db.run('ALTER TABLE studies ADD COLUMN template_id INTEGER REFERENCES study_templates(id)'); } catch (_) {}
     try { db.run('ALTER TABLE notes ADD COLUMN template_step_id INTEGER REFERENCES template_steps(id)'); } catch (_) {}
 
+    // WEB is shown verse-only (no headings, footnotes or speaker labels), so it
+    // is named that way, at eBible.org's request for changed editions. Renames
+    // the row in core.db files made before, including restored backups.
+    db.run(`UPDATE translations SET name = 'Verse-only World English Bible'
+            WHERE filename = 'web.db' AND name = 'World English Bible'`);
+
     // Future drag-to-reorder: position column on notes (idempotent).
     // NULL = use created_at order. Will be populated when ordering is implemented.
     try { db.run('ALTER TABLE notes ADD COLUMN position REAL'); } catch (_) {}
@@ -1730,13 +1736,31 @@ export function removeBookmark(bookmarkId) {
 
 // ============================================================
 
-// The translation files carry an FTS5 verses_fts table, but sql.js's WASM
-// build has no FTS5 module, so the MATCH query throws ("no such module:
-// fts5") and Scripture search falls back to LIKE. That is a property of the
-// runtime, not of the query, so the failure is remembered after the first
-// attempt: later searches go straight to LIKE instead of preparing a
-// doomed statement and logging an error on every keystroke.
+// Scripture search uses each translation's FTS4 verses_fts (unicode61, whole
+// words, no stemming). Translation files built before it carry an FTS5 table
+// that sql.js cannot read ("no such module: fts5"), so an install still holding
+// those falls back to LIKE. That is a property of the file, not of the query,
+// so it is remembered after the first attempt instead of failing on every
+// keystroke. Any other error falls back for that one search only.
 let _verseFtsUnavailable = false;
+
+// What the person typed, as an FTS4 MATCH expression that can't be malformed.
+// Scripture and notes search both use it, so one search box follows one set of rules:
+// every word is quoted, so OR, NOT, hyphens and stray punctuation are just
+// text. All the words must appear, in any order. "A quoted phrase" must
+// appear as written, and a trailing * makes a prefix (love* finds loved,
+// loving). Returns null when nothing searchable is left.
+export function searchMatchExpression(query) {
+    const terms = [];
+    for (const [, phrase, word] of query.matchAll(/"([^"]*)"?|([^\s"]+)/g)) {
+        const text = (phrase ?? word).replace(/\*+(?=.)/g, ' ').trim();
+        if (!/[\p{L}\p{N}]/u.test(text)) continue;
+        const prefix = text.endsWith('*');
+        const body = text.replace(/\*+$/, '').trim();
+        if (body) terms.push(`"${body}${prefix ? '*' : ''}"`);
+    }
+    return terms.length ? terms.join(' ') : null;
+}
 
 export function search(query, translationId = 1) {
     const verseResults = [];
@@ -1751,7 +1775,8 @@ export function search(query, translationId = 1) {
         ...row,
         book_name: getBook(row.book_id)?.name || `Book ${row.book_id}`
     });
-    if (tdb) {
+    const matchExpression = searchMatchExpression(query);
+    if (tdb && matchExpression) {
         let rows = null;
         if (!_verseFtsUnavailable) {
             try {
@@ -1759,12 +1784,17 @@ export function search(query, translationId = 1) {
                     `SELECT ${VERSE_COLUMNS}
                      FROM verses
                      WHERE rowid IN (SELECT rowid FROM verses_fts WHERE verses_fts MATCH ?)
+                     ORDER BY rowid
                      LIMIT 50`,
-                    [query]
+                    [matchExpression]
                 );
             } catch (e) {
-                _verseFtsUnavailable = true;
-                console.warn('FTS verse search unavailable in this runtime; using LIKE for the rest of the session:', e.message);
+                if (/no such module/i.test(e.message)) {
+                    _verseFtsUnavailable = true;
+                    console.warn('This translation file predates FTS4 search; using LIKE for the rest of the session:', e.message);
+                } else {
+                    console.warn('FTS verse search failed; using LIKE for this search:', e.message);
+                }
             }
         }
         if (rows === null) {
@@ -1782,22 +1812,24 @@ export function search(query, translationId = 1) {
     }
 
     // Notes full-text search
-    try {
-        const rows = queryAll(db,
-            `SELECT n.id, n.body, n.created_at, n.study_id, s.name AS study_name
-             FROM notes_fts fts
-             JOIN notes n ON n.id = fts.rowid
-             LEFT JOIN studies s ON s.id = n.study_id
-             WHERE notes_fts MATCH ?
-             LIMIT 50`,
-            [query]
-        );
-        for (const note of attachTagsAndAnchors(rows)) {
-            note.type = 'note';
-            noteResults.push(note);
+    if (matchExpression) {
+        try {
+            const rows = queryAll(db,
+                `SELECT n.id, n.body, n.created_at, n.study_id, s.name AS study_name
+                 FROM notes_fts fts
+                 JOIN notes n ON n.id = fts.rowid
+                 LEFT JOIN studies s ON s.id = n.study_id
+                 WHERE notes_fts MATCH ?
+                 LIMIT 50`,
+                [matchExpression]
+            );
+            for (const note of attachTagsAndAnchors(rows)) {
+                note.type = 'note';
+                noteResults.push(note);
+            }
+        } catch (e) {
+            console.error('FTS note search failed:', e);
         }
-    } catch (e) {
-        console.error('FTS note search failed:', e);
     }
 
     // Tag name search — user tags + system topics
