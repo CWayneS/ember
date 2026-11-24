@@ -26,7 +26,7 @@ You'll land on Genesis 1 with empty study panels on the left. The loading screen
 
 ### Getting help
 
-Each panel has a **?** button with a short list of what that panel does. **More in the guide →** at the bottom opens this manual inside Ember at the panel's section; the **?** next to the search bar opens it at the top. Its contents are down the left side, and **✕**, **Escape** or a click outside it closes it, leaving everything as it was. You can also search it from the search bar (see [Search](#search)). It works offline, like the rest of Ember.
+Each panel has a [**?** button](#getting-help "map:notes-help") with a short list of what that panel does. **More in the guide →** at the bottom opens this manual inside Ember at the panel's section; the [**?** next to the search bar](#getting-help "map:global-help") opens it at the top. Its contents are down the left side, and a map of Ember as it's laid out right now is on the right (behind a **Map** button in a narrower window): a link with a dotted underline, like [the pen](#marking-up-verses "map:markup-pen"), shows where that control is, and **Show me** points at the real one. **✕**, **Escape** or a click outside the guide closes it, leaving everything as it was. You can also search it from the search bar (see [Search](#search)). It works offline, like the rest of Ember.
 
 ---
 
@@ -34,7 +34,7 @@ Each panel has a **?** button with a short list of what that panel does. **More 
 
 ### The layout
 
-The screen is split into two halves. The right side is the reader. The left side holds your study panels — notes on the left, reference beside them. You can drag the handles between them to resize any of the three, and click the **⇅** button in the notes panel header to stack notes above reference instead (**⇆** puts them side by side again). Ember remembers which you chose.
+The screen is split into two halves. The right side is the reader. The left side holds your study panels — notes on the left, reference beside them. You can drag [the handles](#the-layout "map:resize-handles") between them to resize any of the three, and click the [**⇅** button](#the-layout "map:layout-toggle") in the notes panel header to stack notes above reference instead (**⇆** puts them side by side again). Ember remembers which you chose.
 
 Ember is built for a desk: a large screen, a keyboard, and a mouse or trackpad. On a phone it shows a notice saying so first; **Continue anyway** opens it regardless, and the notice won't appear again on that phone.
 
@@ -42,20 +42,20 @@ Ember is built for a desk: a large screen, a keyboard, and a mouse or trackpad. 
 
 At the top of the reader you'll find, from left to right:
 
-- **Split reader** (the two-rectangle icon) — opens a second reading pane alongside the first, so you can read two passages (or two translations) at once. Click again to close it.
-- **One verse per line** (the lines icon) — starts each verse on its own line instead of running them together as paragraphs, in both panes. Click again to go back. Ember remembers the choice. This is one verse per line, not the poetic line breaks of a printed Bible, which these translations don't carry.
-- **Markup tools** (the pen icon) — opens a strip of highlight colors, underline styles, and a circle tool for marking up a selected verse or range. See [Marking Up Verses](#marking-up-verses).
-- **☆ Bookmark** — bookmarks the selected verse, or shows your bookmark list if nothing is selected. See [Bookmarks](#bookmarks).
-- **? Help** — a quick reference popover for the reader.
-- **⚙ Settings** — adjust the size of the Scripture text in both panes; **Reset** puts it back.
+- [**Split reader**](#reading-in-two-panes-side-by-side "map:split-reader") (the two-rectangle icon) — opens a second reading pane alongside the first, so you can read two passages (or two translations) at once. Click again to close it.
+- [**One verse per line**](#the-reader-header "map:verse-lines") (the lines icon) — starts each verse on its own line instead of running them together as paragraphs, in both panes. Click again to go back. Ember remembers the choice. This is one verse per line, not the poetic line breaks of a printed Bible, which these translations don't carry.
+- [**Markup tools**](#marking-up-verses "map:markup-pen") (the pen icon) — opens a strip of highlight colors, underline styles, and a circle tool for marking up a selected verse or range. See [Marking Up Verses](#marking-up-verses).
+- [**☆ Bookmark**](#bookmarks "map:bookmark") — bookmarks the selected verse, or shows your bookmark list if nothing is selected. See [Bookmarks](#bookmarks).
+- [**? Help**](#getting-help "map:reader-help") — a quick reference popover for the reader.
+- [**⚙ Settings**](#the-reader-header "map:reader-settings") — adjust the size of the Scripture text in both panes; **Reset** puts it back.
 
 ### Switching translations
 
-Each reading pane's top row reads like "KJV Genesis 1 ‹ ›". Click "KJV Genesis 1" to open the selector — it opens with a row of translation buttons (KJV, ASV, WEB, YLT, BSB) across the top. Click one to switch that pane to that translation without leaving your current chapter. If you're using split reader, each pane keeps its own translation independently.
+Each reading pane's top row reads like "KJV Genesis 1 ‹ ›". Click ["KJV Genesis 1"](#the-bookchapter-selector "map:book-button") to open the selector — it opens with a row of translation buttons (KJV, ASV, WEB, YLT, BSB) across the top. Click one to switch that pane to that translation without leaving your current chapter. If you're using split reader, each pane keeps its own translation independently.
 
 ### Adding and removing translations
 
-The **+** at the end of the translation row opens your Translations shelf: every translation Ember offers, with a line about each and its size.
+The [**+**](#adding-and-removing-translations "map:translation-shelf") at the end of the translation row opens your Translations shelf: every translation Ember offers, with a line about each and its size.
 
 - **Add** downloads a translation (about 8 MB each) and puts it in the row. Ember checks the file before using it. Darby starts on the shelf rather than installed.
 - **Remove** takes one off your device to free the space. Your notes, highlights and bookmarks are tied to verses, not translations, so they're untouched, and you can add it back any time. A pane that was showing it switches to KJV at the same chapter.
@@ -72,7 +72,7 @@ Click the split-reader icon in the reader header to open a second pane. Each pan
 
 ### Navigating chapters
 
-Click **‹** to go back one chapter, **›** to go forward. At the end of a book, the arrows cross into the next or previous book automatically. At Genesis 1, the back arrow does nothing. At Revelation 22, the forward arrow does nothing.
+Click [**‹**](#navigating-chapters "map:chapter-arrows") to go back one chapter, **›** to go forward. At the end of a book, the arrows cross into the next or previous book automatically. At Genesis 1, the back arrow does nothing. At Revelation 22, the forward arrow does nothing.
 
 Your reading position is saved automatically. When you reopen Ember, you'll return to where you left off.
 
@@ -106,7 +106,7 @@ If a verse has notes attached to it, a small gold dot appears under its verse nu
 
 ## Marking Up Verses
 
-Select a verse or range, then click the pen icon in the reader header to open the markup strip: five highlight colors, two underline styles (solid and wavy), and a circle tool.
+Select a verse or range, then click [the pen icon](#marking-up-verses "map:markup-pen") in the reader header to open the markup strip: five highlight colors, two underline styles (solid and wavy), and a circle tool.
 
 Click any tool to apply it to your current selection. Clicking the same tool again on the same range removes it; clicking a different color of the same type (highlight or underline) replaces it. The markup strip stays open across sessions until you close it again by clicking the pen icon.
 
@@ -114,7 +114,7 @@ Click any tool to apply it to your current selection. Clicking the same tool aga
 
 ## Bookmarks
 
-Click the **☆** button in the reader header to bookmark the currently selected verse. A small prompt lets you add an optional label before saving.
+Click the [**☆** button](#bookmarks "map:bookmark") in the reader header to bookmark the currently selected verse. A small prompt lets you add an optional label before saving.
 
 If the selected verse is already bookmarked, clicking **☆** removes the bookmark immediately.
 
@@ -130,11 +130,11 @@ Notes belong to studies. Before you can add a note, you need a study open. Think
 
 ### Creating a study
 
-Click the **+** button in the notes panel tab bar. A new study called "Untitled Study" opens immediately in a tab.
+Click the [**+** button](#creating-a-study "map:new-study") in the notes panel tab bar. A new study called "Untitled Study" opens immediately in a tab.
 
 ### Adding a note
 
-With a study open, click the **+ Add Note** button at the bottom of the study document. A new blank note appears and focuses automatically.
+With a study open, click the [**+ Add Note** button](#adding-a-note "map:add-note") at the bottom of the study document. A new blank note appears and focuses automatically.
 
 If you have a verse (or a verse range) selected when you click Add Note, the note is anchored to that selection — the reference appears as a chip above the note body (e.g. "John 3:16" or "John 3:16-17" for a range). If no verse is selected, the note is created without an anchor.
 
@@ -144,7 +144,7 @@ The note body is a plain text area. Just click and type. Notes save automaticall
 
 ### Attaching verses to existing notes
 
-When you have a verse selected, a small **+** button appears next to the anchor chips on every note in the open study. The button is labeled with the verse reference. Click it to attach that verse to the note as an additional anchor.
+When you have a verse selected, a [small **+** button](#attaching-verses-to-existing-notes "map:attach-verse") appears next to the anchor chips on every note in the open study. The button is labeled with the verse reference. Click it to attach that verse to the note as an additional anchor.
 
 Clicking any anchor chip on a note navigates the reader to that verse.
 
@@ -160,7 +160,7 @@ Click **Delete** in the note footer. You'll be asked to confirm.
 
 ## Using Tags
 
-Each note has a tag area in its footer. Click the **Add tag…** field and start typing.
+Each note has a tag area in its footer. Click the [**Add tag…** field](#using-tags "map:tag-field") and start typing.
 
 As you type, a dropdown shows matching tags from your existing tag library (up to 8 suggestions, filtered to exclude tags already on this note). Use **↑ / ↓** to move through the list, **Enter** to apply, or **Escape** to dismiss. You can also click any suggestion directly.
 
@@ -174,7 +174,7 @@ Tags appear as green-tinted chips on the note. Click a tag's name to open a tag 
 
 ### The All Studies view
 
-Click the **All Studies** tab (the permanent leftmost tab in the notes panel) to see all your studies. Each row shows the study name, how many notes it contains, and when it was last modified. Studies are sorted by most recently modified first.
+Click the [**All Studies** tab](#the-all-studies-view "map:all-studies") (the permanent leftmost tab in the notes panel) to see all your studies. Each row shows the study name, how many notes it contains, and when it was last modified. Studies are sorted by most recently modified first.
 
 Click a study to open it. If it's already open in a tab, you'll switch to that tab.
 
@@ -184,7 +184,7 @@ The study title at the top of the document is editable — click it and type. Th
 
 ### Exporting a study to read, print or share
 
-Click **Export** at the right end of the study's title line. Ember saves the study as a web page (an `.html` file) that opens in any browser, without Ember. Each note shows the verses it's attached to, quoted in the translation your reader is showing, then your note and its tags. From the browser you can print it or save it as a PDF. A note attached to more than 30 verses (a whole chapter, say) names the passage instead of quoting it.
+Click [**Export**](#exporting-a-study-to-read-print-or-share "map:export-study") at the right end of the study's title line. Ember saves the study as a web page (an `.html` file) that opens in any browser, without Ember. Each note shows the verses it's attached to, quoted in the translation your reader is showing, then your note and its tags. From the browser you can print it or save it as a PDF. A note attached to more than 30 verses (a whole chapter, say) names the passage instead of quoting it.
 
 This is a copy for reading, not a backup: Ember can't restore from it. To export every study at once, use **Export Readable Copy** in Settings → Backup & Restore.
 
@@ -200,9 +200,9 @@ In the All Studies view, hover over a study to reveal the **✕** delete button 
 
 ## The Reference Panel
 
-The reference panel sits beside the notes panel (or below it, if you've stacked them). It has five tabs: **Info**, **Tags**, **Related**, **Language**, and **Plans**. Whichever tab you had open is open again the next time you start Ember.
+The reference panel sits beside the notes panel (or below it, if you've stacked them). It has five tabs: [**Info**](#info "map:tab-info"), [**Tags**](#tags "map:tab-tags"), [**Related**](#related "map:tab-related"), [**Language**](#language "map:tab-language"), and [**Plans**](#plans "map:tab-plans"). Whichever tab you had open is open again the next time you start Ember.
 
-Selecting a verse leaves the open tab alone. To have a particular tab come up every time you select a verse instead, choose it under the panel's **⚙** → Default tab; **Keep** (the default) leaves the tab as it is.
+Selecting a verse leaves the open tab alone. To have a particular tab come up every time you select a verse instead, choose it under [the panel's **⚙**](#the-reference-panel "map:reference-settings") → Default tab; **Keep** (the default) leaves the tab as it is.
 
 Select a verse in the reader to populate the first four tabs. Without a selection, each shows "Select a verse to see reference material." Plans doesn't depend on a selection — see below.
 
@@ -286,7 +286,7 @@ You can also import your own plan as a JSON or CSV file with the **Import** butt
 
 ## Search
 
-The search bar is centered at the top of the screen.
+[The search bar](#search "map:search-bar") is centered at the top of the screen.
 
 Click into it to see the prefix shortcuts panel. Start typing (at least 2 characters) to run a search. Results appear in a dropdown below the bar, grouped into sections: **Scripture**, **Notes**, **Studies**, **Tags**, **Bookmarks**, and **Help**.
 
@@ -329,9 +329,9 @@ Clicking a verse reference in a tag view navigates the reader there. Clicking th
 
 ## Appearance & Settings
 
-Click the **☀/🌙** icon next to the search bar to toggle dark mode.
+Click the [**☀/🌙** icon](#appearance--settings "map:theme-toggle") next to the search bar to toggle dark mode.
 
-Each panel has a **⚙** button in its header for that panel's own settings: the reader's and the notes panel's set their font size, and the reference panel's sets its default tab. The **⚙** next to the search bar opens global settings, covering:
+Each panel has a **⚙** button in its header for that panel's own settings: the reader's and the notes panel's set their font size, and the reference panel's sets its default tab. The [**⚙** next to the search bar](#appearance--settings "map:global-settings") opens global settings, covering:
 
 - **Backup & Restore** — export your entire notes/tags/studies/bookmarks database as a single file, or restore from a previously exported one. **Export Readable Copy** saves all your studies as one web page to read, print or share, with a contents list at the top (see "Exporting a study"); with many years of notes it takes a few seconds, and the button says "Preparing…" meanwhile. Restoring asks you to confirm first, since it replaces everything currently on your device. A line here also tells you whether your browser has agreed to keep Ember's data.
 - **Data & Attribution** — credits for the three externally-sourced, CC BY 4.0–licensed datasets Ember bundles (original-language word data, cross-reference data, and the Hebrew lexicon), each linked to its source.

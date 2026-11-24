@@ -11,8 +11,8 @@
 
     <header id="global-header">
         <div id="search-bar">
-            <input type="text" id="search-input" placeholder="Search Scripture and notes…" autocomplete="off" />
-            <button id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <input type="text" id="search-input" data-help-target="search-bar" placeholder="Search Scripture and notes…" autocomplete="off" />
+            <button id="theme-toggle" data-help-target="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
                 <svg id="theme-icon-sun" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                     <circle cx="10" cy="10" r="4"/>
                     <line x1="10" y1="1" x2="10" y2="3.5"/><line x1="10" y1="16.5" x2="10" y2="19"/>
@@ -24,8 +24,8 @@
                     <path d="M17.5 11.5A7.5 7.5 0 0 1 8.5 2.5a7.5 7.5 0 1 0 9 9z"/>
                 </svg>
             </button>
-            <button id="global-help-btn" class="panel-help-btn" aria-label="Help">?</button>
-            <button id="global-settings-btn" class="panel-settings-btn" aria-label="Settings">⚙</button>
+            <button id="global-help-btn" data-help-target="global-help" class="panel-help-btn" aria-label="Help">?</button>
+            <button id="global-settings-btn" data-help-target="global-settings" class="panel-settings-btn" aria-label="Settings">⚙</button>
         </div>
     </header>
 
@@ -44,34 +44,34 @@
             <section id="notes-panel">
                 <header class="panel-header">
                     <nav id="notes-tabs">
-                        <button class="notes-tab active" role="tab" aria-selected="true" data-study-id="all">All Studies</button>
+                        <button class="notes-tab active" role="tab" aria-selected="true" data-study-id="all" data-help-target="all-studies">All Studies</button>
                         <!-- dynamic study tabs rendered by panels.js -->
-                        <button id="notes-tab-add" aria-label="New study" title="New study">+</button>
+                        <button id="notes-tab-add" data-help-target="new-study" aria-label="New study" title="New study">+</button>
                     </nav>
                     <div class="panel-header-actions">
-                        <button id="layout-toggle-btn" aria-label="Toggle panel layout" title="Put notes above reference">⇅</button>
-                        <button class="panel-help-btn" aria-label="Notes help">?</button>
-                        <button class="panel-settings-btn" aria-label="Notes settings">⚙</button>
+                        <button id="layout-toggle-btn" data-help-target="layout-toggle" aria-label="Toggle panel layout" title="Put notes above reference">⇅</button>
+                        <button class="panel-help-btn" aria-label="Notes help" data-help-target="notes-help">?</button>
+                        <button class="panel-settings-btn" aria-label="Notes settings" data-help-target="notes-settings">⚙</button>
                     </div>
                 </header>
                 <div id="notes-active-view"></div>
                 <div id="notes-all-studies-view" class="hidden"></div>
             </section>
 
-            <div id="panel-resize-handle" aria-hidden="true"></div>
+            <div id="panel-resize-handle" aria-hidden="true" data-help-target="resize-handles"></div>
 
             <section id="reference-panel">
                 <header class="panel-header">
                     <nav id="reference-tabs" role="tablist">
-                        <button class="tab-btn active" role="tab" aria-selected="true" data-tab="info">Info</button>
-                        <button class="tab-btn" role="tab" aria-selected="false" data-tab="tags">Tags</button>
-                        <button class="tab-btn" role="tab" aria-selected="false" data-tab="related">Related</button>
-                        <button class="tab-btn" role="tab" aria-selected="false" data-tab="language">Language</button>
-                        <button class="tab-btn" role="tab" aria-selected="false" data-tab="plans">Plans</button>
+                        <button class="tab-btn active" role="tab" aria-selected="true" data-tab="info" data-help-target="tab-info">Info</button>
+                        <button class="tab-btn" role="tab" aria-selected="false" data-tab="tags" data-help-target="tab-tags">Tags</button>
+                        <button class="tab-btn" role="tab" aria-selected="false" data-tab="related" data-help-target="tab-related">Related</button>
+                        <button class="tab-btn" role="tab" aria-selected="false" data-tab="language" data-help-target="tab-language">Language</button>
+                        <button class="tab-btn" role="tab" aria-selected="false" data-tab="plans" data-help-target="tab-plans">Plans</button>
                     </nav>
                     <div class="panel-header-actions">
-                        <button class="panel-help-btn" aria-label="Reference help">?</button>
-                        <button class="panel-settings-btn" aria-label="Reference settings">⚙</button>
+                        <button class="panel-help-btn" aria-label="Reference help" data-help-target="reference-help">?</button>
+                        <button class="panel-settings-btn" aria-label="Reference settings" data-help-target="reference-settings">⚙</button>
                     </div>
                 </header>
                 <div id="info-tab" class="tab-content active" role="tabpanel"></div>
@@ -98,17 +98,17 @@
 
         </div>
 
-        <div id="workspace-resize-handle" aria-hidden="true"></div>
+        <div id="workspace-resize-handle" aria-hidden="true" data-help-target="resize-handles"></div>
 
         <section id="reader">
             <header id="reader-header">
-                <button id="split-toggle-btn" aria-label="Split reader" title="Split reader">
+                <button id="split-toggle-btn" data-help-target="split-reader" aria-label="Split reader" title="Split reader">
                     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <rect x="1.5" y="2.5" width="7" height="15" rx="1"/>
                         <rect x="11.5" y="2.5" width="7" height="15" rx="1"/>
                     </svg>
                 </button>
-                <button id="verse-lines-btn" aria-label="One verse per line" aria-pressed="false" title="One verse per line">
+                <button id="verse-lines-btn" data-help-target="verse-lines" aria-label="One verse per line" aria-pressed="false" title="One verse per line">
                     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
                         <line x1="2.5" y1="4.5" x2="3.5" y2="4.5"/><line x1="6.5" y1="4.5" x2="17.5" y2="4.5"/>
                         <line x1="2.5" y1="10" x2="3.5" y2="10"/><line x1="6.5" y1="10" x2="15" y2="10"/>
@@ -116,7 +116,7 @@
                     </svg>
                 </button>
                 <div class="reader-header-spacer"></div>
-                <button id="markup-btn" aria-label="Markup tools" title="Markup tools">
+                <button id="markup-btn" data-help-target="markup-pen" aria-label="Markup tools" title="Markup tools">
                     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M13.5 3.5l3 3L7 16H4v-3L13.5 3.5z"/>
                         <path d="M11 6l3 3"/>
@@ -140,27 +140,27 @@
                         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5"/></svg>
                     </button>
                 </div>
-                <button id="bookmark-btn" aria-label="Bookmark verse">☆</button>
-                <button id="reader-help-btn" aria-label="Reader help">?</button>
-                <button id="reader-settings-btn" aria-label="Reader settings">⚙</button>
+                <button id="bookmark-btn" data-help-target="bookmark" aria-label="Bookmark verse">☆</button>
+                <button id="reader-help-btn" data-help-target="reader-help" aria-label="Reader help">?</button>
+                <button id="reader-settings-btn" data-help-target="reader-settings" aria-label="Reader settings">⚙</button>
             </header>
             <div id="reader-body">
                 <div class="reader-pane active" id="reader-pane-a">
                     <div class="pane-nav">
-                        <button class="pane-book-btn" title="Choose book, chapter, or translation"><span class="translation-label">KJV</span> <span class="pane-location"></span></button>
-                        <button class="pane-prev" aria-label="Previous chapter" title="Previous chapter">‹</button>
-                        <button class="pane-next" aria-label="Next chapter" title="Next chapter">›</button>
+                        <button class="pane-book-btn" data-help-target="book-button" title="Choose book, chapter, or translation"><span class="translation-label">KJV</span> <span class="pane-location"></span></button>
+                        <button class="pane-prev" data-help-target="chapter-arrows" aria-label="Previous chapter" title="Previous chapter">‹</button>
+                        <button class="pane-next" data-help-target="chapter-arrows" aria-label="Next chapter" title="Next chapter">›</button>
                     </div>
                     <div class="pane-content">
                         <div class="scripture-text"></div>
                     </div>
                 </div>
-                <div id="reader-split-handle" class="hidden" aria-hidden="true"></div>
+                <div id="reader-split-handle" class="hidden" aria-hidden="true" data-help-target="resize-handles"></div>
                 <div class="reader-pane hidden" id="reader-pane-b">
                     <div class="pane-nav">
-                        <button class="pane-book-btn" title="Choose book, chapter, or translation"><span class="translation-label">KJV</span> <span class="pane-location"></span></button>
-                        <button class="pane-prev" aria-label="Previous chapter" title="Previous chapter">‹</button>
-                        <button class="pane-next" aria-label="Next chapter" title="Next chapter">›</button>
+                        <button class="pane-book-btn" data-help-target="book-button" title="Choose book, chapter, or translation"><span class="translation-label">KJV</span> <span class="pane-location"></span></button>
+                        <button class="pane-prev" data-help-target="chapter-arrows" aria-label="Previous chapter" title="Previous chapter">‹</button>
+                        <button class="pane-next" data-help-target="chapter-arrows" aria-label="Next chapter" title="Next chapter">›</button>
                     </div>
                     <div class="pane-content">
                         <div class="scripture-text"></div>

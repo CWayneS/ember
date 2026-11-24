@@ -582,3 +582,31 @@ TODO step 4's three Help items, built to `docs/Help_Guide_Spec.md` (Items 1–9;
 - **Tests:** `tests/verify.py help` (new) checks each popover's link and section, every `data-help-section` and in-manual link against the headings, the contents order and nesting, the section boundaries, rendering (the 6-row prefix table, `\*`, HTML and unsupported links as text, a `map:` link), the 24 px margin and the 70ch cap, `location.hash` untouched, closing three ways with the selection, scroll and reference tab unchanged, Escape with the book picker or search results underneath, Help in search (`bookm`, `love`, `bdb`, `h:bdb`, `h:ketiv`, the limits, clicking a result), a failed load and Retry, and the guide offline after one online load. No `innerHTML` in `help-guide.js`.
 
 All fourteen suites pass.
+
+## 22. ADDENDUM — 2026-11-23, the app map
+
+Item 10 of `docs/Help_Guide_Spec.md`, built right after the guide at Wayne's request.
+
+- **`js/help-map.js`** (new): `createHelpMap({ scrollToSection, closeGuide })` returns the map column and `onOpen`, `onClose`, `showTarget`, and the drawer controls. `TARGETS` is the target table: 30 names, each with `label`, `section`, `anchor`, `region` and, for controls that are sometimes hidden, `when`.
+- **Drawing:** the regions (header, plan bar when shown, notes panel, reference panel, reader) are measured with `getBoundingClientRect()` and drawn into one SVG whose `viewBox` is the window, so the map's coordinates are the page's own. The panes, tab bars and handles are drawn faintly inside, and every visible target as a faint clickable outline with its label as a tooltip. A `ResizeObserver` on the document redraws it, one redraw per frame, while the guide is open.
+- **`js/help-guide.js`:** the map is the frame's third column; a map link calls `showTarget` instead of scrolling; the header has a Map button (narrow windows only); Escape closes the drawer before the guide.
+- **`index.html`, `js/notes.js`, `js/translation-shelf.js`:** `data-help-target` on every control in the table. Repeated controls (both panes' book buttons and arrows, each note's tag field and attach button, the three resize handles) share a name, and the map highlights every visible one.
+- **`USER_MANUAL.md`:** 24 map links where the text names a control, and a sentence in "Getting help" on the map.
+- **`sw.js`:** `help-map.js` precached; `CACHE_NAME` → `ember-v36`.
+- **Departures from the spec:**
+  - **A ring** is drawn around each highlighted control. At map scale a button is a few pixels across, so the highlighted rectangle alone was easy to miss.
+  - **The narrow-window drawer** sits in the body's grid cell at its right edge, rather than being positioned over it.
+  - **The key's copy** of a control also drops the `hidden`, `active` and `selected` classes, so a hidden control's copy (the attach button) still shows its content.
+- **Tests (`tests/verify.py help`, `help_map`):** every `map:` title names a target, and every target's section is a heading and its anchor exists. Every `data-help-target` in `index.html` and in JS has an entry, and every entry is used. The highlight lines up with the real control within 3 px:
+  - side by side and stacked
+  - Split Reader on and off
+  - after dragging a resize handle
+
+  A map link doesn't scroll the guide. With no study open, + Add Note shows its anchor dashed, the note, and no Show me. The key's ☆ is a copy without ids, and inert. Clicking a target and the reference region scrolls the guide. Show me outlines and focuses ☆ and changes nothing else. Resizing redraws the map. Below 1100 px:
+  - the Map button appears
+  - a map link opens the drawer
+  - Escape closes the drawer, then the guide
+
+  Under reduced motion nothing pulses and Show me is steady. There's no `innerHTML` in `help-map.js`.
+
+help, popovers, smoke, notes, sw, controls, export and translations pass; the other suites don't touch anything this changed.

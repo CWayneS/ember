@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v35'; // bumped: help guide (help-guide.js, USER_MANUAL.md, help.js, search.js, index.html, style.css)
+const CACHE_NAME = 'ember-v36'; // bumped: app map (help-map.js, help-guide.js, USER_MANUAL.md, index.html, notes.js, translation-shelf.js, style.css)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:
@@ -38,6 +38,7 @@ const PRECACHE = [
     './js/readable-export.js',
     './js/help.js',
     './js/help-guide.js',
+    './js/help-map.js',
     './js/language.js',
     './js/manuscript-variants.js',
     './js/markups.js',

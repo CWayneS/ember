@@ -68,6 +68,7 @@ ember/
 │   ├── reader-settings.js, notes-settings.js, reference-settings.js
 │   ├── help.js                  # Contextual help popovers
 │   ├── help-guide.js            # The help guide: USER_MANUAL.md rendered in the app
+│   ├── help-map.js              # The app map beside the guide
 │   ├── popover-registry.js      # Shared popover open/close coordination
 │   ├── dialogs.js               # Shared confirm / prompt modal dialogs
 │   ├── storage-worker.js        # Web Worker for DB writes
@@ -185,7 +186,8 @@ There is no unit test suite; the app is exercised live instead. `tests/verify.py
 pip install playwright && playwright install chromium
 
 python3 tests/verify.py popovers     # every help/settings popover, bookmark prompt + dropdown
-python3 tests/verify.py help         # help guide: popover links, sections, rendering, closing, Help in search, offline
+python3 tests/verify.py help         # help guide: popover links, sections, rendering, closing, Help in search, offline,
+                                     #   and the app map: alignment in every layout, hidden targets, Show me, narrow drawer
 python3 tests/verify.py smoke        # notes, tags, bookmarks, markups, reference tabs, search,
                                      #   plans, template bar, study templates, split view
 python3 tests/verify.py indicators   # note/bookmark dots on a titled Psalm (verse=0 row)
@@ -266,7 +268,7 @@ STEPBible-Data's license permits inclusion in software without requesting permis
 | `docs/Build_N_Spec.md` (per build) | Per-build specifications |
 | `docs/Psalm_Title_Fix_Spec.md`, `docs/Grammar_Decode_Spec_DRAFT.md`, `docs/Language_Panel_Word_Inspector_Spec.md`, `docs/Hebrew_Word_Anatomy_Spec.md` | Standalone feature specs between numbered builds |
 | `docs/Translation_Addons_Spec.md` | Every translation but KJV removable, Darby moved to a downloadable add-on, and a Translations shelf (built; see `docs/BUILD_6.1_ACTUAL_STATE.md` §18) |
-| `docs/Help_Guide_Spec.md` | The in-app help guide: `USER_MANUAL.md` rendered in the app, current help popovers, Help in search (built; see `docs/BUILD_6.1_ACTUAL_STATE.md` §21), and a later app map (not built yet) |
+| `docs/Help_Guide_Spec.md` | The in-app help guide: `USER_MANUAL.md` rendered in the app, current help popovers, Help in search (built; see `docs/BUILD_6.1_ACTUAL_STATE.md` §21), and the app map (all built; see `docs/BUILD_6.1_ACTUAL_STATE.md` §21–22) |
 | `docs/Hebrew_Lexicon_Spec.md`, `docs/HEBREW_LEXICON_REPORT.md` | The Hebrew lexicon's spec, and the build's record: data checks, sizes, and every decision that changed the spec |
 | `docs/HEBREW_ANATOMY_DATA_REPORT.md` | The Hebrew Word Anatomy build's record: the language.db rebuild (sources, checks, sizes) and every decision that changed the spec |
 | `docs/BUILD_N_ACTUAL_STATE.md` (per build) | Ground-truth audit of each build's shipped code, derived from source, not planning docs. Latest: `docs/BUILD_6.1_ACTUAL_STATE.md` (post-Build-6 Language tab rework + September 2026 architecture-review pass; its §12–13 addenda cover the November 2026 offline, stress-test and long-list work, §14 the Hebrew lexicon) |

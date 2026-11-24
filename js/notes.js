@@ -69,6 +69,7 @@ function renderStudyDocument(studyId) {
     const exportBtn = document.createElement('button');
     exportBtn.type = 'button';
     exportBtn.className = 'study-export-btn';
+    exportBtn.dataset.helpTarget = 'export-study';
     exportBtn.textContent = 'Export';
     exportBtn.title = 'Save this study as a page to read, print or share';
     exportBtn.addEventListener('click', () => exportReadableCopy({ studyId, button: exportBtn }));
@@ -180,6 +181,7 @@ function buildAnchorsArea(note) {
 
     const attachBtn     = document.createElement('button');
     attachBtn.className = 'note-block-attach-btn hidden';
+    attachBtn.dataset.helpTarget = 'attach-verse';
     attachBtn.addEventListener('click', () => {
         if (currentVerseIds.length === 0) return;
         const verseStart = Math.min(...currentVerseIds);
@@ -204,6 +206,7 @@ function buildTagsArea(note) {
     const input     = document.createElement('input');
     input.type      = 'text';
     input.className = 'note-block-tag-input';
+    input.dataset.helpTarget = 'tag-field';
     input.setAttribute('placeholder', 'Add tag…');
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && input.value.trim()) {
@@ -280,6 +283,7 @@ function buildDeleteButton(noteId, studyId) {
 function buildAddNoteButton(studyId) {
     const btn     = document.createElement('button');
     btn.className = 'add-note-btn';
+    btn.dataset.helpTarget = 'add-note';
     btn.textContent = '+ Add Note';
     btn.addEventListener('click', () => addNote(studyId));
     return btn;

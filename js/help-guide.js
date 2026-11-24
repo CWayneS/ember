@@ -12,6 +12,7 @@
 // running to the next heading of any level.
 
 import { closeAllPopovers } from './popover-registry.js';
+import { createHelpMap } from './help-map.js';
 
 const MANUAL_URL = './USER_MANUAL.md';
 
@@ -299,9 +300,9 @@ function renderInline(nodes, parent) {
     }
 }
 
-// #slug → scrolls the guide. https:// → a new tab. A "map:" title marks a map
-// link (the app map, docs/Help_Guide_Spec.md Item 10); until the map is
-// built it's an ordinary in-guide link. Any other link is shown as its
+// #slug → scrolls the guide. https:// → a new tab. A "map:" title makes it a
+// map link: in the guide it highlights that control on the app map
+// (help-map.js) instead of scrolling; on GitHub it stays an ordinary link. Any other link is shown as its
 // Markdown source, as plain text.
 function renderLink(node) {
     if (node.href.startsWith('#')) {
@@ -310,7 +311,11 @@ function renderLink(node) {
         link.href = `#${helpElementId(slug)}`;
         link.className = 'help-guide-link';
         link.dataset.helpSlug = slug;
-        if (node.title.startsWith('map:')) link.dataset.helpMap = node.title.slice(4);
+        if (node.title.startsWith('map:')) {
+            link.dataset.helpMap = node.title.slice(4);
+            link.classList.add('help-map-link');
+            link.title = 'Show where this is on the map';
+        }
         renderInline(node.children, link);
         return link;
     }
@@ -424,6 +429,7 @@ function renderContents(manual, onPick) {
 let _overlay = null;      // #help-guide
 let _body = null;         // the scrolling center column
 let _contents = null;     // the contents column
+let _map = null;          // the app map (help-map.js)
 let _rendered = false;
 let _returnFocus = null;
 let _fallbackFocus = null;
@@ -454,6 +460,7 @@ export function openHelpGuide(slug = '', options = {}) {
         _madeInert = [...document.body.children].filter(el => el !== _overlay && !el.inert);
         _madeInert.forEach(el => { el.inert = true; });
         window.addEventListener('keydown', onKeydown, true);
+        _map.onOpen();
     }
     _body.focus({ preventScroll: true });
     showContent(slug);
@@ -461,6 +468,7 @@ export function openHelpGuide(slug = '', options = {}) {
 
 export function closeHelpGuide() {
     if (!isHelpGuideOpen()) return;
+    _map.onClose();
     _overlay.classList.add('hidden');
     _madeInert.forEach(el => { el.inert = false; });
     _madeInert = [];
@@ -485,7 +493,8 @@ function onKeydown(e) {
     e.stopPropagation();
     if (e.key === 'Escape') {
         e.preventDefault();
-        closeHelpGuide();
+        if (_map.isDrawerOpen()) _map.closeDrawer();   // the map drawer first, then the guide
+        else closeHelpGuide();
     }
 }
 
@@ -513,7 +522,14 @@ function buildOverlay() {
     closeBtn.title = 'Close (Esc)';
     closeBtn.textContent = '✕';
     closeBtn.addEventListener('click', closeHelpGuide);
+    // In a window too narrow for three columns, the map is a drawer.
+    const mapBtn = document.createElement('button');
+    mapBtn.className = 'help-guide-map-btn';
+    mapBtn.textContent = 'Map';
+    mapBtn.setAttribute('aria-label', 'Show the app map');
+    mapBtn.addEventListener('click', () => _map.toggleDrawer());
     header.appendChild(title);
+    header.appendChild(mapBtn);
     header.appendChild(closeBtn);
 
     _contents = document.createElement('nav');
@@ -531,12 +547,15 @@ function buildOverlay() {
         const link = e.target.closest('a[data-help-slug]');
         if (!link) return;
         e.preventDefault();
-        scrollToSection(link.dataset.helpSlug);
+        if (link.dataset.helpMap) _map.showTarget(link.dataset.helpMap);
+        else scrollToSection(link.dataset.helpSlug);
     });
 
     frame.appendChild(header);
     frame.appendChild(_contents);
     frame.appendChild(_body);
+    _map = createHelpMap({ scrollToSection, closeGuide: closeHelpGuide });
+    frame.appendChild(_map.element);
     _overlay.appendChild(frame);
 
     // The margin around the frame is the backdrop: a click there closes.

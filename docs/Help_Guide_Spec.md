@@ -1,6 +1,6 @@
 # Ember Bible Study — Help Guide Spec
 
-**Status:** Drafted 2026-11-23. Updated 2026-11-23: the guide overlay now fills the window, and Item 10 (the app map) was added. Later on 2026-11-23: Wayne took the default on all four open questions (see Decisions), Item 1's manual fixes and Item 2's headings were made in `USER_MANUAL.md`, and the spec was corrected after checking it against the code. Items 3–9 were built the same day; what shipped and every departure from this spec is in `docs/BUILD_6.1_ACTUAL_STATE.md` §21.
+**Status:** Drafted 2026-11-23. Updated 2026-11-23: the guide overlay now fills the window, and Item 10 (the app map) was added. Later on 2026-11-23: Wayne took the default on all four open questions (see Decisions), Item 1's manual fixes and Item 2's headings were made in `USER_MANUAL.md`, and the spec was corrected after checking it against the code. Items 3–9 were built the same day; what shipped and every departure from this spec is in `docs/BUILD_6.1_ACTUAL_STATE.md` §21. Item 10, the app map, was built next, the same day, at Wayne's request (§22).
 **Ground rule:** where the code and this spec disagree, the code wins. Every "current state" claim below was checked against `index.html`, `js/help.js`, `js/search.js`, `js/popover-registry.js`, `sw.js` and `USER_MANUAL.md` at `a823fef` (2026-11-23). Check again before building.
 **Covers:** the three Help items in step 4 of `docs/TODO.md`: stale Help text, "More help", and the Strong's vs. BDB entry. Item 10, the app map, is a third column in the guide. It is deferred to its own TODO item.
 
@@ -218,7 +218,7 @@ Add a `help` scenario to `tests/verify.py`:
 
 ---
 
-## Item 10: The app map (Tier 2.5) — deferred to its own TODO item
+## Item 10: The app map (Tier 2.5) — built 2026-11-23 (`docs/BUILD_6.1_ACTUAL_STATE.md` §22)
 
 Built after the guide has shipped. Item 4's full-width layout already leaves room for it, so nothing in the guide gets reworked. When it's built, it also adds `./js/help-map.js` to `PRECACHE` and to CLAUDE.md's Project Structure, and adds this CLAUDE.md rule: *A new control the manual mentions gets a `data-help-target` and an entry in `help-map.js`'s target table.*
 

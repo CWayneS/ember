@@ -3676,7 +3676,7 @@ def help_sections_and_contents(app):
     for slug in ('marking-up-verses', 'bookmarks'):
         p.evaluate("window.__help.guide().then(m => m.openHelpGuide('reading-scripture'))")
         wait_guide_rendered(p)
-        p.click(f'#help-guide .help-guide-article a[data-help-slug="{slug}"]')
+        p.click(f'#help-guide .help-guide-article a[data-help-slug="{slug}"]:not([data-help-map])')
         p.wait_for_timeout(150)
         st = help_state(p)
         check(st['headingAtTop'] == f'help-{slug}' and st['current'] == slug, f'the #{slug} link scrolls to it ({st["headingAtTop"]})')
@@ -3718,13 +3718,13 @@ def help_rendering(app):
     check(r['star'], '\\* shows as * ("love* finds loved")')
     check('<b>x</b>' in r['testText'] and 'B' not in r['testElements'], f'HTML in the manual shows as text ({r["testElements"]})')
     check('(javascript:alert(1)' in r['testText'] and r['testElements'].count('A') == 1, 'a link to anything but #slug or https:// is plain text')
-    check(r['mapLink'], 'a "map:" link renders as a working in-guide link')
+    check(r['mapLink'], 'a "map:" link renders as a map link')
     check(all(abs(edge - 24) <= 1 for edge in r['frame']), f'the guide fills the window less a 24 px margin ({r["frame"]})')
     check(r['articleWidth'] <= r['maxWidth'] + 0.5 and r['maxWidth'] <= 75 * r['fontSize'] and r['bodyWidth'] > r['articleWidth'],
           f'the body text is capped at its measure ({r["articleWidth"]:.0f} ≤ {r["maxWidth"]:.0f} px)')
     check(r['noHash'], 'the guide never touches location.hash')
     p.keyboard.press('Escape')
-    for module in ('help-guide.js',):
+    for module in ('help-guide.js', 'help-map.js'):
         check('innerHTML' not in open(os.path.join(ROOT, 'js', module)).read(), f'{module} has no innerHTML')
 
 def help_closing_keeps_app(app):
@@ -3856,6 +3856,172 @@ def help_load_failure(browser):
     check(app.errors == [], f'load failure: no app console errors {app.errors[:3]}')
     ctx.close()
 
+# ---- the app map (docs/Help_Guide_Spec.md Item 10)
+def open_guide(p, slug=''):
+    p.evaluate(f"window.__help.guide().then(m => m.openHelpGuide('{slug}'))")
+    wait_guide_rendered(p)
+
+def click_map_link(p, name):
+    """Clicks the first map link for `name` without Playwright scrolling the body to it
+    (a map link never scrolls the guide, and the test checks that)."""
+    p.evaluate(f"document.querySelector('#help-guide a[data-help-map=\"{name}\"]').click()")
+    p.wait_for_timeout(150)
+
+def map_state(p, name):
+    return p.evaluate("""(name) => {
+        const svg = document.querySelector('#help-guide .help-map-svg');
+        const rects = [...svg.querySelectorAll(`.help-map-highlight[data-target="${name}"]`)].map(r =>
+            ['x', 'y', 'width', 'height'].map(a => +r.getAttribute(a)));
+        const real = [...document.querySelectorAll(`[data-help-target="${name}"]`)]
+            .filter(e => !e.closest('.hidden') && e.getBoundingClientRect().width > 0)
+            .map(e => { const b = e.getBoundingClientRect(); return [b.left, b.top, b.width, b.height]; });
+        const dashed = svg.querySelector('.help-map-dashed');
+        const key = document.querySelector('#help-guide .help-map-key');
+        return {
+            viewBox: svg.getAttribute('viewBox'),
+            rects, real,
+            dashed: dashed ? dashed.dataset.outlined : null,
+            keyLabel: key.querySelector('.help-map-key-label')?.textContent || '',
+            when: key.querySelector('.help-map-key-when')?.textContent || '',
+            showMe: !!key.querySelector('.help-map-show-me'),
+        };
+    }""", name)
+
+def lines_up(st, tolerance=3):
+    return (len(st['rects']) == len(st['real']) > 0 and
+            all(abs(a - b) <= tolerance for r, e in zip(st['rects'], st['real']) for a, b in zip(r, e)))
+
+def help_map(app):
+    p = app.page
+    info = p.evaluate("""async () => {
+        const guide = await window.__help.guide();
+        const { TARGETS } = await import('./js/help-map.js');
+        const manual = await guide.loadManual();
+        const slugs = new Set(manual.sections.map(s => s.slug));
+        const titles = [];
+        const visit = nodes => nodes.forEach(n => { if (n.type === 'link' && n.title.startsWith('map:')) titles.push(n.title.slice(4)); if (n.children) visit(n.children); });
+        manual.blocks.forEach(b => (b.inline ? [b.inline] : b.items || []).forEach(visit));
+        return {
+            titles,
+            names: Object.keys(TARGETS),
+            badSections: Object.entries(TARGETS).filter(([n, t]) => !slugs.has(t.section)).map(([n]) => n),
+            badAnchors: Object.entries(TARGETS).filter(([n, t]) => !document.querySelector(t.anchor)).map(([n]) => n),
+        };
+    }""")
+    names = set(info['names'])
+    unknown = sorted(set(t for t in info['titles'] if t not in names))
+    check(len(info['titles']) >= 20 and unknown == [], f'every map: title in the manual names a target ({len(info["titles"])} links; unknown {unknown})')
+    check(info['badSections'] == [], f'every target\'s section is a manual heading (bad: {info["badSections"]})')
+    check(info['badAnchors'] == [], f'every target\'s anchor is in the page (bad: {info["badAnchors"]})')
+    html = open(os.path.join(ROOT, 'index.html')).read()
+    js = ''.join(open(os.path.join(ROOT, 'js', f)).read() for f in os.listdir(os.path.join(ROOT, 'js')) if f.endswith('.js') and f != 'help-map.js')
+    used = set(re.findall(r'data-help-target="([^"]+)"', html)) | set(re.findall(r"helpTarget = '([^']+)'", js))
+    check(used - names == set() and len(used) >= 25, f'every data-help-target has a table entry (missing: {sorted(used - names)})')
+    check(names - used == set(), f'every table entry is on a real control (unused: {sorted(names - used)})')
+
+    # Layouts: the highlight lines up with the real control.
+    def check_lines_up(label, name='markup-pen'):
+        open_guide(p, 'reading-scripture')
+        top_before = help_state(p)['scrollTop']
+        click_map_link(p, name)
+        st = map_state(p, name)
+        check(lines_up(st), f'{label}: the {name} highlight lines up with the real control ({st["rects"]} vs {st["real"]})')
+        check(help_state(p)['scrollTop'] == top_before, f'{label}: a map link doesn\'t scroll the guide')
+        check(st['viewBox'] == f'0 0 {p.viewport_size["width"]} {p.viewport_size["height"]}', f'{label}: the map has the window\'s shape')
+        p.keyboard.press('Escape')
+    check_lines_up('side by side')
+    check_lines_up('side by side', 'resize-handles')
+    p.click('#layout-toggle-btn'); p.wait_for_timeout(200)
+    check_lines_up('stacked', 'tab-language')
+    p.click('#layout-toggle-btn'); p.wait_for_timeout(200)
+    p.click('#split-toggle-btn'); p.wait_for_timeout(300)
+    check_lines_up('split reader on', 'chapter-arrows')
+    p.click('#split-toggle-btn'); p.wait_for_timeout(300)
+    check_lines_up('split reader off', 'chapter-arrows')
+    handle = p.locator('#workspace-resize-handle').bounding_box()
+    p.mouse.move(handle['x'] + 2, handle['y'] + 200); p.mouse.down()
+    p.mouse.move(handle['x'] - 150, handle['y'] + 200, steps=5); p.mouse.up()
+    p.wait_for_timeout(200)
+    check_lines_up('after dragging a resize handle', 'tab-plans')
+
+    # Hidden target: no study open, so + Add Note isn't on screen.
+    open_guide(p, 'taking-notes')
+    click_map_link(p, 'add-note')
+    st = map_state(p, 'add-note')
+    check(st['rects'] == [] and st['dashed'] == 'anchor' and 'open study' in st['when'] and not st['showMe'],
+          f'hidden target: the anchor is outlined dashed, the when note shows, no Show me ({st["dashed"]}, {st["when"][:30]!r})')
+    # The key copies the real control: ☆, no ids, inert.
+    click_map_link(p, 'bookmark')
+    key = p.evaluate("""() => {
+        const icon = document.querySelector('#help-guide .help-map-key-icon > *');
+        return { text: icon.textContent, real: document.getElementById('bookmark-btn').textContent,
+                 ids: icon.querySelectorAll('[id]').length + (icon.id ? 1 : 0), inert: icon.inert,
+                 hidden: icon.getAttribute('aria-hidden') };
+    }""")
+    check(key['text'] == key['real'] == '☆' and key['ids'] == 0 and key['inert'] and key['hidden'] == 'true',
+          f'the key shows a copy of the real control, without ids, inert ({key})')
+    # Map clicks.
+    p.evaluate("""document.querySelector('#help-guide .help-map-target[data-target="tab-related"]')
+                    .dispatchEvent(new MouseEvent('click', { bubbles: true }))""")
+    p.wait_for_timeout(150)
+    check(help_state(p)['headingAtTop'] == 'help-related' and map_state(p, 'tab-related')['rects'],
+          'clicking a target on the map scrolls the guide to its section and highlights it')
+    p.evaluate("""document.querySelector('#help-guide .help-map-region[data-region="reference"] rect')
+                    .dispatchEvent(new MouseEvent('click', { bubbles: true }))""")
+    p.wait_for_timeout(150)
+    check(help_state(p)['headingAtTop'] == 'help-the-reference-panel', 'clicking the reference panel region scrolls to "The Reference Panel"')
+    p.keyboard.press('Escape')
+
+    # Show me: closes the guide, outlines the real control, changes nothing.
+    app.navigate(1, 1)
+    app.select_verse(1001003)
+    before = app_state(p)
+    open_guide(p, 'bookmarks')
+    click_map_link(p, 'bookmark')
+    p.click('#help-guide .help-map-show-me')
+    p.wait_for_timeout(100)
+    shown = p.evaluate("""() => ({ cls: document.getElementById('bookmark-btn').className,
+                                    focus: document.activeElement?.id })""")
+    check(not help_state(p)['open'] and 'help-show-me' in shown['cls'] and shown['focus'] == 'bookmark-btn',
+          f'Show me closes the guide, outlines the real control and focuses it ({shown})')
+    check(app_state(p) == before, 'Show me changes nothing: selection, scroll, reference tab')
+    p.wait_for_timeout(1700)
+    check('help-show-me' not in p.evaluate("document.getElementById('bookmark-btn').className"), 'the Show me outline goes away')
+
+    # Resize while open; narrow windows use a drawer.
+    open_guide(p, 'reading-scripture')
+    p.set_viewport_size({'width': 1300, 'height': 900}); p.wait_for_timeout(300)
+    check(map_state(p, 'x')['viewBox'] == '0 0 1300 900', 'resizing the window while the guide is open redraws the map')
+    check(not p.is_visible('#help-guide .help-guide-map-btn'), 'wide window: no Map button, the map is a column')
+    p.set_viewport_size({'width': 1000, 'height': 800}); p.wait_for_timeout(300)
+    check(p.is_visible('#help-guide .help-guide-map-btn') and not p.is_visible('#help-guide .help-map'),
+          'narrow window: the map column collapses behind a Map button')
+    click_map_link(p, 'bookmark')
+    st = map_state(p, 'bookmark')
+    check(p.is_visible('#help-guide .help-map') and lines_up(st), 'narrow window: a map link opens the drawer, highlight lined up')
+    p.keyboard.press('Escape')
+    check(help_state(p)['open'] and not p.is_visible('#help-guide .help-map'), 'Escape closes the drawer first')
+    p.click('#help-guide .help-guide-map-btn')
+    check(p.is_visible('#help-guide .help-map'), 'the Map button opens the drawer')
+    p.click('#help-guide .help-map-drawer-close')
+    check(not p.is_visible('#help-guide .help-map'), 'the drawer\'s ✕ closes it')
+    p.keyboard.press('Escape')
+    check(not help_state(p)['open'], 'then Escape closes the guide')
+    p.set_viewport_size({'width': 1600, 'height': 1000}); p.wait_for_timeout(300)
+
+    # Reduced motion: no animation.
+    p.emulate_media(reduced_motion='reduce')
+    open_guide(p, 'bookmarks')
+    click_map_link(p, 'bookmark')
+    animations = p.evaluate("""() => [...document.querySelectorAll('#help-guide .pulse')].map(e => getComputedStyle(e).animationName)""")
+    check(animations and all(a == 'none' for a in animations), f'reduced motion: the map highlight doesn\'t pulse ({animations})')
+    p.click('#help-guide .help-map-show-me')
+    p.wait_for_timeout(100)
+    cls = p.evaluate("document.getElementById('bookmark-btn').className")
+    check('help-show-me-steady' in cls and 'help-show-me ' not in cls + ' ', f'reduced motion: Show me is a steady outline ({cls})')
+    p.emulate_media(reduced_motion='no-preference')
+    p.wait_for_timeout(2100)
+
 def scenario_help(browser):
     ctx = browser.new_context(viewport={'width': 1600, 'height': 1000})
     ctx.add_init_script(HELP_JS)
@@ -3866,6 +4032,7 @@ def scenario_help(browser):
     help_rendering(app)
     help_closing_keeps_app(app)
     help_search(app)
+    help_map(app)
     check(app.errors == [], f'no console errors {app.errors[:3]}')
     ctx.close()
     help_load_failure(browser)

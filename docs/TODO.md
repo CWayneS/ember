@@ -32,7 +32,7 @@ Restore bundled plans done 2026-11-23: the Plans tab offers "Restore N bundled p
 
 Help guide done 2026-11-23: `USER_MANUAL.md` is the in-app guide, every help popover links into it, the popovers' copy is current, Strong's vs. BDB has its own heading, and Help is searchable (`docs/Help_Guide_Spec.md`, `docs/BUILD_6.1_ACTUAL_STATE.md` §21).
 
-- **The app map** beside the guide: a wireframe of the live layout, links in the manual that point at controls on it, and Show me. Its own item now that the guide has shipped. See Item 10 of `docs/Help_Guide_Spec.md`.
+App map done 2026-11-23: a wireframe of the live layout beside the guide, map links in the manual, and Show me (`docs/BUILD_6.1_ACTUAL_STATE.md` §22). The Help items are finished.
 
 **Testing**
 

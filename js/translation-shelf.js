@@ -34,6 +34,7 @@ export function getTranslationShelfButton() {
     _button.type        = 'button';
     _button.id          = 'translation-shelf-btn';
     _button.className   = 'translation-btn translation-shelf-btn';
+    _button.dataset.helpTarget = 'translation-shelf';
     _button.textContent = '+';
     _button.title       = 'Translations';
     _button.setAttribute('aria-label', 'Translations');
