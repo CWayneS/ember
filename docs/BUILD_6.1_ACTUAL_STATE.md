@@ -578,7 +578,7 @@ TODO step 4's three Help items, built to `docs/Help_Guide_Spec.md` (Items 1–9;
   - **A Help result's smaller line** is the section's ancestor headings ("The Reference Panel › Language" for "The Hebrew lexicon: Strong's and BDB"), not its own heading again.
   - **A link the renderer doesn't support** (not `#slug` or `https://`) shows as its Markdown source, as plain text.
   - **`####` contents entries** are always shown, indented under their `###`.
-  - **`Help_System_Design.md`** is a project document outside this repository and wasn't updated here.
+  - **`Help_System_Design.md`** wasn't in the repository when the guide was built. It was added on GitHub afterwards (`f906999`), and its status was updated then.
 - **Tests:** `tests/verify.py help` (new) checks each popover's link and section, every `data-help-section` and in-manual link against the headings, the contents order and nesting, the section boundaries, rendering (the 6-row prefix table, `\*`, HTML and unsupported links as text, a `map:` link), the 24 px margin and the 70ch cap, `location.hash` untouched, closing three ways with the selection, scroll and reference tab unchanged, Escape with the book picker or search results underneath, Help in search (`bookm`, `love`, `bdb`, `h:bdb`, `h:ketiv`, the limits, clicking a result), a failed load and Retry, and the guide offline after one online load. No `innerHTML` in `help-guide.js`.
 
 All fourteen suites pass.
