@@ -174,7 +174,7 @@ Serve the project root with any static file server:
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000` in a Chromium-based browser. On first visit, the core database and translations load before the app starts, and `language.db` and `lexicon-hebrew.db` follow in the background just after. All of them are kept locally (OPFS) for later launches.
+Open `http://localhost:8000` in a Chromium-based browser. On first visit, the core database and translations load before the app starts, and `language.db` and `lexicon-hebrew.db` follow in the background just after. All of them are kept locally (OPFS) for later launches. In a browser that can't write OPFS, `core.db` and the translations are kept in IndexedDB instead; `language.db` and `lexicon-hebrew.db` are then fetched each session and aren't available offline.
 
 To install as a PWA, use your browser's install option (usually in the address bar or menu). The app will open in its own window without browser chrome.
 

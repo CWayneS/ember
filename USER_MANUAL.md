@@ -340,7 +340,7 @@ Each panel has a **⚙** button in its header for that panel's own settings: the
 
 ## Your Data
 
-All your notes, tags, studies, bookmarks, and markups are stored locally on your device in your browser's storage (OPFS when available, IndexedDB as a fallback). Nothing leaves your device.
+All your notes, tags, studies, bookmarks, and markups are stored locally on your device in your browser's storage (OPFS when available, IndexedDB as a fallback). Your installed translations are kept the same way, so the Bible text works offline in either. Nothing leaves your device.
 
 No account is required. There is no cloud sync — if you use Ember on more than one device, use Export/Restore under **Settings** to carry your data between them.
 

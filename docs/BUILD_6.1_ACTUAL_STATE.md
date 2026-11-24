@@ -610,3 +610,70 @@ Item 10 of `docs/Help_Guide_Spec.md`, built right after the guide at Wayne's req
   Under reduced motion nothing pulses and Show me is steady. There's no `innerHTML` in `help-map.js`.
 
 help, popovers, smoke, notes, sw, controls, export and translations pass; the other suites don't touch anything this changed.
+
+---
+
+## 23. ADDENDUM — 2026-11-23, without full OPFS
+
+The OPFS → IndexedDB fallback test from "Deferred / Related" in `Offline_Language_And_Stress_Test_Spec.md`, then the fixes Wayne chose from it. This confirms §11's unverified note that restore fails without `createWritable()`, which is now fixed. It replaces the "Without OPFS" paragraph of `OFFLINE_LANGUAGE_REPORT.md` §2 for translations only.
+
+**What the test found first.** Three modes were shimmed into the page and into the storage worker: no OPFS; OPFS without `createWritable` (older Safari); and `getDirectory` refused (some private modes). In every mode, notes saved to IndexedDB, survived reloads and loaded offline. Five things didn't work:
+
+- **Offline, the reader was empty.** No translation opened, in all three modes.
+- **Restore failed** without `createWritable` and when `getDirectory` was refused. The user's data was left as it was.
+- **Add translation failed** without `createWritable`.
+- **Every online launch downloaded the translations again:** 39 MB, or 78 MB without `createWritable`.
+- **Smaller faults:**
+  - A wrong "could not be fetched" warning.
+  - A false "Seeded 5" log.
+  - 0-byte files left in OPFS.
+  - `console.error`s.
+
+**`js/db.js`**
+
+- **Where translations are kept.** `getTranslationStore()` picks between two stores that answer the same calls by filename: `has`, `read`, `write`, `remove`, `list` and `sha256`.
+  - `OPFS_TRANSLATION_STORE` is the old behaviour.
+  - `INDEXEDDB_TRANSLATION_STORE` uses its own database, `EmberTranslations` v1. Its `files` store holds each file as an ArrayBuffer, and its `sha256` store holds each file's hash. A write is one transaction, so a file that is there is whole. The hash is stored beside the file, so the update check never reads the file itself.
+  - IndexedDB is used whenever `canWriteOpfs()` is false. That check requires `getDirectory` and `createWritable` both to exist, and `getDirectory` to resolve. It is asked once per session.
+  - It's a separate database because the storage worker and `loadFromStorage()` open `ScriptureStudy` at version 1. A new object store there would need version 2.
+  - With neither store available, each session fetches the files over the network, as before.
+- **The store is used by every translation path:**
+  - `seedTranslations()`: download and store are now separate steps with separate messages. "Installing translations… n of m" counts only the missing files.
+  - `removeOrphanTranslationFiles()`
+  - `loadTranslationBuffer()`
+  - `installTranslationBytes()`, which Add uses
+  - `removeTranslation()`
+  - The update check. `runDataUpdates()` checks translations through the store. `language.db` and `lexicon-hebrew.db` are checked only when they're in OPFS.
+- **The reference downloads use `canWriteOpfs()`,** which replaces `canDownloadToOpfs()`. When `getDirectory` is refused, they no longer attempt an OPFS download that would fail.
+- **`writeRestoredCoreDb()`** writes to OPFS when `canWriteOpfs()` is true, and to IndexedDB otherwise, which is where the worker's saves go too.
+  - It refuses if a non-empty OPFS `core.db` is visible, because `loadFromStorage()` would read that file over the restored copy.
+  - Its IndexedDB write now closes the connection and rejects on an abort.
+
+**`js/storage-worker.js`:** OPFS is used only if `createWritable` exists. Before this, every save left an empty OPFS `core.db` behind first.
+
+**Not changed:** `language.db` and `lexicon-hebrew.db` still aren't offline without writable OPFS. They are 68 MB together, and that wasn't part of this choice.
+
+**`USER_MANUAL.md`** ("Your Data"), **`README.md`** and **`FEATURE_INVENTORY.md`** (50d, 50e, 188, 188a, 233d) are updated. **`sw.js`:** `CACHE_NAME` → `ember-v37`.
+
+**Tests (`tests/verify.py fallback`, new):**
+- **How the modes are shimmed:**
+  - Each mode goes into the page by an init script, and into the worker by prepending it to `storage-worker.js`.
+  - The real `getDirectory` is kept as `__realGetDirectory`, so the test can still look at OPFS.
+- **Checked in each mode:**
+  - The five default translations are in IndexedDB, with the catalog's SHA-256.
+  - `core.db` is saved to IndexedDB, and a save survives a reload.
+  - A later launch downloads no translation.
+  - Restore replaces the data.
+  - Add works, and an added translation opens after a reload without downloading again.
+  - Remove deletes the file.
+  - A changed ASV is replaced in IndexedDB, and is not fetched again.
+  - Nothing at all is written to OPFS.
+  - Offline, every translation opens and the updated ASV text shows.
+  - There are no console errors.
+- **Only without `createWritable`:** a restore is refused while a non-empty OPFS `core.db` is there, and the data stays as it was.
+- **In Firefox** (`EMBER_BROWSER=firefox`), the service worker is blocked and the offline phase is skipped. Firefox serves the worker script from the service worker's cache, out of `ctx.route`'s reach, and can't reload a routed page offline. Everything else passes.
+
+**Known limit:** if a browser later gains `createWritable`, it switches to the OPFS store. Its translations then download again into OPFS, and the IndexedDB copies (about 40 MB) stay behind unused. `core.db` moves by itself: the OPFS copy is empty, so it loads from IndexedDB, and the next save writes to OPFS.
+
+Fallback passes in Chromium and Firefox. translations, updates, storage, offline, lexicon, sw, smoke and help pass in Chromium.
+

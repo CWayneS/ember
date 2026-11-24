@@ -36,7 +36,8 @@ App map done 2026-11-23: a wireframe of the live layout beside the guide, map li
 
 **Testing**
 
-- **OPFS → IndexedDB fallback test**, including where translations and `language.db` live without OPFS, and Safari's missing `createWritable()` on restore. From "Deferred / Related" in `docs/Offline_Language_And_Stress_Test_Spec.md`; see also `docs/BUILD_6.1_ACTUAL_STATE.md` §11 and `docs/OFFLINE_LANGUAGE_REPORT.md` §2.
+OPFS → IndexedDB fallback done 2026-11-23: without OPFS, without `createWritable`, or with OPFS refused, `core.db` and the translations are kept in IndexedDB, and restore, Add, Remove, updates and offline reading all work (`python3 tests/verify.py fallback`, `docs/BUILD_6.1_ACTUAL_STATE.md` §23). `language.db` and the Hebrew lexicon are still online-only there.
+
 - **On Wayne's install:**
   - **Storage persistence.** Run `await navigator.storage.persisted()` in the installed app and in a normal Chrome tab, and note each result here. A real grant has never been tested, because headless Chromium always declines, so seeing Backup & Restore switch to its "has agreed" wording would be the first real confirmation. Background: `docs/OFFLINE_LANGUAGE_REPORT.md` §5.
   - **The Hebrew lexicon in your own Firefox profile.** It was checked in Playwright's Firefox (H7307, H2617, H1254, H2219, H0114). In your browser, open one Hebrew Lexicon offline after it has downloaded once.

@@ -156,90 +156,71 @@ function getManifestRows() {
     return queryAll(db, 'SELECT id, filename FROM translations ORDER BY id');
 }
 
-// For every manifest row: fetch the file from ./data/translations/ into OPFS
-// under translations/{filename} if it isn't there and whole. On a first install
-// that's the default set; afterwards it's a fast no-op, except for a row a
-// restored backup brought that this machine lacks, which arrives here on the
-// next online boot. If OPFS is unavailable, openTranslationHandles falls back
-// to network fetch.
+// For every manifest row: download the file from ./data/translations/ into the
+// translation store if it isn't there and whole. On a first install that's the
+// default set; afterwards it's a fast no-op, except for a row a restored backup
+// brought that this machine lacks, which arrives here on the next online boot.
+// With no store at all, openTranslationHandles fetches each file per session.
 async function seedTranslations() {
-    if (!('storage' in navigator && 'getDirectory' in navigator.storage)) {
-        return;
-    }
+    const store = await getTranslationStore();
+    if (!store) return;
 
-    let transDir;
-    try {
-        const root = await navigator.storage.getDirectory();
-        transDir = await root.getDirectoryHandle('translations', { create: true });
-    } catch (e) {
-        console.error('seedTranslations: cannot create translations/ in OPFS:', e);
-        return;
+    const missing = [];
+    for (const { filename } of getManifestRows()) {
+        if (!await store.has(filename).catch(() => false)) missing.push(filename);
     }
-
-    const rows = getManifestRows();
 
     const loadingEl = document.getElementById('loading');
-    let seeded = 0;
-
-    for (const { filename } of rows) {
-        // Skip if already in OPFS and whole. A tab closed mid-seed leaves an empty
-        // file behind (see getCompleteOpfsFile), which seeds again here.
-        try {
-            const existing = await transDir.getFileHandle(filename);
-            if (await isCompleteSqliteFile(await existing.getFile())) continue;
-        } catch (_) {}
-
-        // Not yet seeded — fetch and write. Offline, it waits for an online boot;
-        // until then the translation is hidden (see getTranslations()).
+    let installed = 0;
+    for (const [index, filename] of missing.entries()) {
+        // Offline, it waits for an online boot; until then the translation is
+        // hidden (see getTranslations()).
         if (navigator.onLine === false) {
             console.warn(`seedTranslations: offline, ${filename} will download on the next online boot`);
             continue;
         }
-        seeded++;
         if (loadingEl) {
-            loadingEl.textContent = `Installing translations… ${seeded} of ${rows.length}`;
+            loadingEl.textContent = `Installing translations… ${index + 1} of ${missing.length}`;
         }
 
+        let bytes;
         try {
-            const response = await fetch(`./data/translations/${filename}`, { cache: 'no-cache' });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const buffer   = await response.arrayBuffer();
-            const handle   = await transDir.getFileHandle(filename, { create: true });
-            const writable = await handle.createWritable();
-            await writable.write(buffer);
-            await writable.close();
-            forgetInstalledFile(`translations/${filename}`);
+            bytes = await fetchCheckedBytes(`./data/translations/${filename}`);
         } catch (e) {
             // A failed fetch (TypeError) is no connection, an expected state:
             // navigator.onLine can still say true then. It downloads next boot.
             if (e instanceof TypeError) {
                 console.warn(`seedTranslations: ${filename} could not be fetched, will try on the next boot:`, e.message);
             } else {
-                console.error(`seedTranslations: failed to seed ${filename}:`, e);
+                console.error(`seedTranslations: failed to download ${filename}:`, e);
             }
+            continue;
+        }
+        try {
+            await store.write(filename, bytes);
+            installed++;
+        } catch (e) {
+            // Quota, most likely. openTranslationHandles fetches it for this session.
+            console.warn(`seedTranslations: ${filename} could not be stored (${store.name}), will try on the next boot:`, e);
         }
     }
 
-    if (seeded > 0) {
-        console.log(`Seeded ${seeded} translation file(s) into OPFS.`);
+    if (installed > 0) {
+        console.log(`Installed ${installed} translation file(s) (${store.name}).`);
     }
 }
 
-// Any .db file in OPFS translations/ with no manifest row is deleted: the
+// Any .db file in the translation store with no manifest row is deleted: the
 // leftover of a Remove interrupted between its manifest and file steps. Other
 // names (a browser's .crswap, say) are left alone.
 async function removeOrphanTranslationFiles() {
-    const transDir = await getTranslationsDir();
-    if (!transDir) return;
+    const store = await getTranslationStore();
+    if (!store) return;
     const installed = new Set(getManifestRows().map(row => row.filename));
-    const orphans = [];
     try {
-        for await (const [name, handle] of transDir.entries()) {
-            if (handle.kind === 'file' && name.endsWith('.db') && !installed.has(name)) orphans.push(name);
-        }
-        for (const name of orphans) {
-            await transDir.removeEntry(name);
-            forgetInstalledFile(`translations/${name}`);
+        for (const name of await store.list()) {
+            if (!name.endsWith('.db') || installed.has(name)) continue;
+            await store.remove(name);
             console.log(`Removed ${name}: no longer installed.`);
         }
     } catch (e) {
@@ -258,9 +239,155 @@ async function getTranslationsDir({ create = false } = {}) {
     }
 }
 
+// ---- Where translation files are kept ----------------------------------------
+//
+// In OPFS translations/ when this browser can write OPFS files. Otherwise in an
+// IndexedDB database of their own, so the reader still works offline without
+// OPFS, without createWritable (older Safari), or with OPFS refused (some
+// private modes). Not in ScriptureStudy, core.db's database: the storage worker
+// and loadFromStorage() open that at version 1, and a new object store there
+// would need version 2. With neither, getTranslationStore() is null and each
+// session fetches the files over the network.
+//
+// Both stores answer the same calls, by filename: has (there and whole), read
+// (an ArrayBuffer, or null), write (`sha256` when known), remove, list, and
+// sha256 (the installed file's, for checkForDataUpdates; null if it isn't there).
+
+let _translationStore = null;
+
+function getTranslationStore() {
+    if (!_translationStore) {
+        _translationStore = (async () => {
+            if (await canWriteOpfs()) return OPFS_TRANSLATION_STORE;
+            if (await canUseTranslationsIdb()) return INDEXEDDB_TRANSLATION_STORE;
+            return null;
+        })();
+    }
+    return _translationStore;
+}
+
+const OPFS_TRANSLATION_STORE = {
+    name: 'OPFS',
+    async has(filename) {
+        const file = await getOpfsFileAt(`translations/${filename}`);
+        return Boolean(file) && await isCompleteSqliteFile(file);
+    },
+    async read(filename) {
+        const file = await getOpfsFileAt(`translations/${filename}`);
+        return file && await isCompleteSqliteFile(file) ? await file.arrayBuffer() : null;
+    },
+    async write(filename, bytes, sha256 = null) {
+        await writeOpfsFile(await getTranslationsDir({ create: true }), filename, bytes);
+        if (sha256) await recordInstalledFile(`translations/${filename}`, sha256);
+        else forgetInstalledFile(`translations/${filename}`);
+    },
+    async remove(filename) {
+        try {
+            await (await getTranslationsDir())?.removeEntry(filename);
+        } catch (e) {
+            if (e.name !== 'NotFoundError') throw e;
+        }
+        forgetInstalledFile(`translations/${filename}`);
+    },
+    async list() {
+        const transDir = await getTranslationsDir();
+        const names = [];
+        if (transDir) {
+            for await (const [name, handle] of transDir.entries()) {
+                if (handle.kind === 'file') names.push(name);
+            }
+        }
+        return names;
+    },
+    sha256(filename) {
+        return installedSha256(`translations/${filename}`);
+    },
+};
+
+// Two object stores keyed by filename: `files` holds each file's bytes as an
+// ArrayBuffer, `sha256` its hash, so an update check never reads the files. A
+// write is one transaction, so a file that is there is whole.
+const TRANSLATIONS_IDB_NAME = 'EmberTranslations';
+
+function openTranslationsIdb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(TRANSLATIONS_IDB_NAME, 1);
+        request.onupgradeneeded = () => {
+            request.result.createObjectStore('files');
+            request.result.createObjectStore('sha256');
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// Runs `operate(transaction)` in one transaction over both stores and resolves
+// with what its last request returned, once the transaction has committed.
+async function translationsIdbTransaction(mode, operate) {
+    const connection = await openTranslationsIdb();
+    try {
+        return await new Promise((resolve, reject) => {
+            const transaction = connection.transaction(['files', 'sha256'], mode);
+            let result;
+            const request = operate(transaction);
+            if (request) request.onsuccess = () => { result = request.result; };
+            transaction.oncomplete = () => resolve(result);
+            transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
+        });
+    } finally {
+        connection.close();
+    }
+}
+
+async function canUseTranslationsIdb() {
+    if (typeof indexedDB === 'undefined') return false;
+    try {
+        (await openTranslationsIdb()).close();
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+const INDEXEDDB_TRANSLATION_STORE = {
+    name: 'IndexedDB',
+    async has(filename) {
+        const count = await translationsIdbTransaction('readonly',
+            transaction => transaction.objectStore('files').count(filename));
+        return count > 0;
+    },
+    read(filename) {
+        return translationsIdbTransaction('readonly',
+            transaction => transaction.objectStore('files').get(filename)).then(buffer => buffer ?? null);
+    },
+    async write(filename, bytes, sha256 = null) {
+        const view = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes;
+        const buffer = view.byteOffset === 0 && view.byteLength === view.buffer.byteLength
+            ? view.buffer : view.slice().buffer;
+        const hash = sha256 ?? await sha256Hex(view);
+        await translationsIdbTransaction('readwrite', transaction => {
+            transaction.objectStore('sha256').put(hash, filename);
+            return transaction.objectStore('files').put(buffer, filename);
+        });
+    },
+    remove(filename) {
+        return translationsIdbTransaction('readwrite', transaction => {
+            transaction.objectStore('sha256').delete(filename);
+            return transaction.objectStore('files').delete(filename);
+        });
+    },
+    list() {
+        return translationsIdbTransaction('readonly',
+            transaction => transaction.objectStore('files').getAllKeys());
+    },
+    sha256(filename) {
+        return translationsIdbTransaction('readonly',
+            transaction => transaction.objectStore('sha256').get(filename)).then(hash => hash ?? null);
+    },
+};
+
 // Open a sql.js Database handle for every installed translation.
-// Reads from OPFS; falls back to a direct network fetch if OPFS is unavailable
-// (e.g. in browsers without OPFS support — handles are in-memory only in that case).
 // A row whose file can't be loaded (offline, right after a restore) gets no
 // handle, which keeps it out of the reader until its download succeeds.
 async function openTranslationHandles(SQL) {
@@ -286,19 +413,15 @@ async function openTranslationHandles(SQL) {
     console.log(`Translation handles open: ${_translationDbs.size}/${rows.length}`);
 }
 
-// Load a translation file as an ArrayBuffer.
-// OPFS is the primary store (fast, persistent); network is the fallback.
+// Load a translation file as an ArrayBuffer. The translation store first;
+// the network when the file isn't stored (no store, or storing it failed).
 async function loadTranslationBuffer(filename) {
-    if ('storage' in navigator && 'getDirectory' in navigator.storage) {
-        try {
-            const root     = await navigator.storage.getDirectory();
-            const transDir = await root.getDirectoryHandle('translations');
-            const handle   = await transDir.getFileHandle(filename);
-            const file     = await handle.getFile();
-            if (await isCompleteSqliteFile(file)) return await file.arrayBuffer();
-        } catch (_) {
-            // Not in OPFS — fall through to network.
-        }
+    const store = await getTranslationStore();
+    try {
+        const buffer = await store?.read(filename);
+        if (buffer) return buffer;
+    } catch (e) {
+        console.warn(`loadTranslationBuffer: could not read ${filename} (${store.name}):`, e);
     }
 
     // Network fallback: fetch fresh each time (read-only, so safe).
@@ -369,25 +492,24 @@ async function readResponseWithProgress(response, total, onProgress) {
     return bytes;
 }
 
-// Checks `bytes` against the catalog entry, writes the file to OPFS, then
-// registers it. Takes bytes rather than a URL so a future "import your own
+// Checks `bytes` against the catalog entry, writes the file to the translation
+// store, then registers it. Takes bytes rather than a URL so a future "import your own
 // translation file" path can call it with a local file. The checks run on the
 // bytes in memory, before anything is written, so a bad file never reaches disk.
 export async function installTranslationBytes(entry, bytes) {
     const database = await openCheckedTranslation(entry, bytes);
     try {
-        const transDir = await getTranslationsDir({ create: true });
-        if (transDir) {
+        const store = await getTranslationStore();
+        if (store) {
             try {
-                await writeOpfsFile(transDir, entry.filename, bytes);
+                await store.write(entry.filename, bytes, entry.sha256);
             } catch (e) {
-                await transDir.removeEntry(entry.filename).catch(() => {});
+                await store.remove(entry.filename).catch(() => {});
                 throw e;
             }
-            await recordInstalledFile(`translations/${entry.filename}`, entry.sha256);
         }
-        // Without OPFS the handle lives in memory, and later boots fetch the file
-        // over the network (loadTranslationBuffer), as for the default set.
+        // With no store the handle lives in memory, and later boots fetch the
+        // file over the network (loadTranslationBuffer), as for the default set.
     } catch (e) {
         database.close();
         console.error(`installTranslationBytes: could not store ${entry.filename}:`, e);
@@ -461,12 +583,10 @@ export async function removeTranslation(id) {
     document.dispatchEvent(new CustomEvent(TRANSLATIONS_CHANGED_EVENT));
 
     await waitForStorageWorker();
-    const transDir = await getTranslationsDir();
     try {
-        await transDir?.removeEntry(row.filename);
-        forgetInstalledFile(`translations/${row.filename}`);
+        await (await getTranslationStore())?.remove(row.filename);
     } catch (e) {
-        if (e.name !== 'NotFoundError') console.warn(`removeTranslation: ${row.filename} stays until the next boot:`, e);
+        console.warn(`removeTranslation: ${row.filename} stays until the next boot:`, e);
     }
 }
 
@@ -514,8 +634,9 @@ export function mergeInstalledTranslations(bytes) {
 // used from the next launch. One file at a time: checking a 64 MB file means
 // holding all of it in memory.
 //
-// Which version each installed file is gets recorded per machine, in
-// localStorage, never in core.db: a backup carries core.db to other machines,
+// Translations kept in IndexedDB (see getTranslationStore()) carry their SHA-256
+// beside them. For files in OPFS, which version each is gets recorded per
+// machine, in localStorage, never in core.db: a backup carries core.db to other machines,
 // whose files may differ. Each record is { sha256, size, lastModified } by OPFS
 // path. Every write of a file sets or forgets its record; a record whose size or
 // lastModified no longer matches the file is ignored too. A file with no usable
@@ -618,7 +739,9 @@ export function checkForDataUpdates({ delayMs = DATA_UPDATE_DELAY_MS } = {}) {
 }
 
 async function runDataUpdates() {
-    if (navigator.onLine === false || !canDownloadToOpfs()) return [];
+    const store = await getTranslationStore();
+    const referencesInOpfs = await canWriteOpfs();
+    if (navigator.onLine === false || (!store && !referencesInOpfs)) return [];
     let translations, references;
     try {
         translations = await fetchTranslationCatalog();
@@ -632,23 +755,25 @@ async function runDataUpdates() {
     }
 
     const updated = [];
-    for (const entry of translations) {
+    for (const entry of store ? translations : []) {
         if (!isTranslationInstalled(entry.id)) continue;
         const path = `translations/${entry.filename}`;
-        await updateIfChanged(path, entry.sha256, () => updateTranslationFile(entry), updated);
+        await updateIfChanged(path, () => store.sha256(entry.filename), entry.sha256,
+            () => updateTranslationFile(store, entry), updated);
     }
-    for (const source of [LANGUAGE_DB, HEBREW_LEXICON_DB]) {
+    for (const source of referencesInOpfs ? [LANGUAGE_DB, HEBREW_LEXICON_DB] : []) {
         const entry = references.find(file => file.filename === source.file);
         if (!entry || _opfsDownloads.has(source.file)) continue;
-        await updateIfChanged(source.file, entry.sha256, () => updateReferenceFile(source, entry), updated);
+        await updateIfChanged(source.file, () => installedSha256(source.file), entry.sha256,
+            () => updateReferenceFile(source, entry), updated);
     }
     if (updated.length) console.log(`Updated ${updated.join(', ')}; in use from the next launch.`);
     return updated;
 }
 
-async function updateIfChanged(path, catalogSha256, update, updated) {
+async function updateIfChanged(path, getInstalledSha256, catalogSha256, update, updated) {
     try {
-        const installed = await installedSha256(path);
+        const installed = await getInstalledSha256();
         if (!installed || installed === catalogSha256) return;
         if (await update()) updated.push(path);
     } catch (e) {
@@ -665,13 +790,12 @@ function isTranslationInstalled(id) {
 
 // Checked like Add (sha256, meta, verse count) before it's written. Returns
 // false if the translation was removed meanwhile, so nothing is written.
-async function updateTranslationFile(entry) {
+async function updateTranslationFile(store, entry) {
     const bytes = await fetchCheckedBytes(`./data/translations/${entry.filename}`);
     const database = await openCheckedTranslation(entry, bytes);
     database.close();
     if (!isTranslationInstalled(entry.id)) return false;
-    await writeOpfsFile(await getTranslationsDir({ create: true }), entry.filename, bytes);
-    await recordInstalledFile(`translations/${entry.filename}`, entry.sha256);
+    await store.write(entry.filename, bytes, entry.sha256);
     return true;
 }
 
@@ -778,7 +902,7 @@ async function loadReferenceBuffer(source) {
     // `false` is reliable; `true` only means "maybe", so that case just tries.
     if (navigator.onLine === false) throw new Error('the browser is offline');
 
-    if (canDownloadToOpfs()) {
+    if (await canWriteOpfs()) {
         try {
             await downloadReferenceDb(source);
             const downloaded = await getCompleteOpfsFile(source.file);
@@ -808,7 +932,7 @@ export function startReferenceDbDownloads() {
 }
 
 async function downloadReferenceDbInBackground(source) {
-    if (source.database || !canDownloadToOpfs()) return;
+    if (source.database || !await canWriteOpfs()) return;
     if (await getCompleteOpfsFile(source.file)) return;
 
     try {
@@ -833,9 +957,25 @@ function downloadReferenceDb(source) {
 
 const _opfsDownloads = new Map(); // filename -> in-flight download promise
 
-function canDownloadToOpfs() {
-    return 'storage' in navigator && 'getDirectory' in navigator.storage
-        && 'FileSystemFileHandle' in window && 'createWritable' in FileSystemFileHandle.prototype;
+// Whether this browser can write OPFS files: the API is there, including
+// createWritable (missing in older Safari), and getDirectory isn't refused (as
+// in some private modes). Asked once per session.
+let _opfsWritable = null;
+
+function canWriteOpfs() {
+    if (!_opfsWritable) {
+        _opfsWritable = (async () => {
+            if (!('storage' in navigator && 'getDirectory' in navigator.storage
+                && 'FileSystemFileHandle' in window && 'createWritable' in FileSystemFileHandle.prototype)) return false;
+            try {
+                await navigator.storage.getDirectory();
+                return true;
+            } catch (_) {
+                return false;
+            }
+        })();
+    }
+    return _opfsWritable;
 }
 
 // Streams `url` into OPFS as `filename`, joining a download of that file already
@@ -1610,7 +1750,8 @@ export function looksLikeCoreDb(bytes) {
 // while leaving a truncated core.db in OPFS that the next boot reads
 // instead of the good IndexedDB copy, i.e. exactly the half-restored state
 // this function must not produce. If OPFS is the platform's storage,
-// commit to it and let failure reject outright.
+// commit to it and let failure reject outright. Where OPFS can't be written
+// (canWriteOpfs()), the worker's saves all go to IndexedDB, and so does this.
 //
 // Ordinary saves go through the storage worker's queue, which this write does not.
 // So it first stops new saves and waits for the worker to finish the ones it has:
@@ -1646,7 +1787,7 @@ function waitForStorageWorker() {
 }
 
 async function writeRestoredCoreDb(bytes) {
-    if ('storage' in navigator && 'getDirectory' in navigator.storage) {
+    if (await canWriteOpfs()) {
         const root     = await navigator.storage.getDirectory();
         const handle   = await root.getFileHandle('core.db', { create: true });
         const writable = await handle.createWritable();
@@ -1655,16 +1796,33 @@ async function writeRestoredCoreDb(bytes) {
         return;
     }
 
+    // loadFromStorage() reads a non-empty OPFS core.db before IndexedDB. One
+    // could only be left from when this browser could write OPFS; the restored
+    // copy would never be read over it, so the restore stops instead.
+    const opfsCoreDb = await getOpfsFileAt('core.db');
+    if (opfsCoreDb?.size > 0) {
+        throw new Error('an older core.db in OPFS would be read instead of the restored copy');
+    }
+
     await new Promise((resolve, reject) => {
         const request = indexedDB.open('ScriptureStudy', 1);
         request.onupgradeneeded = () => {
             request.result.createObjectStore('db');
         };
         request.onsuccess = () => {
-            const tx = request.result.transaction('db', 'readwrite');
-            tx.objectStore('db').put(bytes, 'core');
-            tx.oncomplete = () => resolve();
-            tx.onerror    = () => reject(tx.error);
+            const connection = request.result;
+            let tx;
+            try {
+                tx = connection.transaction('db', 'readwrite');
+                tx.objectStore('db').put(bytes, 'core');
+            } catch (error) {
+                connection.close();
+                reject(error);
+                return;
+            }
+            tx.oncomplete = () => { connection.close(); resolve(); };
+            tx.onerror    = () => { connection.close(); reject(tx.error); };
+            tx.onabort    = () => { connection.close(); reject(tx.error); };
         };
         request.onerror = () => reject(request.error);
     });

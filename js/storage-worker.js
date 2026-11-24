@@ -59,8 +59,11 @@ async function drainQueue() {
     answerIdleRequests();
 }
 
+// OPFS only with createWritable (older Safari lacks it): checking first keeps
+// getFileHandle from leaving an empty core.db there on every save.
 async function writeCoreDb(data) {
-    if ('storage' in navigator && 'getDirectory' in navigator.storage) {
+    if ('storage' in navigator && 'getDirectory' in navigator.storage
+        && 'createWritable' in FileSystemFileHandle.prototype) {
         try {
             const root     = await navigator.storage.getDirectory();
             const handle   = await root.getFileHandle('core.db', { create: true });

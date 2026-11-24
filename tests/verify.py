@@ -36,6 +36,8 @@ Usage (from the repo root):
                                          #   (EMBER_BROWSER=firefox runs any browser scenario in Firefox)
    python3 tests/verify.py help          # help guide: every popover's link, sections and contents, rendering,
                                          #   closing leaves the app as it was, Help in search, offline
+   python3 tests/verify.py fallback      # without full OPFS (none, no createWritable, refused): core.db and the
+                                         #   translations in IndexedDB, restore, Add/Remove, updates, offline
    python3 tests/verify.py boots         # warm-boot time to "app live": prints samples and the median
    python3 tests/verify.py dbsnapshot out.json          # results of ~36 db.js calls as JSON
    python3 tests/verify.py dbcompare before.json after.json
@@ -4040,11 +4042,254 @@ def scenario_help(browser):
     return FAILURES
 
 
+# ---------------------------------------------------------------- fallback
+# Ember without full OPFS. Each mode is shimmed into the page by an init script and
+# into the storage worker by prepending it to js/storage-worker.js. The real
+# getDirectory is kept as __realGetDirectory, so the test can still look at OPFS
+# and prove nothing reached it the shim was meant to keep out.
+FALLBACK_MODES = {
+    # Older browsers: no OPFS at all.
+    'no-opfs': 'delete StorageManager.prototype.getDirectory;',
+    # OPFS without createWritable, as in older Safari.
+    'no-writable': 'delete FileSystemFileHandle.prototype.createWritable;',
+    # getDirectory there but refused, as in some private-browsing modes.
+    'opfs-rejects': "StorageManager.prototype.getDirectory = function () { return Promise.reject(new DOMException('The operation is insecure.', 'SecurityError')); };",
+}
+
+FALLBACK_STASH_JS = ("self.__realGetDirectory = StorageManager.prototype.getDirectory;"
+                     "self.__realCreateWritable = self.FileSystemFileHandle?.prototype.createWritable;")
+
+IDB_CORE_JS = """() => new Promise(resolve => {
+    const request = indexedDB.open('ScriptureStudy', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('db');
+    request.onsuccess = () => {
+        const get = request.result.transaction('db').objectStore('db').get('core');
+        get.onsuccess = () => { window.__idbCore = get.result ?? null; resolve(get.result ? get.result.length : 0); };
+        get.onerror = () => resolve(-1);
+    };
+    request.onerror = () => resolve(-1);
+})"""
+
+# Sizes of what is really in OPFS, through the stashed getDirectory: { path: bytes }.
+REAL_OPFS_JS = """async () => {
+    const sizes = {};
+    const walk = async (directory, prefix) => {
+        for await (const [name, handle] of directory.entries()) {
+            if (handle.kind === 'directory') await walk(handle, prefix + name + '/');
+            else sizes[prefix + name] = (await handle.getFile()).size;
+        }
+    };
+    await walk(await window.__realGetDirectory.call(navigator.storage), '');
+    return sizes;
+}"""
+
+
+class FallbackRun(OfflineRun):
+    """A fresh profile with `mode` shimmed into the page and the storage worker."""
+
+    def __init__(self, browser, mode):
+        self.mode = mode
+        self.shim = FALLBACK_STASH_JS + FALLBACK_MODES[mode]
+        self.worker_scripts = 0
+        self.translation_bytes = []
+        # Firefox serves the worker script from the service worker's cache, where
+        # ctx.route can't reach it, and can't reload a routed page offline: there
+        # the service worker is blocked and the offline phase skipped.
+        self.firefox = browser.browser_type.name == 'firefox'
+        self.ctx = browser.new_context(viewport={'width': 1600, 'height': 1000},
+                                       service_workers='block' if self.firefox else 'allow')
+        self.ctx.add_init_script(SQL_HOOK_JS)
+        self.ctx.add_init_script(self.shim)
+        self.ctx.route('**/js/storage-worker.js', self.serve_worker)
+        self.requests = []
+        self.lexicon_requests = []
+        self.new_page()
+        self.page.on('response', self.count_translation)
+
+    def serve_worker(self, route):
+        response = route.fetch()
+        self.worker_scripts += 1
+        route.fulfill(response=response, body=self.shim + '\n' + response.text())
+
+    def count_translation(self, response):
+        if '/data/translations/' in response.url and response.url.endswith('.db') and response.ok:
+            try:
+                self.translation_bytes.append(len(response.body()))
+            except Exception:
+                pass
+
+    def state(self):
+        return self.page.evaluate("import('./js/db.js').then(db => db.getState('fallback_probe'))")
+
+    def set_state(self, value):
+        self.page.evaluate("(value) => import('./js/db.js').then(db => db.setState('fallback_probe', value))", value)
+        self.page.wait_for_timeout(2500)  # the worker's write
+
+    def translations(self):
+        return self.page.evaluate("import('./js/db.js').then(db => db.getTranslations().map(t => t.abbreviation))")
+
+    def opfs_core_size(self):
+        return self.page.evaluate(REAL_OPFS_JS).get('core.db')
+
+
+# What's in the IndexedDB translation store: { filename: [bytes, sha256] }.
+IDB_TRANSLATIONS_JS = """() => new Promise(resolve => {
+    const request = indexedDB.open('EmberTranslations', 1);
+    request.onupgradeneeded = () => { request.result.createObjectStore('files'); request.result.createObjectStore('sha256'); };
+    request.onsuccess = () => {
+        const tx = request.result.transaction(['files', 'sha256']);
+        const result = {};
+        const files = tx.objectStore('files').openCursor();
+        files.onsuccess = () => {
+            const cursor = files.result;
+            if (!cursor) return;
+            result[cursor.key] = [cursor.value.byteLength, null];
+            cursor.continue();
+        };
+        const hashes = tx.objectStore('sha256').openCursor();
+        hashes.onsuccess = () => {
+            const cursor = hashes.result;
+            if (!cursor) return;
+            (result[cursor.key] ??= [null, null])[1] = cursor.value;
+            cursor.continue();
+        };
+        tx.oncomplete = () => resolve(result);
+    };
+    request.onerror = () => resolve(null);
+})"""
+
+
+def fallback_mode(browser, mode):
+    print(f'-- {mode}')
+    run = FallbackRun(browser, mode)
+    p = run.page
+    run.boot()
+    p.wait_for_timeout(1000)
+    check(run.worker_scripts >= 1, f'{mode}: the storage worker was served with the shim ({run.worker_scripts})')
+    catalog = catalog_entries()
+    defaults = ['KJV', 'ASV', 'WEB', 'YLT', 'BSB']
+
+    # Translations are kept in IndexedDB, each with the catalog's SHA-256.
+    stored = p.evaluate(IDB_TRANSLATIONS_JS)
+    expected = {catalog[a]['filename']: [catalog[a]['size_bytes'], catalog[a]['sha256']] for a in defaults}
+    check(stored == expected, f'{mode}: the 5 default translations stored in IndexedDB with their SHA-256 ({sorted(stored or {})})')
+
+    # Saves land in IndexedDB, never in OPFS, and survive a reload.
+    run.set_state('first')
+    check(p.evaluate(IDB_CORE_JS) > 1_000_000, f'{mode}: core.db saved to IndexedDB')
+    run.translation_bytes.clear()
+    run.reload()
+    check(run.state() == 'first', f'{mode}: a save survives a reload')
+    check(run.translations() == defaults, f'{mode}: the 5 default translations open ({run.translations()})')
+    check(run.translation_bytes == [], f'{mode}: a later launch downloads no translation ({len(run.translation_bytes)} requests)')
+
+    # Restore: back up 'backup', change it to 'later', restore, reload.
+    run.set_state('backup')
+    p.evaluate(IDB_CORE_JS)
+    run.set_state('later')
+    restored = p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        try { await db.restoreCoreDb(window.__idbCore); return 'ok'; } catch (e) { return String(e); }
+    }""")
+    p.wait_for_timeout(1000)
+    run.reload()
+    check(restored == 'ok' and run.state() == 'backup', f'{mode}: restore replaces the data ({restored}, {run.state()!r})')
+    if mode == 'no-writable':
+        fallback_restore_refused(run)
+
+    # Add a translation through the same call as the shelf, and Remove it.
+    added = p.evaluate("""async (entry) => {
+        const db = await import('./js/db.js');
+        try { await db.addTranslation(entry); return 'ok'; } catch (e) { return e.message; }
+    }""", catalog['Darby'])
+    check(added == 'ok', f'{mode}: Add translation works ({added})')
+    p.wait_for_timeout(2500)
+    run.translation_bytes.clear()
+    run.reload()
+    check('Darby' in run.translations() and run.translation_bytes == [],
+          f'{mode}: an added translation opens after a reload, not downloaded again ({run.translations()})')
+    p.evaluate("import('./js/db.js').then(db => db.removeTranslation(5))")
+    p.wait_for_timeout(2500)
+    run.reload()
+    check('Darby' not in run.translations() and 'darby.db' not in p.evaluate(IDB_TRANSLATIONS_JS),
+          f'{mode}: a removed translation is gone, file and all')
+
+    # A changed translation is replaced, from IndexedDB's stored SHA-256.
+    new_asv = edited_copy(os.path.join(TRANSLATIONS_DIR, 'asv.db'), 'asv-fallback.db',
+                          "UPDATE verses SET text = 'zzupdated ' || text WHERE book = 43 AND chapter = 3 AND verse = 16")
+    UpdateRun.route_catalogs(run, translations={'asv.db': new_asv})
+    p.route('**/data/translations/asv.db', lambda route: route.fulfill(status=200, body=new_asv))
+    run.reload()
+    updated = p.evaluate(UPDATE_CHECK_JS)
+    check(updated == ['translations/asv.db'] and p.evaluate(IDB_TRANSLATIONS_JS)['asv.db'] == [len(new_asv), sha256_of(new_asv)],
+          f'{mode}: a changed translation is replaced in IndexedDB ({updated})')
+    run.reload()
+    check(p.evaluate(UPDATE_CHECK_JS) == [], f'{mode}: and not fetched again')
+    p.unroute('**/data/translations/asv.db')
+    UpdateRun.route_catalogs(run)
+
+    real_opfs = p.evaluate(REAL_OPFS_JS)
+    check(real_opfs == {}, f'{mode}: nothing written to OPFS ({real_opfs})')
+    run.check_no_errors(f'{mode} online')
+
+    # Offline, served by the service worker: the reader still works.
+    if run.firefox:
+        print(f'  skip {mode}: offline phase (Chromium only, see FallbackRun)')
+        run.close()
+        return
+    expected_state = run.state()
+    run.worker_ready()
+    run.ctx.set_offline(True)
+    p.reload()
+    p.wait_for_selector('#loading.hidden', state='attached', timeout=60_000)
+    p.wait_for_selector('#reader-pane-a .verse', timeout=30_000)
+    check(run.state() == expected_state, f'{mode}: offline, the saved data loads ({run.state()!r})')
+    check(run.translations() == defaults, f'{mode}: offline, every translation opens ({run.translations()})')
+    run.app.navigate(43, 3)
+    p.click('#reader-pane-a .pane-book-btn')
+    p.click('#translation-row .translation-btn:has-text("ASV")')
+    p.keyboard.press('Escape')
+    check('zzupdated' in p.inner_text('#reader-pane-a .verse[data-verse-id="43003016"]'),
+          f'{mode}: offline, the updated ASV shows')
+    run.check_no_errors(f'{mode} offline')
+    run.close()
+
+
+def fallback_restore_refused(run):
+    """A non-empty OPFS core.db (left from when the browser could write OPFS) would be
+    read over a restore written to IndexedDB, so the restore must refuse."""
+    p = run.page
+    opfs_core = """async (action) => {
+        const root = await window.__realGetDirectory.call(navigator.storage);
+        if (action === 'remove') return root.removeEntry('core.db');
+        const handle = await root.getFileHandle('core.db', { create: true });
+        const writable = await window.__realCreateWritable.call(handle);
+        await writable.write(new Uint8Array(4096).fill(1));
+        await writable.close();
+    }"""
+    p.evaluate(opfs_core, 'write')
+    refused = p.evaluate("""async () => {
+        const db = await import('./js/db.js');
+        try { await db.restoreCoreDb(window.__idbCore); return 'ok'; } catch (e) { return String(e); }
+    }""")
+    p.evaluate(opfs_core, 'remove')
+    p.wait_for_timeout(500)
+    run.reload()
+    check(refused != 'ok' and 'OPFS' in refused and run.state() == 'backup',
+          f'no-writable: restore refuses while a non-empty OPFS core.db would be read instead ({refused}, {run.state()!r})')
+
+
+def scenario_fallback(browser):
+    for mode in FALLBACK_MODES:
+        fallback_mode(browser, mode)
+    return FAILURES
+
+
 BROWSER_SCENARIOS = {'offline': scenario_offline, 'lexicon': scenario_lexicon,
                      'storage': scenario_storage, 'boots': scenario_boots,
                      'controls': scenario_controls,
                      'translations': scenario_translations, 'updates': scenario_updates,
-                     'help': scenario_help}
+                     'help': scenario_help, 'fallback': scenario_fallback}
 
 
 def main():
