@@ -1,6 +1,7 @@
 // help.js — Contextual help popovers for reader, notes, reference, and global
 
 import { bindPopover } from './popover-registry.js';
+import { openHelpGuide } from './help-guide.js';
 
 export function initHelp() {
     const entries = [
@@ -26,8 +27,15 @@ export function initHelp() {
         bindPopover(btn, popover);
     }
 
-    // "More help" links — non-functional placeholder
-    document.querySelectorAll('.help-more-link').forEach(link => {
-        link.addEventListener('click', (e) => e.preventDefault());
-    });
+    // "More in the guide" links open the guide at the link's section. Focus
+    // goes back to the panel's ? button on close, since the popover the link
+    // was in is closed by then.
+    for (const { btn, popover } of entries) {
+        popover.querySelectorAll('.help-more-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                openHelpGuide(link.dataset.helpSection || '', { returnFocusTo: btn });
+            });
+        });
+    }
 }

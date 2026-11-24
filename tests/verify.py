@@ -34,6 +34,8 @@ Usage (from the repo root):
    python3 tests/verify.py updates       # installed data files replaced when the catalog's sha256 changes: hashed
                                          #   once, then never again; bad downloads, removed translations, offline
                                          #   (EMBER_BROWSER=firefox runs any browser scenario in Firefox)
+   python3 tests/verify.py help          # help guide: every popover's link, sections and contents, rendering,
+                                         #   closing leaves the app as it was, Help in search, offline
    python3 tests/verify.py boots         # warm-boot time to "app live": prints samples and the median
    python3 tests/verify.py dbsnapshot out.json          # results of ~36 db.js calls as JSON
    python3 tests/verify.py dbcompare before.json after.json
@@ -3548,11 +3550,334 @@ def scenario_updates(browser):
     run.close()
     return FAILURES
 
+# ---------------------------------------------------------------- help guide
+HELP_JS = """
+window.__help = {
+    guide: () => import('./js/help-guide.js'),
+    state: () => {
+        const overlay = document.getElementById('help-guide');
+        const body = overlay?.querySelector('.help-guide-body');
+        const current = overlay?.querySelector('.help-guide-contents a.current');
+        let top = null;
+        if (body) {
+            const bodyTop = body.getBoundingClientRect().top;
+            for (const h of body.querySelectorAll('h2, h3, h4')) {
+                if (Math.abs(h.getBoundingClientRect().top - bodyTop) <= 2) { top = h.id; break; }
+            }
+        }
+        return {
+            open: !!overlay && !overlay.classList.contains('hidden'),
+            scrollTop: body ? body.scrollTop : null,
+            headingAtTop: top,
+            current: current ? current.dataset.helpSlug : null,
+            focusId: document.activeElement?.id || '',
+            focusLabel: document.activeElement?.getAttribute('aria-label') || '',
+        };
+    },
+};
+"""
+
+def help_state(p):
+    return p.evaluate('window.__help.state()')
+
+def wait_guide_rendered(p):
+    p.wait_for_selector('#help-guide .help-guide-article h2', timeout=15_000)
+    p.wait_for_timeout(150)
+
+def app_state(p):
+    return p.evaluate("""() => ({
+        selected: [...document.querySelectorAll('.verse.selected')].map(v => v.dataset.verseId),
+        paneScroll: document.querySelector('#reader-pane-a .pane-content').scrollTop,
+        refTab: document.querySelector('#reference-tabs .tab-btn.active')?.dataset.tab,
+        bookOverlay: !document.getElementById('book-overlay').classList.contains('hidden'),
+        hash: location.hash,
+    })""")
+
+def help_popover_links(app):
+    p = app.page
+    sources = [
+        ('#reader-help-btn', 'reader-help-popover', 'reading-scripture', 'Reader help'),
+        ('#notes-panel .panel-help-btn', 'notes-help-popover', 'taking-notes', 'Notes help'),
+        ('#reference-panel .panel-help-btn', 'reference-help-popover', 'the-reference-panel', 'Reference help'),
+        ('#global-help-btn', 'global-help-popover', '', 'Help'),
+    ]
+    closers = ['escape', 'close', 'backdrop', 'escape']
+    for (btn, pop, slug, label), closer in zip(sources, closers):
+        p.click(btn)
+        p.click(f'#{pop} .help-more-link')
+        wait_guide_rendered(p)
+        st = help_state(p)
+        check(st['open'] and app.open_popovers() == [], f'{pop}: its link opens the guide and closes the popover')
+        if slug:
+            check(st['headingAtTop'] == f'help-{slug}', f'{pop}: "{slug}" heading at the top of the body ({st["headingAtTop"]})')
+            check(st['current'] == slug, f'{pop}: "{slug}" marked current in the contents ({st["current"]})')
+        else:
+            check(st['scrollTop'] == 0, f'{pop}: the guide opens at the top (scrollTop {st["scrollTop"]})')
+        if closer == 'escape':
+            p.keyboard.press('Escape')
+        elif closer == 'close':
+            p.click('#help-guide .help-guide-close')
+        else:
+            p.mouse.click(8, 500)   # the 24 px margin
+        st = help_state(p)
+        check(not st['open'], f'{pop}: {closer} closes the guide')
+        check(st['focusLabel'] == label, f'{pop}: focus returns to its ? button ({st["focusLabel"]!r})')
+
+def help_sections_and_contents(app):
+    p = app.page
+    info = p.evaluate("""async () => {
+        const m = await window.__help.guide();
+        const manual = await m.loadManual();
+        const slugs = manual.sections.map(s => s.slug);
+        const sections = [...document.querySelectorAll('[data-help-section]')].map(a => a.dataset.helpSection);
+        const links = manual.blocks.flatMap(function walk(b) {
+            const inl = b.inline ? [b.inline] : b.items ? b.items : b.rows ? [...b.rows.flat(), ...b.head] : [];
+            const out = [];
+            const visit = nodes => nodes.forEach(n => { if (n.type === 'link') out.push(n.href); if (n.children) visit(n.children); });
+            inl.forEach(visit);
+            return out;
+        });
+        const contents = [...document.querySelectorAll('#help-guide .help-guide-contents a')].map(a => ({
+            slug: a.dataset.helpSlug,
+            level: +a.parentElement.className.match(/level-(\\d)/)[1],
+            parentSlug: a.parentElement.parentElement.closest('li')?.querySelector(':scope > a')?.dataset.helpSlug || null,
+        }));
+        const sec = slug => manual.sections.find(s => s.slug === slug);
+        return {
+            title: manual.title,
+            sections: manual.sections.map(s => ({ slug: s.slug, level: s.level, path: s.path })),
+            slugs, dataSections: sections, links, contents,
+            lexiconText: sec('the-hebrew-lexicon-strongs-and-bdb')?.text || '',
+            readingHebrew: !!sec('reading-the-hebrew'),
+            readingHebrewText: sec('reading-the-hebrew')?.text || '',
+        };
+    }""")
+    slugs = set(info['slugs'])
+    bad = [sct for sct in info['dataSections'] if sct and sct not in slugs]
+    check(len(info['dataSections']) == 4 and bad == [], f'every data-help-section names a manual heading (bad: {bad})')
+    local = [l[1:] for l in info['links'] if l.startswith('#')]
+    check(len(local) >= 3 and all(l in slugs for l in local), f'every in-manual # link names a heading ({local})')
+    check('the-hebrew-lexicon-strongs-and-bdb' in slugs and 'appearance--settings' in slugs,
+          "GitHub slugs: Strong's and BDB, Appearance & Settings")
+    check(info['title'] == 'Ember Bible Study — User Manual', f'the manual\'s H1 is the title ({info["title"]})')
+    # Contents: every ##/###/#### in order, each #### under its ###.
+    check([c['slug'] for c in info['contents']] == info['slugs'], 'the contents list every ##, ### and #### heading, in order')
+    by_slug = {s['slug']: s for s in info['sections']}
+    nested_ok = True
+    last = {}
+    for c in info['contents']:
+        last[c['level']] = c['slug']
+        if c['level'] > 2 and c['parentSlug'] != last.get(c['level'] - 1):
+            nested_ok = False
+    check(nested_ok, 'each ### sits under its ##, and each #### under its ###')
+    check(info['readingHebrew'] and 'Ketiv' not in info['lexiconText'] and 'Ketiv' in info['readingHebrewText'],
+          '"Reading the Hebrew" is its own section; the Hebrew lexicon section doesn\'t hold the Ketiv paragraph')
+    # The two in-page links scroll the guide.
+    for slug in ('marking-up-verses', 'bookmarks'):
+        p.evaluate("window.__help.guide().then(m => m.openHelpGuide('reading-scripture'))")
+        wait_guide_rendered(p)
+        p.click(f'#help-guide .help-guide-article a[data-help-slug="{slug}"]')
+        p.wait_for_timeout(150)
+        st = help_state(p)
+        check(st['headingAtTop'] == f'help-{slug}' and st['current'] == slug, f'the #{slug} link scrolls to it ({st["headingAtTop"]})')
+    # A contents entry scrolls the body.
+    p.click('#help-guide .help-guide-contents a[data-help-slug="your-data"]')
+    p.wait_for_timeout(150)
+    check(help_state(p)['headingAtTop'] == 'help-your-data', 'a contents entry scrolls the body to it')
+    p.keyboard.press('Escape')
+
+def help_rendering(app):
+    p = app.page
+    p.evaluate("window.__help.guide().then(m => m.openHelpGuide('prefix-shortcuts'))")
+    wait_guide_rendered(p)
+    r = p.evaluate("""async () => {
+        const m = await window.__help.guide();
+        const article = document.querySelector('#help-guide .help-guide-article');
+        const table = document.querySelector('#help-prefix-shortcuts ~ table');
+        const test = m.renderManualBody(m.parseManual(
+            'Escaped \\\\* star and <b>x</b> tag.\\n\\n[the pen](#marking-up-verses "map:markup-pen") and [x](javascript:alert(1)).'));
+        const mapLink = test.querySelector('a[data-help-slug="marking-up-verses"]');
+        const frame = document.querySelector('#help-guide .help-guide-frame').getBoundingClientRect();
+        const style = getComputedStyle(article);
+        return {
+            rows: table ? table.tBodies[0].rows.length : -1,
+            hasH: table ? table.textContent.includes('h:') : false,
+            star: article.textContent.includes('love* finds loved'),
+            testText: test.textContent,
+            testElements: [...test.querySelectorAll('*')].map(e => e.tagName),
+            mapLink: !!mapLink && mapLink.dataset.helpMap === 'markup-pen',
+            frame: [frame.left, frame.top, innerWidth - frame.right, innerHeight - frame.bottom],
+            articleWidth: article.getBoundingClientRect().width,
+            maxWidth: parseFloat(style.maxWidth),
+            fontSize: parseFloat(style.fontSize),
+            bodyWidth: article.parentElement.clientWidth,
+            noHash: location.hash === '',
+        };
+    }""")
+    check(r['rows'] == 6 and r['hasH'], f'the prefix table renders with 6 body rows including h: ({r["rows"]})')
+    check(r['star'], '\\* shows as * ("love* finds loved")')
+    check('<b>x</b>' in r['testText'] and 'B' not in r['testElements'], f'HTML in the manual shows as text ({r["testElements"]})')
+    check('(javascript:alert(1)' in r['testText'] and r['testElements'].count('A') == 1, 'a link to anything but #slug or https:// is plain text')
+    check(r['mapLink'], 'a "map:" link renders as a working in-guide link')
+    check(all(abs(edge - 24) <= 1 for edge in r['frame']), f'the guide fills the window less a 24 px margin ({r["frame"]})')
+    check(r['articleWidth'] <= r['maxWidth'] + 0.5 and r['maxWidth'] <= 75 * r['fontSize'] and r['bodyWidth'] > r['articleWidth'],
+          f'the body text is capped at its measure ({r["articleWidth"]:.0f} ≤ {r["maxWidth"]:.0f} px)')
+    check(r['noHash'], 'the guide never touches location.hash')
+    p.keyboard.press('Escape')
+    for module in ('help-guide.js',):
+        check('innerHTML' not in open(os.path.join(ROOT, 'js', module)).read(), f'{module} has no innerHTML')
+
+def help_closing_keeps_app(app):
+    p = app.page
+    app.navigate(19, 119)
+    app.select_verse(19119009)
+    p.evaluate("document.querySelector('#reader-pane-a .pane-content').scrollTop = 900")
+    p.click('#reference-tabs [data-tab="related"]')
+    p.wait_for_timeout(200)
+    before = app_state(p)
+    for how in ('escape', 'close', 'backdrop'):
+        p.click('#reader-help-btn')
+        p.click('#reader-help-popover .help-more-link')
+        wait_guide_rendered(p)
+        # Keys don't reach the app while the guide is open.
+        p.keyboard.press('ArrowDown')
+        if how == 'escape':   p.keyboard.press('Escape')
+        elif how == 'close':  p.click('#help-guide .help-guide-close')
+        else:                 p.mouse.click(1590, 500)
+        after = app_state(p)
+        check(after == before, f'{how}: selection, scroll, reference tab unchanged ({after if after != before else "same"})')
+    # Escape with the book picker open underneath closes only the guide.
+    p.click('#reader-pane-a .pane-book-btn')
+    p.wait_for_timeout(150)
+    p.evaluate("window.__help.guide().then(m => m.openHelpGuide('the-bookchapter-selector'))")
+    wait_guide_rendered(p)
+    p.click('#help-guide .help-guide-article h2')   # a click in the guide isn't "outside" the picker
+    p.keyboard.press('Escape')
+    st = app_state(p)
+    check(not help_state(p)['open'] and st['bookOverlay'], 'book picker underneath: Escape and clicks in the guide leave it open')
+    p.keyboard.press('Escape')
+    check(not app_state(p)['bookOverlay'], 'a second Escape then closes the book picker')
+    # Escape with the search results open underneath.
+    p.click('#search-input')
+    p.keyboard.type('beginning')
+    p.wait_for_selector('#search-results:not(.hidden) .search-result-item', timeout=10_000)
+    p.evaluate("window.__help.guide().then(m => m.openHelpGuide(''))")
+    wait_guide_rendered(p)
+    p.keyboard.press('Escape')
+    check(not help_state(p)['open'] and app.visible('#search-results'), 'search results underneath: Escape closes only the guide')
+    p.evaluate("document.getElementById('search-input').value = ''; document.getElementById('search-input').blur()")
+    p.click('#global-header', position={'x': 2, 'y': 2})
+
+def help_search(app):
+    p = app.page
+    def results(query):
+        p.fill('#search-input', '')
+        p.click('#search-input')
+        p.wait_for_timeout(300)   # the manual arrives on first focus
+        p.fill('#search-input', query)
+        p.wait_for_timeout(500)
+        return p.evaluate("""() => [...document.querySelectorAll('#search-results .search-result-section')].map(s => ({
+            heading: s.querySelector('.search-result-heading').textContent,
+            items: [...s.querySelectorAll('.search-result-item')].map(i => ({
+                title: i.querySelector('.search-result-ref').textContent,
+                context: i.querySelector('.search-result-context')?.textContent || '',
+                text: i.querySelector('.search-result-text')?.textContent || '' })),
+        }))""")
+    def help_titles(groups):
+        g = [x for x in groups if x['heading'] == 'Help']
+        return [i['title'] for i in g[0]['items']] if g else None
+    groups = results('bookm')
+    check(help_titles(groups) and 'Bookmarks' in help_titles(groups), f'"bookm" shows a Help result "Bookmarks" ({help_titles(groups)})')
+    check(groups[-1]['heading'] == 'Help', 'the Help group comes last')
+    check(help_titles(results('love')) is None, '"love" shows no Help group')
+    bdb = "The Hebrew lexicon: Strong's and BDB"
+    plain = results('bdb')
+    check(help_titles(plain) is not None and bdb in help_titles(plain), f'"bdb" finds "{bdb}"')
+    item = next(i for i in plain[-1]['items'] if i['title'] == bdb)
+    check(item['context'] == 'The Reference Panel › Language' and item['text'].startswith('The Hebrew lexicon shows two dictionaries'),
+          f'a Help result shows its parent and first sentence ({item["context"]!r}, {item["text"][:40]!r})')
+    prefixed = results('h:bdb')
+    check(len(prefixed) == 1 and prefixed[0]['heading'] == 'Help' and bdb in help_titles(prefixed), '"h:bdb" finds it, Help only')
+    body = results('h:ketiv')
+    check(help_titles(body) and 'Reading the Hebrew' in help_titles(body), f'"h:" searches the body too ({help_titles(body)})')
+    check(len(help_titles(results('h:the'))) == 10, 'h: shows at most 10 results')
+    check(len(help_titles(results('the')) or []) <= 3, 'unprefixed shows at most 3 Help results')
+    shortcuts = (p.fill('#search-input', ''), p.evaluate("document.querySelector('#search-results').textContent"))[1]
+    check('h:' in shortcuts and 'Help only' in shortcuts, 'the prefix shortcuts list h: Help only')
+    results('bdb')
+    p.click(f'#search-results .search-result-item:has-text("{bdb}")')
+    wait_guide_rendered(p)
+    st = help_state(p)
+    check(st['open'] and st['headingAtTop'] == 'help-the-hebrew-lexicon-strongs-and-bdb' and not app.visible('#search-results'),
+          f'clicking a Help result closes search and opens the guide there ({st["headingAtTop"]})')
+    p.keyboard.press('Escape')
+
+def help_offline(browser):
+    ctx = browser.new_context(viewport={'width': 1600, 'height': 1000})
+    ctx.add_init_script(HELP_JS)
+    app = App(ctx.new_page(), ignore=is_expected_network_line)
+    p = app.page
+    app.boot(SW_URL)
+    p.evaluate('navigator.serviceWorker.ready')
+    p.wait_for_timeout(1500)
+    cached = p.evaluate("""async () => {
+        for (const n of await caches.keys())
+            if (await (await caches.open(n)).match('./USER_MANUAL.md')) return true;
+        return false;
+    }""")
+    check(cached, 'USER_MANUAL.md is precached')
+    ctx.set_offline(True)
+    p.reload()
+    p.wait_for_selector('#loading.hidden', state='attached', timeout=60_000)
+    p.click('#reference-panel .panel-help-btn')
+    p.click('#reference-help-popover .help-more-link')
+    wait_guide_rendered(p)
+    st = help_state(p)
+    check(st['open'] and st['headingAtTop'] == 'help-the-reference-panel', 'offline: the guide opens and renders at its section')
+    ctx.set_offline(False)
+    check(app.errors == [], f'offline: no console errors {app.errors[:3]}')
+    ctx.close()
+
+def help_load_failure(browser):
+    ctx = browser.new_context(viewport={'width': 1600, 'height': 1000})
+    ctx.add_init_script(HELP_JS)
+    app = App(ctx.new_page(), ignore=lambda m: 'USER_MANUAL.md' in (m.location or {}).get('url', '') or 'USER_MANUAL' in m.text)
+    p = app.page
+    app.boot()
+    p.route('**/USER_MANUAL.md', lambda route: route.abort())
+    p.click('#global-help-btn')
+    p.click('#global-help-popover .help-more-link')
+    p.wait_for_selector('#help-guide .help-guide-retry', timeout=10_000)
+    check("couldn't be loaded" in p.text_content('#help-guide .help-guide-status'), 'a failed load says so, with Retry')
+    p.unroute('**/USER_MANUAL.md')
+    p.click('#help-guide .help-guide-retry')
+    wait_guide_rendered(p)
+    check(help_state(p)['open'], 'Retry loads the guide')
+    check(app.errors == [], f'load failure: no app console errors {app.errors[:3]}')
+    ctx.close()
+
+def scenario_help(browser):
+    ctx = browser.new_context(viewport={'width': 1600, 'height': 1000})
+    ctx.add_init_script(HELP_JS)
+    app = App(ctx.new_page())
+    app.boot()
+    help_popover_links(app)
+    help_sections_and_contents(app)
+    help_rendering(app)
+    help_closing_keeps_app(app)
+    help_search(app)
+    check(app.errors == [], f'no console errors {app.errors[:3]}')
+    ctx.close()
+    help_load_failure(browser)
+    help_offline(browser)
+    return FAILURES
+
 
 BROWSER_SCENARIOS = {'offline': scenario_offline, 'lexicon': scenario_lexicon,
                      'storage': scenario_storage, 'boots': scenario_boots,
                      'controls': scenario_controls,
-                     'translations': scenario_translations, 'updates': scenario_updates}
+                     'translations': scenario_translations, 'updates': scenario_updates,
+                     'help': scenario_help}
 
 
 def main():

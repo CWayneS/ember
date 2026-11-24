@@ -46,6 +46,7 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - js/readable-export.js — Studies as one self-contained HTML page (Export in a study, Export Readable Copy in Backup & Restore)
 - js/usfm.js — USFM book codes and reference resolution
 - js/help.js — Contextual help popovers
+- js/help-guide.js — The help guide: USER_MANUAL.md fetched and rendered as DOM (never innerHTML), the guide overlay, and the manual's sections for Help in search
 - js/global-settings.js, reader-settings.js, notes-settings.js, reference-settings.js — Settings popovers
 - js/popover-registry.js — Shared popover open/close behavior
 - js/dialogs.js — Shared confirm / prompt modal dialogs
@@ -71,12 +72,13 @@ A desktop-first Progressive Web App for serious Bible study. Offline-first, zero
 - sql.js has no FTS5 module: translations' verses_fts and core.db's notes_fts are FTS4. Search input goes through searchMatchExpression() in db.js, never straight to MATCH
 - Note anchors use range-aware queries through anchorsOverlapping() in db.js — see docs/ANCHOR_QUERIES.md
 - notes_fts is external-content: delete from it before changing a note's body in `notes`, never after
+- USER_MANUAL.md is shown in the app as the help guide. A change that alters what the user sees isn't finished until the manual (and the panel's help popover, if it applies) says so. sw.js precaches the manual, so bump CACHE_NAME when it changes, and keep every `data-help-section` in index.html naming one of its headings (`python3 tests/verify.py help` checks)
 - `.note-block` uses content-visibility: auto. In a skipped block, innerText is empty and overflow is clipped, so read a note's text at input time (see scheduleSave in js/notes.js). Update a block in place rather than rebuilding the study, or the scroll position moves
 
 ## Reference Documents
 - README.md — overview, data sources and attribution, documentation index
 - FEATURE_INVENTORY.md — every working feature, traced to live code
-- USER_MANUAL.md — end-user documentation
+- USER_MANUAL.md — end-user documentation, and the in-app help guide
 - docs/ — specs per build and per feature; the latest BUILD_N_ACTUAL_STATE.md is the ground-truth audit of shipped code
 - docs/TODO.md — everything known to be open; update it when an item is finished or found
 - docs/DATA_QUIRKS.md — slips and oddities found in upstream data (STEPBible, Open Scriptures), written to share with them; add to it whenever one turns up

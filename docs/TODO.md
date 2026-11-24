@@ -30,9 +30,9 @@ Restore bundled plans done 2026-11-23: the Plans tab offers "Restore N bundled p
 
 **Help**
 
-- **Update the stale Help text.** Do it after the features above, since the shelf and the new search change what Help has to explain. See `FEATURE_INVENTORY.md` items 67a and 148a, and `docs/BUILD_6.1_ACTUAL_STATE.md` §7.
-- **Make "More help" work.** The link in the reader, notes and reference help popovers is a placeholder that does nothing (`preventDefault` only). See `FEATURE_INVENTORY.md` item 154.
-- **A Help entry** explaining Strong's vs. BDB. From "Deferred to Follow-Up Specs" in `docs/Hebrew_Lexicon_Spec.md` (Open Question 5).
+Help guide done 2026-11-23: `USER_MANUAL.md` is the in-app guide, every help popover links into it, the popovers' copy is current, Strong's vs. BDB has its own heading, and Help is searchable (`docs/Help_Guide_Spec.md`, `docs/BUILD_6.1_ACTUAL_STATE.md` §21).
+
+- **The app map** beside the guide: a wireframe of the live layout, links in the manual that point at controls on it, and Show me. Its own item now that the guide has shipped. See Item 10 of `docs/Help_Guide_Spec.md`.
 
 **Testing**
 

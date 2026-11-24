@@ -24,6 +24,10 @@ When a corrected version of a translation or of the original-language data is pu
 
 You'll land on Genesis 1 with empty study panels on the left. The loading screen disappears when the app is ready.
 
+### Getting help
+
+Each panel has a **?** button with a short list of what that panel does. **More in the guide →** at the bottom opens this manual inside Ember at the panel's section; the **?** next to the search bar opens it at the top. Its contents are down the left side, and **✕**, **Escape** or a click outside it closes it, leaving everything as it was. You can also search it from the search bar (see [Search](#search)). It works offline, like the rest of Ember.
+
 ---
 
 ## Reading Scripture
@@ -284,13 +288,14 @@ You can also import your own plan as a JSON or CSV file with the **Import** butt
 
 The search bar is centered at the top of the screen.
 
-Click into it to see the prefix shortcuts panel. Start typing (at least 2 characters) to run a search. Results appear in a dropdown below the bar, grouped into sections: **Scripture**, **Notes**, **Studies**, **Tags**, and **Bookmarks**.
+Click into it to see the prefix shortcuts panel. Start typing (at least 2 characters) to run a search. Results appear in a dropdown below the bar, grouped into sections: **Scripture**, **Notes**, **Studies**, **Tags**, **Bookmarks**, and **Help**.
 
 - **Scripture result** — navigates to that verse and selects it (searches your currently active translation)
 - **Note result** — navigates to the note's verse and opens its study in a tab
 - **Study result** — opens the study in a tab
 - **Tag result** — opens a tag view tab
 - **Bookmark result** — navigates to that bookmark
+- **Help result** — opens this guide at that section. Without a prefix, Help results come from the guide's headings only; `h:` searches its text too
 
 Scripture and notes search match whole words, so **love** finds "love" but not "glove" or "beloved". Every word you type must appear, in any order. Put words in quotes to find them as a phrase (**"in the beginning"**), and end a word with **\*** to find every word that starts with it (**love\*** finds loved, loving, lovely). In the WEB, a Psalm's title is searchable too.
 
@@ -307,6 +312,7 @@ You can narrow results to a single type by starting your query with a prefix:
 | `s:` | Studies only |
 | `t:` | Tags only |
 | `k:` | Bookmarks only |
+| `h:` | Help only: searches the guide's headings and text |
 
 The shortcuts panel that appears when you focus the search bar is interactive — clicking a prefix row inserts it into the input so you can type right after it.
 

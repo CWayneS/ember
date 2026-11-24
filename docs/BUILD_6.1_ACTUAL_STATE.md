@@ -560,3 +560,25 @@ TODO step 3, last item. A deleted bundled plan stays deleted, because it stays o
 TODO step 3 is finished.
 
 All thirteen suites pass.
+
+## 21. ADDENDUM — 2026-11-23, the help guide
+
+TODO step 4's three Help items, built to `docs/Help_Guide_Spec.md` (Items 1–9; Item 10, the app map, is its own TODO item).
+
+- **`USER_MANUAL.md`** is the in-app guide. Fixed after checking it against the code: the reader's ⚙ (font size only, both panes), the note dot's place (under the verse number) and the bookmark dot it never mentioned, what each panel's ⚙ holds, and the roadmap line (removed). Language gained `####` headings: "The Greek lexicon", "The Hebrew lexicon: Strong's and BDB" and "Reading the Hebrew", with "All occurrences" moved above them so each section holds only its own paragraphs. New: "Getting help" under Getting Started, Help in the Search section, and `h:` in the prefix table.
+- **`js/help-guide.js`** (new): `parseManual()` (blocks, plus the `##`–`####` sections with their ancestor titles and plain text, one parse for the guide and for search), `renderManualBody()` (DOM only), `loadManual()` (one fetch per session; a failure clears it so Retry works), `getHelpSections()`, `openHelpGuide(slug, { returnFocusTo })`, `closeHelpGuide()`.
+- **`js/help.js`:** each popover's `.help-more-link` opens the guide at its `data-help-section`.
+- **`index.html`:** the four popovers' copy from the spec's Item 5.
+- **`js/search.js`:** a Help group, last; the `h:` prefix; "Help only" in the shortcuts (and `k:` now reads "Bookmarks only", as in the manual). The manual is fetched on the search bar's first focus.
+- **`css/style.css`:** the guide overlay (z-index 380: above popovers and overlays, below the plan dialogs and confirm dialogs), its contents and body, the popover links styled as links, and `.search-result-context`.
+- **`sw.js`:** `USER_MANUAL.md` and `help-guide.js` precached; `CACHE_NAME` → `ember-v35`. The fetch handler needed no change: only `/data/` bypasses the cache.
+- **Departures from the spec:**
+  - **Focus on close** goes to the panel's ? button when the guide was opened from a popover's link, since the guide closed that popover and the link is hidden. Otherwise it goes back to whatever had focus.
+  - **Keys:** the page behind the guide is `inert` while it's open (Tab can't leave it, and nothing behind it can be clicked), and a window capture-phase listener stops every keydown from reaching the app. Default actions still run, so the arrow keys scroll the guide.
+  - **A Help result's smaller line** is the section's ancestor headings ("The Reference Panel › Language" for "The Hebrew lexicon: Strong's and BDB"), not its own heading again.
+  - **A link the renderer doesn't support** (not `#slug` or `https://`) shows as its Markdown source, as plain text.
+  - **`####` contents entries** are always shown, indented under their `###`.
+  - **`Help_System_Design.md`** is a project document outside this repository and wasn't updated here.
+- **Tests:** `tests/verify.py help` (new) checks each popover's link and section, every `data-help-section` and in-manual link against the headings, the contents order and nesting, the section boundaries, rendering (the 6-row prefix table, `\*`, HTML and unsupported links as text, a `map:` link), the 24 px margin and the 70ch cap, `location.hash` untouched, closing three ways with the selection, scroll and reference tab unchanged, Escape with the book picker or search results underneath, Help in search (`bookm`, `love`, `bdb`, `h:bdb`, `h:ketiv`, the limits, clicking a result), a failed load and Retry, and the guide offline after one online load. No `innerHTML` in `help-guide.js`.
+
+All fourteen suites pass.

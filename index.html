@@ -200,43 +200,50 @@
 
     <!-- Help popovers -->
     <div id="reader-help-popover" class="help-popover hidden" role="dialog" aria-label="Reader help">
-        <p class="help-popover-lead"><strong>Your Bible.</strong> Navigate, read, and bookmark Scripture here.</p>
+        <p class="help-popover-lead"><strong>Your Bible.</strong> Read, navigate and mark up Scripture here.</p>
         <ul>
-            <li>Click the translation and chapter (e.g. "KJV Genesis 1") to jump to any book, chapter, or translation</li>
-            <li>The + at the end of the translations opens your shelf: add another translation, or remove one you don't use (KJV always stays)</li>
-            <li>Click a verse to select it — notes and references update automatically</li>
-            <li>‹ › arrows move between chapters</li>
-            <li>The ⬤ button bookmarks the selected verse</li>
-            <li>Split view lets you read two passages side by side; the lines button next to it puts each verse on its own line</li>
+            <li>Click the translation and chapter (e.g. "KJV Genesis 1") to jump anywhere; ‹ › move between chapters</li>
+            <li>Click a verse to select it, then Shift+click another to select a range</li>
+            <li>The pen marks up the selection; ☆ bookmarks it, or lists your bookmarks when nothing is selected</li>
+            <li>Split view reads two passages side by side; the lines button puts each verse on its own line</li>
+            <li>In the book picker, the + after the translations opens your shelf to add or remove one</li>
         </ul>
-        <a href="#" class="help-more-link">Need more? A full help guide is on its way. For now, try clicking around — Ember is designed to teach itself through use.</a>
+        <a href="#" class="help-more-link" data-help-section="reading-scripture">More in the guide →</a>
     </div>
 
     <div id="notes-help-popover" class="help-popover hidden" role="dialog" aria-label="Notes help">
-        <p class="help-popover-lead"><strong>Your notebook.</strong> Studies, notes, and tags live here.</p>
+        <p class="help-popover-lead"><strong>Your notebook.</strong> Studies, notes and tags live here.</p>
         <ul>
-            <li>Click + to start a new study</li>
-            <li>Select a verse, then click "Add Note" to write about it</li>
-            <li>Attach more verses to a note with the + button on the anchor bar</li>
-            <li>Type in the tag field to organize notes by theme</li>
-            <li>Click any tag chip to see everything tagged with that word</li>
+            <li>+ starts a new study; All Studies lists every one</li>
+            <li>Select a verse, then + Add Note to write about it. Notes save as you type</li>
+            <li>With a verse selected, the + beside a note's verse chips attaches that verse too</li>
+            <li>Type in a note's tag field to tag it; click a tag to see everything tagged with it</li>
+            <li>Export saves a study as a web page to read, print or share</li>
         </ul>
-        <a href="#" class="help-more-link">Need more? A full help guide is on its way. For now, try clicking around — Ember is designed to teach itself through use.</a>
+        <a href="#" class="help-more-link" data-help-section="taking-notes">More in the guide →</a>
     </div>
 
     <div id="reference-help-popover" class="help-popover hidden" role="dialog" aria-label="Reference help">
-        <p class="help-popover-lead"><strong>Your reference shelf.</strong> Background material and cross-references appear here based on what you're reading.</p>
+        <p class="help-popover-lead"><strong>Your reference shelf.</strong> Background for the verse you've selected.</p>
         <ul>
-            <li><strong>Info</strong> — book context, chapter details, and any notes you've written about the selected verse</li>
-            <li><strong>Tags</strong> — topics from Nave's Topical Bible and your own tags for this verse</li>
-            <li><strong>Related</strong> — cross-references connecting this verse to the rest of Scripture <em>(coming soon)</em></li>
+            <li><strong>Info</strong>: the book and chapter, and your notes on this verse</li>
+            <li><strong>Tags</strong>: Nave's topics and your own tags</li>
+            <li><strong>Related</strong>: cross-references to the rest of Scripture</li>
+            <li><strong>Language</strong>: the Hebrew or Greek, word by word, with lexicons</li>
+            <li><strong>Plans</strong>: reading plans and study templates (no verse needed)</li>
         </ul>
-        <a href="#" class="help-more-link">Need more? A full help guide is on its way. For now, try clicking around — Ember is designed to teach itself through use.</a>
+        <a href="#" class="help-more-link" data-help-section="the-reference-panel">More in the guide →</a>
     </div>
 
     <!-- Global help popover -->
     <div id="global-help-popover" class="help-popover hidden" role="dialog" aria-label="Help">
-        <p class="help-popover-lead"><strong>Ember</strong> — the whole workspace. Settings and help for each panel live in that panel's own ⚙ and ? buttons. Global settings (below) cover things that apply everywhere, like backup and restore.</p>
+        <p class="help-popover-lead"><strong>Ember</strong>: the whole workspace.</p>
+        <ul>
+            <li>⚙ here holds Backup &amp; Restore, readable export and data credits</li>
+            <li>☀/🌙 switches between light and dark</li>
+            <li>Each panel's own ? and ⚙ cover that panel</li>
+        </ul>
+        <a href="#" class="help-more-link help-more-link-strong" data-help-section="">Open the guide →</a>
     </div>
 
     <!-- Global settings popover — shell built out in Build 4 Item 5 -->

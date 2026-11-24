@@ -1,12 +1,13 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v34'; // bumped: restore bundled plans (db.js, plans.js, style.css)
+const CACHE_NAME = 'ember-v35'; // bumped: help guide (help-guide.js, USER_MANUAL.md, help.js, search.js, index.html, style.css)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:
 // cache.addAll() is all-or-nothing, and a module missing from this list is
 // simply not available offline until some online visit happened to fetch
-// it. When a file is added to js/, add it here and bump CACHE_NAME
+// it. When a file is added to js/, add it here and bump CACHE_NAME. Bump it
+// too when USER_MANUAL.md changes: the help guide reads the cached copy
 // (tests/verify.py sw checks the list against js/ on disk).
 //
 // core.db is NOT included here — it is large (23 MB) and already persisted
@@ -22,6 +23,7 @@ const PRECACHE = [
     './',
     './index.html',
     './manifest.json',
+    './USER_MANUAL.md',
     './css/style.css',
     './js/app.js',
     './js/backup.js',
@@ -35,6 +37,7 @@ const PRECACHE = [
     './js/hebrew-versification.js',
     './js/readable-export.js',
     './js/help.js',
+    './js/help-guide.js',
     './js/language.js',
     './js/manuscript-variants.js',
     './js/markups.js',

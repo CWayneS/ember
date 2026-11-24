@@ -135,8 +135,8 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 ## Reader Help
 
-67. Help popover (? button in reader header): opens a contextual help overlay with metaphor lead, action bullets (including the + that opens the Translations shelf), and a non-functional "More help" placeholder link — help.js
-67a. **[STALE CONTENT]** The bullet list describes the bookmark button as "The ⬤ button" — the actual button is "☆" (index.html:136, item 51 above). Text not updated since an earlier button design — index.html:198-208
+67. Help popover (? button in reader header): metaphor lead, five action bullets (chapter navigation, range selection, the markup pen and ☆, split view and verse per line, the shelf's +), and "More in the guide →", which opens the help guide at "Reading Scripture" — index.html, help.js
+67a. ~~**[STALE CONTENT]** The bullet list described the bookmark button as "The ⬤ button".~~ **Fixed 2026-11-23:** the copy names ☆ and the markup pen (docs/Help_Guide_Spec.md Item 5)
 
 ---
 
@@ -165,7 +165,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 ## Notes Help
 
-81. Help popover (? button in notes panel header): opens a contextual help overlay with metaphor lead, action bullets, and a non-functional "More help" placeholder link — help.js
+81. Help popover (? button in notes panel header): metaphor lead, five action bullets (new study and All Studies, Add Note, the verse-chip +, tags, Export), and "More in the guide →", which opens the help guide at "Taking Notes" — index.html, help.js
 
 ---
 
@@ -370,8 +370,8 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 ## Reference Help
 
-148. Help popover (? button in reference panel header): opens a contextual help overlay with metaphor lead, action bullets (Info / Tags / Related described), and a non-functional "More help" placeholder link — help.js
-148a. **[STALE CONTENT]** The bullet list still labels Related as "cross-references... *(coming soon)*", even though Related has been fully functional since Build 2 (see item 141 above), and does not mention the Language or Plans tabs at all (both added Build 3/6) — index.html:222-230
+148. Help popover (? button in reference panel header): metaphor lead, one bullet per tab (Info, Tags, Related, Language, Plans), and "More in the guide →", which opens the help guide at "The Reference Panel" — index.html, help.js
+148a. ~~**[STALE CONTENT]** Related was labeled "(coming soon)", and Language and Plans weren't mentioned.~~ **Fixed 2026-11-23** (docs/Help_Guide_Spec.md Item 5)
 
 ---
 
@@ -382,7 +382,11 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 151. Opening one popover closes any other open popover — popover-registry.js:closeAllPopovers (called at the top of each open handler; registered by help.js, bookmarks.js, reader-settings.js, notes-settings.js, reference-settings.js, global-settings.js)
 152. Clicking outside any open popover closes it — help.js (document click handler)
 153. Pressing Escape closes any open popover — help.js (keydown handler)
-154. "More help" link in each of the three per-panel popovers (reader, notes, reference): non-functional placeholder (`preventDefault` only) — help.js. The global help popover has no such link — its content is placeholder text only, per Build 4 scope
+154. ~~"More help" was a non-functional placeholder.~~ **Done 2026-11-23:** every help popover ends with a link carrying `data-help-section` ("More in the guide →"; the global popover's "Open the guide →" opens at the top). The global popover lists ⚙ (Backup & Restore, readable export, data credits), ☀/🌙, and each panel's own ? and ⚙ — index.html, help.js
+154a. The help guide: `USER_MANUAL.md` rendered in the app, the one source for the repository's manual and the in-app guide. Fetched once per session on first open, parsed by a small Markdown renderer that handles only what the manual uses (headings to ####, paragraphs, one-level lists, tables, rules, bold, italic, code, backslash escapes, #slug and https:// links) and builds DOM only; anything else shows as plain text. Headings get GitHub's slugs with a `help-` id prefix, so the manual's links work on GitHub and in the app — js/help-guide.js:parseManual, renderManualBody
+154b. The guide overlay fills the window less a 24 px margin: header with the manual's H1 and ✕; a contents column (every ##, ### under it, #### under its ###) that marks the current section as the body scrolls; the body, text capped at 70ch. Opens at a section with its heading at the top, or at the top. In-guide links scroll the body and never touch `location.hash` — js/help-guide.js:openHelpGuide
+154c. Closing: ✕, Escape, or a click on the margin. Focus returns to the element that opened it, or to the panel's ? button when that was a link in a popover the guide closed. While open, the rest of the page is `inert` and no key reaches the app (a window capture-phase listener stops every keydown), so Escape closes only the guide even with the book picker or search results underneath; the selection, scroll positions and open tabs are untouched — js/help-guide.js
+154d. A failed load (offline before the manual was ever cached) shows "The guide couldn't be loaded. Try again when you're online." with Retry. `USER_MANUAL.md` and help-guide.js are precached — js/help-guide.js, sw.js
 
 ---
 
@@ -395,7 +399,8 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 159. Search covers: Scripture (FTS4, whole words, in canonical order; LIKE only for a translation file built before FTS4; 50 results max), notes (FTS4, 50 max), tag names + topic names (LIKE, combined 20 max via `UNION ... LIMIT 20`), study names (LIKE, 20 max) — db.js:search
 159b. Scripture and notes search share one way of reading the query: every word must appear, in any order; "a quoted phrase" must appear as written; a trailing `*` matches a prefix (`love*` finds loved, loving). Every word is quoted before it reaches MATCH, so stray quotes, hyphens or words like OR and NOT never make the search fail — db.js:searchMatchExpression
 159a. Editing a note replaces its words in the notes index: the old text is removed from `notes_fts` before `notes` changes, because this external-content table reads the current text to work out what to remove — db.js:updateNote. The index in any `core.db` edited before this fix is rebuilt once at boot, tracked by `app_state.notes_fts_repaired` inside `core.db`, so restoring an older backup repairs that file too — db.js:repairNotesSearchIndexOnce
-160. Results displayed in labeled sections: "Scripture · {abbrev}" (e.g. "Scripture · KJV"), Notes, Studies, Tags — search.js
+160. Results displayed in labeled sections: "Scripture · {abbrev}" (e.g. "Scripture · KJV"), Notes, Studies, Tags, Bookmarks, Help — search.js
+160b. Help results: the manual's ##, ### and #### sections. Without a prefix, every query word must start a word in a heading (apostrophes dropped, so "strong" finds "Strong's"), at most 3, so a word from the manual's examples ("love") brings up no Help. Each shows the heading, its ancestor headings ("The Reference Panel › Language") and the section's first sentence; clicking one closes search and opens the guide there. The manual is fetched on the search bar's first focus and searched synchronously; until it arrives there's no Help group — search.js:matchHelpSections, renderHelpResult
 160a. Scripture section runs FTS against the active pane's translation database — search.js:runSearch; db.js:search
 161. Empty results: "No results for 'query'" — search.js:renderEmpty
 162. Clicking a Scripture result: navigates to that verse, closes search, clears input — search.js:111-115
@@ -409,15 +414,16 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 ## Search Prefix Shortcuts
 
-All five prefixes are functional:
+All six prefixes are functional:
 
 168. `b:` — Scripture verses only
 169. `n:` — Notes only
 170. `s:` — Studies only
 171. `t:` — Tags only
 172. `k:` — Bookmarks only
+172a. `h:` — Help only: headings and section text, headings ranked first, at most 10
 
-173. Shortcuts panel shows all five prefixes with descriptions — search.js:renderShortcuts
+173. Shortcuts panel shows all six prefixes with descriptions — search.js:renderShortcuts
 174. Clicking a prefix row in the shortcuts panel inserts that prefix into the input and focuses it — search.js
 
 ---

@@ -1112,16 +1112,228 @@ body.markup-mode-on .verse.markup-circle {
 .help-more-link {
     display: block;
     margin-top: 12px;
-    font-size: var(--size-xs);
-    color: var(--text-muted);
-    font-style: italic;
+    font-size: var(--size-small);
+    color: var(--accent);
     text-decoration: none;
-    cursor: default;
+    cursor: pointer;
     line-height: 1.5;
 }
 
-.help-more-link:hover {
-    color: var(--text-muted);
+.help-more-link:hover,
+.help-more-link:focus-visible {
+    color: var(--accent-hover);
+    text-decoration: underline;
+}
+
+.help-more-link-strong {
+    font-weight: 600;
+}
+
+/* ============================================================
+   Help Guide — USER_MANUAL.md rendered in the app (js/help-guide.js)
+   ============================================================ */
+
+#help-guide {
+    position: fixed;
+    inset: 0;
+    z-index: 380;               /* above popovers and overlays, below confirm dialogs */
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+}
+
+#help-guide.hidden {
+    display: none;
+}
+
+.help-guide-frame {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+        "header header"
+        "contents body";
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+}
+
+.help-guide-header {
+    grid-area: header;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px 10px 20px;
+    border-bottom: 1px solid var(--border-light);
+    background: var(--bg-panel);
+}
+
+.help-guide-header h1 {
+    flex: 1;
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--size-base);
+    font-weight: 600;
+}
+
+.help-guide-close {
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 16px;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.help-guide-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.help-guide-contents {
+    grid-area: contents;
+    overflow-y: auto;
+    padding: 16px 8px 24px 12px;
+    border-right: 1px solid var(--border-light);
+    background: var(--bg-secondary);
+    font-size: var(--size-small);
+    line-height: var(--line-height-ui);
+}
+
+.help-guide-contents ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.help-guide-contents ul ul {
+    padding-left: 12px;
+}
+
+.help-guide-contents a {
+    display: block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    text-decoration: none;
+}
+
+.help-guide-contents-level-2 > a {
+    margin-top: 6px;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.help-guide-contents a:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.help-guide-contents a.current {
+    background: var(--accent-light);
+    color: var(--accent);
+}
+
+.help-guide-body {
+    grid-area: body;
+    overflow-y: auto;
+    outline: none;
+    padding: 0 32px;
+}
+
+.help-guide-article {
+    max-width: 70ch;
+    margin: 0 auto;
+    padding: 8px 0 70vh;        /* room for the last section's heading to reach the top */
+    font-family: var(--font-reading);
+    font-size: 16px;
+    line-height: var(--line-height-body);
+}
+
+.help-guide-article h2,
+.help-guide-article h3,
+.help-guide-article h4 {
+    font-family: var(--font-display);
+    line-height: 1.3;
+    margin: 0;
+    padding-top: 20px;
+}
+
+.help-guide-article h2 { font-size: 24px; }
+.help-guide-article h3 { font-size: 19px; }
+.help-guide-article h4 { font-size: 16px; }
+
+.help-guide-article p,
+.help-guide-article ul,
+.help-guide-article table {
+    margin: 10px 0 0;
+}
+
+.help-guide-article ul {
+    padding-left: 22px;
+}
+
+.help-guide-article li + li {
+    margin-top: 4px;
+}
+
+.help-guide-article hr {
+    border: none;
+    border-top: 1px solid var(--border-light);
+    margin: 28px 0 8px;
+}
+
+.help-guide-article code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: 3px;
+    padding: 0 4px;
+}
+
+.help-guide-article table {
+    border-collapse: collapse;
+    font-size: var(--size-small);
+}
+
+.help-guide-article th,
+.help-guide-article td {
+    border: 1px solid var(--border-light);
+    padding: 4px 12px;
+    text-align: left;
+}
+
+.help-guide-article th {
+    background: var(--bg-secondary);
+}
+
+.help-guide-article a {
+    color: var(--accent);
+}
+
+.help-guide-status {
+    max-width: 70ch;
+    margin: 48px auto;
+    color: var(--text-secondary);
+}
+
+.help-guide-retry {
+    margin-top: 8px;
+    padding: 6px 14px;
+    border: 1px solid var(--border-medium);
+    border-radius: 6px;
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    cursor: pointer;
 }
 
 /* ── Reader settings popover ────────────────────────────────────── */
@@ -2933,6 +3145,12 @@ details.ref-crossref-group:not([open]) .ref-crossref-group-header::before {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.search-result-context {
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    margin-bottom: 2px;
 }
 
 .search-result-chips {

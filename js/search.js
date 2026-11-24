@@ -3,6 +3,7 @@
 import { search, parseVerseId, formatReference, getAllBookmarks } from './db.js';
 import { navigateTo, getActivePaneTranslationId, getActivePaneTranslationAbbrev } from './reader.js';
 import { openTagView, openStudy }           from './panels.js';
+import { loadManual, getHelpSections, openHelpGuide } from './help-guide.js';
 
 // ============================================================
 // Init
@@ -15,6 +16,9 @@ export function initSearch() {
     const overlay = document.getElementById('search-results');
 
     input.addEventListener('focus', () => {
+        // Help in search reads the manual's sections synchronously; fetch it
+        // (precached, so local) the first time the bar gets focus.
+        loadManual().catch(() => {});
         const q = input.value.trim();
         if (q.length >= 2) {
             runSearch(q);
@@ -56,7 +60,7 @@ export function initSearch() {
 // Search execution
 // ============================================================
 
-const PREFIXES = { 'b:': 'verses', 'n:': 'notes', 's:': 'studies', 't:': 'tags', 'k:': 'bookmarks' };
+const PREFIXES = { 'b:': 'verses', 'n:': 'notes', 's:': 'studies', 't:': 'tags', 'k:': 'bookmarks', 'h:': 'help' };
 
 function runSearch(query) {
     let filter = null;
@@ -77,6 +81,17 @@ function runSearch(query) {
         return;
     }
 
+    // Help search — the manual's sections, JS-side, no FTS
+    if (filter === 'help') {
+        const matches = matchHelpSections(q, { body: true, limit: 10 });
+        if (matches.length === 0) { showOverlay(renderEmpty(query)); return; }
+        const container = document.createElement('div');
+        container.id = 'search-results-inner';
+        container.appendChild(renderSection('Help', matches.map(renderHelpResult)));
+        showOverlay(container);
+        return;
+    }
+
     const translationId    = getActivePaneTranslationId();
     const translationAbbrev = getActivePaneTranslationAbbrev();
     const results = search(q, translationId);
@@ -92,6 +107,11 @@ function runSearch(query) {
     if (!filter) {
         const bmMatches = matchBookmarks(q);
         if (bmMatches.length > 0) sections.push(renderSection('Bookmarks', bmMatches.map(renderBookmarkResult)));
+
+        // Help — headings only here, so a word in the manual's examples
+        // (the Search section's "love") doesn't bring up Help for it.
+        const helpMatches = matchHelpSections(q, { body: false, limit: 3 });
+        if (helpMatches.length > 0) sections.push(renderSection('Help', helpMatches.map(renderHelpResult)));
     }
 
     if (sections.length === 0) { showOverlay(renderEmpty(query)); return; }
@@ -272,6 +292,86 @@ function renderBookmarkResult(bm) {
     return item;
 }
 
+// ============================================================
+// Help — the manual's sections (docs/Help_Guide_Spec.md, Item 6)
+// ============================================================
+
+// Lowercase words with apostrophes dropped, so "Strong's" is one word,
+// "strongs", that "strong" and "strong's" both start.
+function helpWords(text) {
+    return text.toLowerCase().replace(/['’]/g, '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+
+const _helpWordCache = new WeakMap();
+function sectionWords(section) {
+    let words = _helpWordCache.get(section);
+    if (!words) {
+        words = { heading: helpWords(section.title), body: helpWords(section.text) };
+        _helpWordCache.set(section, words);
+    }
+    return words;
+}
+
+// Every query word must start a word in the heading (or, with body, a word
+// in the heading or the section's text). Heading matches rank first.
+function matchHelpSections(query, { body, limit }) {
+    const sections = getHelpSections();
+    if (!sections) return [];
+    const queryWords = helpWords(query);
+    if (queryWords.length === 0) return [];
+    const startsSome = (words, queryWord) => words.some(word => word.startsWith(queryWord));
+
+    const headingMatches = [];
+    const bodyMatches = [];
+    for (const section of sections) {
+        const words = sectionWords(section);
+        if (queryWords.every(queryWord => startsSome(words.heading, queryWord))) {
+            headingMatches.push(section);
+        } else if (body && queryWords.every(queryWord =>
+            startsSome(words.heading, queryWord) || startsSome(words.body, queryWord))) {
+            bodyMatches.push(section);
+        }
+    }
+    return headingMatches.concat(bodyMatches).slice(0, limit);
+}
+
+function firstSentence(text) {
+    const match = /^.*?[.!?](?=\s|$)/.exec(text);
+    return match ? match[0] : text;
+}
+
+function renderHelpResult(section) {
+    const item     = document.createElement('div');
+    item.className = 'search-result-item search-result-help';
+
+    const title_el       = document.createElement('div');
+    title_el.className   = 'search-result-ref';
+    title_el.textContent = section.title;
+    item.appendChild(title_el);
+
+    if (section.path.length > 0) {
+        const parent_el       = document.createElement('div');
+        parent_el.className   = 'search-result-context';
+        parent_el.textContent = section.path.join(' › ');
+        item.appendChild(parent_el);
+    }
+
+    const text_el       = document.createElement('div');
+    text_el.className   = 'search-result-text';
+    text_el.textContent = firstSentence(section.text);
+    item.appendChild(text_el);
+
+    item.addEventListener('click', () => {
+        hideOverlay();
+        const input = document.getElementById('search-input');
+        input.value = '';
+        input.blur();
+        openHelpGuide(section.slug);
+    });
+
+    return item;
+}
+
 function renderEmpty(query) {
     const el       = document.createElement('div');
     el.className   = 'search-no-results';
@@ -293,7 +393,8 @@ function renderShortcuts() {
         { prefix: 'n:', desc: 'Notes only'            },
         { prefix: 's:', desc: 'Studies only'          },
         { prefix: 't:', desc: 'Tags only'             },
-        { prefix: 'k:', desc: 'Bookmarks'             },
+        { prefix: 'k:', desc: 'Bookmarks only'        },
+        { prefix: 'h:', desc: 'Help only'             },
     ];
 
     for (const { prefix, desc } of prefixes) {
