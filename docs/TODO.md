@@ -46,7 +46,8 @@ OPFS → IndexedDB fallback done 2026-11-23: without OPFS, without `createWritab
 
 **Polish**
 
-- **Info tab shows the chapter before a verse is selected.** Today the tab is empty until a verse is selected, though its book, chapter and headings sections don't depend on one; only the notes do. Decide first: when the selected verse is in a different chapter from the one on screen, which the tab follows; and in split view, whether it follows the active pane, as the headings section already does. Tags, Related and Language stay verse-only. Source: `js/reference.js` (`renderInfoTab`, `clearAll`); Wayne, 2026-11-23.
+- **Rebuild the Info tab.** Translation, Book and Chapter accordions with summary-line headers, opened by a new selection level in the reading pane; people and places from STEPBible's TIPNR; chapter summaries from the 1611 KJV. Spec: `docs/Info_Tab_Spec.md` (draft, 2026-11-24).
+  - **Reminder for Wayne: find a reviewer for the Info tab copy, or a better source.** The book and translation copy and the chapter summaries need checking by someone qualified before release. Also keep looking for a more modern source of chapter summaries to replace the 1611 ones. See "Review" in the spec.
 - **Add the PWA icons.** `manifest.json` lists them, but `icons/` has none. See `FEATURE_INVENTORY.md` item 3. Three concepts were sketched (a glowing coal, a flame rising from an open book, a spark over a page corner); the coal was the one that stayed readable at 16px. No final choice recorded yet. Warm amber on dark; keep the mark inside the central ~80% for the maskable version.
 - **Finish the PWA install prompt.** The page element and styles exist, but there's no `beforeinstallprompt` handler. See `docs/BUILD_6.1_ACTUAL_STATE.md` §7.
 - **Fix drifted line references in `FEATURE_INVENTORY.md`.** For example, item 8 says the load error is shown at `app.js:46`, which is now `initMarkups()`; the `catch` is at line 77. Not recorded anywhere else.
