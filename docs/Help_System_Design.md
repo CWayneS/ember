@@ -1,5 +1,17 @@
 # Ember Bible Study — Help System Design
 
+**Status (2026-11-23):** All three tiers are built, plus a Tier 2.5. They were built to `docs/Help_Guide_Spec.md`, and what shipped is recorded in `docs/BUILD_6.1_ACTUAL_STATE.md` §21–22. The design below is kept as written. Where it differs from what shipped, this section is current:
+
+- **Tier 1, quick help popovers:** built in Build 1.5. Their copy was updated on 2026-11-23 to match the app (the ☆ bookmark button, Related live, Language and Plans listed), and a fourth popover was added for the global `?`. "More help" became "More in the guide →", which opens the guide at that panel's section.
+- **Tier 2, the full help panel:** this is `USER_MANUAL.md`, rendered in the app by `js/help-guide.js`, rather than a separate HTML document. The repository's manual and the in-app guide are one file. It's an overlay that fills the window, with a contents list, and it works offline.
+- **Tier 2.5, the app map** (new, not in the original design): a wireframe of the live layout beside the guide (`js/help-map.js`). Links in the manual highlight a control on it, and **Show me** points at the real control.
+- **Tier 3, help in search:** matches the manual's own headings, not a hand-kept keyword index, so there's nothing extra to maintain. Without a prefix, a query must match a heading; the `h:` prefix searches the sections' text as well.
+- **Not built from this design:**
+  - an opening "How Ember is organized" chapter (the manual starts with "What is Ember?")
+  - setting names in help that link to their ⚙ popover
+  - "Keyboard shortcuts" and "About Ember" sections
+  - synonym matching in search: "notebook" or "dark mode" won't find a section unless a heading contains the word
+
 ---
 
 ## Overview
@@ -207,6 +219,6 @@ const helpIndex = [
 
 **Build 2:** No help system changes by default. If the Reference panel's Related tab content changes meaningfully when cross-references ship, the reference popover's content may need a small update.
 
-**Build 3 or later:** Full help panel ships. "More help" links become functional. Help search integration ships in the same build (the help index is small and the search module is already structured to accept new result groups).
+**Build 3 or later:** *(Shipped 2026-11-23 as the rendered `USER_MANUAL.md`, with Help in search and the app map; see the status at the top.)* Full help panel ships. "More help" links become functional. Help search integration ships in the same build (the help index is small and the search module is already structured to accept new result groups).
 
 **Future:** As new panels and settings are added (templates, memory verses, journal, commentary, language tools), each gets a quick help popover and a section in the full help document. The help index gains new keyword entries. The pattern scales without structural changes.
