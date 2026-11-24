@@ -37,7 +37,8 @@ Usage (from the repo root):
    python3 tests/verify.py help          # help guide: every popover's link, sections and contents, rendering,
                                          #   closing leaves the app as it was, Help in search, offline
    python3 tests/verify.py fallback      # without full OPFS (none, no createWritable, refused): core.db and the
-                                         #   translations in IndexedDB, restore, Add/Remove, updates, offline
+                                         #   translations in IndexedDB, restore, Add/Remove, updates, offline,
+                                         #   backups moving between IndexedDB and OPFS
    python3 tests/verify.py boots         # warm-boot time to "app live": prints samples and the median
    python3 tests/verify.py dbsnapshot out.json          # results of ~36 db.js calls as JSON
    python3 tests/verify.py dbcompare before.json after.json
@@ -4279,9 +4280,46 @@ def fallback_restore_refused(run):
           f'no-writable: restore refuses while a non-empty OPFS core.db would be read instead ({refused}, {run.state()!r})')
 
 
+def fallback_backups_across_stores(browser):
+    """A backup made where core.db lives in IndexedDB restores where it lives in
+    OPFS, and the other way round, through the real Backup & Restore flow."""
+    os.makedirs(SCRATCH, exist_ok=True)
+    for source_mode, target_mode in ((None, 'no-writable'), ('no-writable', None)):
+        label = f'{source_mode or "OPFS"} → {target_mode or "OPFS"}'
+        path = os.path.join(SCRATCH, 'fallback-backup.db')
+        source = FallbackRun(browser, source_mode) if source_mode else OfflineRun(browser)
+        source.boot()
+        source.page.evaluate("""() => import('./js/db.js').then(db => {
+            db.setState('fallback_probe', 'from the backup');
+            db.saveNote('zzcrossstore note', [{ verseStart: 43003016 }], [], null);
+        })""")
+        make_backup(source.page, path)
+        source.close()
+
+        target = FallbackRun(browser, target_mode) if target_mode else OfflineRun(browser)
+        target.boot()
+        target.page.evaluate("import('./js/db.js').then(db => db.setState('fallback_probe', 'before restore'))")
+        target.page.wait_for_timeout(2500)
+        restore_backup(target, path)
+        p = target.page
+        value = p.evaluate("import('./js/db.js').then(db => db.getState('fallback_probe'))")
+        notes = p.evaluate("import('./js/db.js').then(db => db.getNotesForVerse(43003016).map(n => n.body))")
+        check(value == 'from the backup' and any('zzcrossstore' in body for body in notes),
+              f'{label}: the backup restores ({value!r}, {len(notes)} note(s) on John 3:16)')
+        target.reload()
+        value = p.evaluate("import('./js/db.js').then(db => db.getState('fallback_probe'))")
+        check(value == 'from the backup', f'{label}: and is still there after another launch ({value!r})')
+        if target_mode:
+            check(p.evaluate(REAL_OPFS_JS) == {}, f'{label}: restored into IndexedDB, not OPFS')
+        target.check_no_errors(label)
+        target.close()
+        os.remove(path)
+
+
 def scenario_fallback(browser):
     for mode in FALLBACK_MODES:
         fallback_mode(browser, mode)
+    fallback_backups_across_stores(browser)
     return FAILURES
 
 

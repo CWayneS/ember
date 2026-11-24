@@ -670,6 +670,7 @@ The OPFS → IndexedDB fallback test from "Deferred / Related" in `Offline_Langu
   - Nothing at all is written to OPFS.
   - Offline, every translation opens and the updated ASV text shows.
   - There are no console errors.
+- **Backups between stores:** a backup made with `core.db` in IndexedDB restores into an OPFS install, and the other way round. Both go through the real Backup & Restore flow, and each restore is still there after another launch.
 - **Only without `createWritable`:** a restore is refused while a non-empty OPFS `core.db` is there, and the data stays as it was.
 - **In Firefox** (`EMBER_BROWSER=firefox`), the service worker is blocked and the offline phase is skipped. Firefox serves the worker script from the service worker's cache, out of `ctx.route`'s reach, and can't reload a routed page offline. Everything else passes.
 
