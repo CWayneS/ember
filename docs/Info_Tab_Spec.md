@@ -101,11 +101,26 @@ Check before building: the file's exact format, and how it separates people from
 
 The 1611 KJV printed a short summary at the head of every chapter. These are the first source, until a more modern one is found.
 
-- **Finding a clean digital copy is the first task.** Not yet confirmed: the Wikisource transcription of the 1611 edition and Project Gutenberg's KJV texts are the places to check. The copy must be public domain and keyed by chapter.
-- **Shown as a quotation, with its source,** e.g. "Summary from the 1611 King James Bible", not as Ember's own words.
-- **Spelling as the source has it,** or with only spelling modernized. Decide when the source is in hand.
-- **Expect interpretation.** The 1611 summaries read some Old Testament passages Christologically (e.g. the Song of Solomon as Christ and the church). That's a reason to show them as attributed quotations, and a question for the reviewer.
-- **Any gap** (a chapter the source doesn't cover) falls back to people and places alone.
+**Source: [lb42/KJV_1611](https://github.com/lb42/KJV_1611)** (surveyed 2026-11-24). A TEI XML edition of the 1611 text, one file per chapter in `chaps/` (1,361 files, Apocrypha included). Each chapter has a `<head>CHAP. N.</head>` followed by a second `<head>` holding the summary, e.g. John 3: "1 Christ teacheth Nicodemus the necessitie of regeneration. 14 Of faith in his death. 16 The great loue of God towards the world. 18 Condemnation for vnbeliefe. 23 The baptisme, witnes & doctrine of Iohn concerning Christ."
+
+- **Coverage:** every chapter of the 66 books except Proverbs 11–24, which the 1611 itself left without summaries. Its note at Proverbs 10 covers them: "From this Chapter to the fiue and twentieth, are sundry obseruations of morall vertues, and their contrary vices." Show that note on Proverbs 11–24, attributed to Proverbs 10. (Ecclesiasticus 51 is also bare, but the Apocrypha isn't in Ember.)
+- **Verse numbers inside the summaries** ("14 Of faith…") become links to those verses.
+- **Original spelling** ("loue", "Iohn", "Dauid"). Lengths run 29 to 668 characters, median about 190. Entities such as `&amp;` need decoding.
+- **Licence: none stated.** The repo's header says the transcription was taken from kingjamesbibleonline.org and reprocessed. The 1611 text is public domain, and a faithful transcription normally adds no new copyright in the US, but ask the repo's author for an explicit licence before shipping. Pin the commit and sha256 in the build script either way.
+- **It also has the 1611 marginal notes** inline (`<note>` in each verse, e.g. John 3:3 "Or, from aboue."). Not part of this spec; a candidate for the KJV's "Notes for this version". [basil/bible's listing](https://github.com/basil/bible/blob/master/sources/exhaustive-listing-marginal-notes-1611-edition-king-james-bible.md) of all 7,341 notes in modern spelling (from Literatura Bautista; licence unclear) is a cross-check.
+- **Shown as a quotation, with its source,** not as Ember's own words.
+- **Expect interpretation.** The 1611 summaries read some Old Testament passages Christologically (e.g. Song of Solomon 2: "The mutuall loue of Christ and his Church"; Isaiah 53: "the scandall of the crosse"). That's a reason to show them as attributed quotations, and a question for the reviewer.
+- **Any other gap** falls back to people and places alone.
+
+Looked at and not used: aruljohn/Bible-kjv-1611 (1611 verse text as JSON, no summaries); kennethreitz/kjvstudy.org (modern section headings of unknown origin, not the 1611 summaries).
+
+### Editorial convention
+
+- **Modernize spelling only; never change a word.** u/v, i/j, final -e, doubled letters and the like ("loue" → "love", "Iohn" → "John", "vnbeliefe" → "unbelief"). Wording, word order and punctuation stay as printed. Spelling is modernized by a fixed, reviewable word list in the build, not by hand, edit by edit.
+- **One label per summary, not a mark per word:** a small line under it, "1611 King James Bible · spelling modernized". Modernization touches almost every line, so marking each word would bury the text, and editions of early modern texts state their spelling policy once. The label links to a short note in `USER_MANUAL.md` saying what was and wasn't changed.
+- **Square brackets only for words Ember adds,** the standard editorial use. The only planned case is the Proverbs 10 note shown on 11–24, introduced as "[From Proverbs 10:]".
+- **Hard words are glossed, not replaced.** A word whose meaning has changed or dropped out of use (e.g. "prelation", 1 Corinthians 13, meaning preference) keeps its place and gets a dotted underline with the meaning on hover. The glosses are a small hand-kept list, so they're part of the review.
+- **Original spelling stays one click away.** The db keeps both forms; clicking the label toggles to the 1611 spelling.
 
 ---
 
@@ -133,7 +148,7 @@ Where OPFS can't be written, it is online-only, like `language.db`.
 - `tests/verify.py`, a new `info` scenario: each selection level opens the right section; folded headers show their summary; empty fields are hidden; split view follows the active pane; switching translation opens Translation; the other tabs show their placeholders above verse level.
 - `USER_MANUAL.md` and the Reference panel's help popover describe the tab and the new selections. The chapter title and the accordion get `data-help-target`s and entries in `help-map.js`.
 - `sw.js`: bump `CACHE_NAME`.
-- `README.md` "Data & Attribution": TIPNR and the 1611 source.
+- `README.md` "Data & Attribution": TIPNR and lb42/KJV_1611.
 
 ---
 
@@ -141,7 +156,7 @@ Where OPFS can't be written, it is online-only, like `language.db`.
 
 1. Selection levels, chapter title, active-pane outline, and the three sections with today's data.
 2. `context.db` and TIPNR people and places.
-3. Chapter summaries from the 1611 KJV.
+3. Chapter summaries from the 1611 KJV (lb42/KJV_1611), spelling modernized.
 4. Translation and book copy, drafted for review.
 5. Review (Wayne finds help); corrections ship through the update path.
 
