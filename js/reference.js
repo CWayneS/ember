@@ -211,9 +211,11 @@ function nameLink(row, book, chapter) {
     link.className = 'info-name';
     link.textContent = row.shown_as;
     const where = row.first_verse === 0 ? `${book.name} ${chapter}, title` : `${book.name} ${chapter}:${row.first_verse}`;
+    // TIPNR's one-sentence @Short says who they are; @Brief, then the plain
+    // description ("Man living at the time of the Patriarchs"), stand in.
     link.title = [
         row.name !== row.shown_as ? `Also called ${row.name}` : null,
-        row.description || null,
+        row.summary || row.brief || row.description || null,
         row.verse_count > 1 ? `first at ${where}, in ${row.verse_count} verses` : where,
     ].filter(Boolean).join(' · ');
     const verseId = book.id * 1000000 + chapter * 1000 + row.first_verse;

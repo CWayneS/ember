@@ -2775,13 +2775,15 @@ export function getCrossReferencesForVerse(verseId, options = {}) {
 
 // The people and places named in a chapter, in order of first appearance:
 // [{ name_id, shown_as, name, kind ('person' | 'place'), type, description,
-// first_verse, verse_count }]. shown_as is the form used in the chapter
-// ("Abram" in Genesis 12), name the one TIPNR files them under ("Abraham").
+// brief, summary, first_verse, verse_count }]. shown_as is the form used in the
+// chapter ("Abram" in Genesis 12), name the one TIPNR files them under
+// ("Abraham"); brief and summary are TIPNR's @Brief and @Short.
 // Rejects when context.db can't be had (offline before its first download).
 export async function getChapterNames(bookId, chapter) {
     const contextDb = await openReferenceDb(CONTEXT_DB);
     return queryAll(contextDb,
-        `SELECT c.name_id, c.shown_as, n.name, n.kind, n.type, n.description, c.first_verse, c.verse_count
+        `SELECT c.name_id, c.shown_as, n.name, n.kind, n.type, n.description, n.brief, n.summary,
+                c.first_verse, c.verse_count
          FROM chapter_names c JOIN context_names n ON n.id = c.name_id
          WHERE c.book = ? AND c.chapter = ?
          ORDER BY c.first_verse, c.shown_as, c.name_id`,

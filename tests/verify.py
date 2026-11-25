@@ -993,8 +993,12 @@ def scenario_info(app):
     fields = info_state(p)['sections']['chapter']['fields']
     check([label for label, _ in fields][:3] == ['People', 'Places', 'Verses'], f'people and places come before the verse count ({fields})')
     title = p.evaluate("document.querySelector('#info-tab .info-name').title")
-    check(title == 'Also called Abraham · Man living at the time of the Patriarchs · first at Genesis 12:1, in 11 verses',
-          f"a name's tooltip: its other name, who, where ({title!r})")
+    check(title.startswith('Also called Abraham · Abraham') and title.endswith('. · first at Genesis 12:1, in 11 verses'),
+          f"a name's tooltip: its other name, TIPNR's one-line summary, where ({title!r})")
+    summary = p.evaluate("""import('./js/db.js').then(db => db.getChapterNames(1, 6))
+        .then(rows => rows.find(row => row.shown_as === 'Noah'))""")
+    check(summary['brief'] and summary['summary'].startswith('Noah') and '<' not in summary['summary'],
+          f"@Brief and @Short come through, as plain text ({summary['brief']!r})")
     check('STEPBible TIPNR' in info_state(p)['infoText'], 'the source is named')
     p.evaluate("document.querySelector('#reader-pane-a .pane-content').scrollTop = 0")
     p.click('#info-tab .info-name-list[data-kind="person"] .info-name:has-text("Pharaoh")')

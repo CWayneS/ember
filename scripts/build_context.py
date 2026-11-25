@@ -35,9 +35,13 @@ What goes in, and what doesn't:
              in the text); "– Form" sub-records (verbs and adjectives made from a
              name); LXX-only references; OTHER and EXCLUDED OTHER records (God,
              Sheol, months, titles).
-    Not used: @Briefest, @Brief, @Short and @Article. TIPNR says they were
-             "adapted from the output by Claude 3 Opus AI in April 2024": AI-written
-             copy, which the spec's review rule would have to cover first.
+    Descriptions: @Brief (up to ten words) and @Short (one sentence) are kept.
+             TIPNR says they were "adapted from the output by Claude 3 Opus AI in
+             April 2024"; STEPBible uses them itself (TIPNR's own extraction recipe
+             maps them to its lexicon's @STEPSuperMeaning and @ShortDef), which is
+             what Ember takes them on (Wayne, 2026-11-25). Their <ref> markup is
+             turned into plain references ("Exodus 6:23"). @Briefest (often empty)
+             and @Article (up to six paragraphs) aren't used.
 
     The name shown for a chapter is the form used there: "Abram" in Genesis 12
     (TIPNR's AltName|UnifiedName gives it), with the unified name kept beside it.
@@ -75,6 +79,7 @@ RAW_DIR      = PROJECT_ROOT / 'data' / 'context-prep' / 'raw'
 OUTPUT_DB    = PROJECT_ROOT / 'data' / 'context-prep' / 'output' / 'context.db'
 SHIPPED_DB   = PROJECT_ROOT / 'data' / 'context.db'
 KJV_DB       = PROJECT_ROOT / 'data' / 'translations' / 'kjv.db'
+CORE_DB      = PROJECT_ROOT / 'data' / 'core.db'
 
 STEPBIBLE_COMMIT = 'be4191f0082aeedddb0eff0c02c966292b2bd641'  # 2026-10-24
 TIPNR_PATH   = 'Proper Nouns/TIPNR - Translators Individualised Proper Names with all References - STEPBible.org CC BY.txt'
@@ -177,7 +182,33 @@ def read_records(path):
                 current['head'] = line.split('\t')
         elif line.startswith('– '):
             current['subs'].append(line.split('\t'))
+        elif line.startswith(('@Brief=', '@Short=')):
+            key, _, value = line.partition('=')
+            current[key[1:].lower()] = value.strip('\t ')
     return records
+
+
+REFERENCE_MARKUP = re.compile(r'<ref="([^"]*)">([^<]*)</ref>')
+SHOWN_REFERENCE = re.compile(r'^([1-3]?[A-Z][a-z]+)\.(\d+)\.(\d+)(.*)$', re.S)
+
+
+def plain_references(text, book_names):
+    """'… a priest. (<ref="Exo.6.23">Exo.6.23</ref>)' → '… a priest. (Exodus 6:23)'.
+    The shown text is kept ('1Ch.6.23, 37' → '1 Chronicles 6:23, 37'); a book
+    code it doesn't know is taken from the attribute ('Joel.1.1' → 'Joel 1:1')."""
+    def readable(match):
+        attribute, shown = match.groups()
+        parts = SHOWN_REFERENCE.match(shown.strip())
+        if not parts:
+            return shown
+        book, chapter, verse, rest = parts.groups()
+        if book not in BOOK_ID:
+            from_attribute = REFERENCE.match(attribute.split(';')[0].split(',')[0].strip())
+            if not from_attribute or from_attribute.group(2) not in BOOK_ID:
+                return shown
+            book = from_attribute.group(2)
+        return f'{book_names[BOOK_ID[book]]} {chapter}:{verse}{rest}'
+    return REFERENCE_MARKUP.sub(readable, text)
 
 
 def display_names(unique_name):
@@ -220,9 +251,9 @@ def parse_references(text, slips):
     return references
 
 
-def build_rows(records, verses, slips):
+def build_rows(records, verses, book_names, slips):
     """context_names rows, chapter_names rows, and counts for the report."""
-    names = []            # (unique_name, name, kind, type, description)
+    names = []            # (unique_name, name, kind, type, description, brief, summary)
     appearances = {}      # (unique_name, book, chapter) → {verse: form}
     counts = collections.Counter()
     for record in records:
@@ -244,7 +275,11 @@ def build_rows(records, verses, slips):
         else:
             area = head[6].strip() if len(head) > 6 else ''
             description = '' if area in ('', '>') else area
-        names.append((unique_name, unified, kind, record_type, description))
+        brief = record.get('brief', '')
+        summary = plain_references(record.get('short', ''), book_names)
+        if '<' in summary:
+            sys.exit(f'markup left in the @Short of {unique_name}: {summary}')
+        names.append((unique_name, unified, kind, record_type, description, brief, summary))
         counts[kind] += 1
 
         for sub in record['subs']:
@@ -276,6 +311,15 @@ def build_rows(records, verses, slips):
     return name_rows, chapter_rows, counts
 
 
+def book_names():
+    """Ember's book names by id, from core.db ("1 Chronicles")."""
+    con = sqlite3.connect(f'file:{CORE_DB}?mode=ro', uri=True)
+    try:
+        return dict(con.execute('SELECT id, name FROM books'))
+    finally:
+        con.close()
+
+
 def kjv_verses():
     """Every (book, chapter, verse) in the KJV file, Psalm titles (verse 0) included:
     the versification all of Ember's translations share."""
@@ -295,7 +339,9 @@ CREATE TABLE context_names (
     name         TEXT NOT NULL,          -- the name it's filed under, e.g. Abraham
     kind         TEXT NOT NULL CHECK (kind IN ('person', 'place')),
     type         TEXT NOT NULL,          -- Male, Female or Place
-    description  TEXT NOT NULL           -- e.g. "Man living at the time of the Patriarchs"; '' if none
+    description  TEXT NOT NULL,          -- e.g. "Man living at the time of the Patriarchs"; '' if none
+    brief        TEXT NOT NULL,          -- @Brief, e.g. "Moses' brother, first high priest of Israel"; '' if none
+    summary      TEXT NOT NULL           -- @Short, one sentence, references as plain text
 );
 CREATE TABLE chapter_names (
     book         INTEGER NOT NULL,
@@ -327,7 +373,7 @@ def write_database(path, name_rows, chapter_rows):
     con.execute('PRAGMA page_size = 4096')
     con.execute('PRAGMA journal_mode = DELETE')
     con.executescript(SCHEMA)
-    con.executemany('INSERT INTO context_names VALUES (?, ?, ?, ?, ?, ?)', name_rows)
+    con.executemany('INSERT INTO context_names VALUES (?, ?, ?, ?, ?, ?, ?, ?)', name_rows)
     con.executemany('INSERT INTO chapter_names VALUES (?, ?, ?, ?, ?, ?)', chapter_rows)
     con.executemany('INSERT INTO context_meta VALUES (?, ?)', meta_rows())
     con.commit()
@@ -367,6 +413,9 @@ def spot_checks(con):
     psalm_3 = chapter(19, 3)
     psalm_51 = chapter(19, 51)
     zechariahs = con.execute("SELECT COUNT(*) FROM context_names WHERE name = 'Zechariah' AND kind = 'person'").fetchone()[0]
+    abihu = con.execute("SELECT summary FROM context_names WHERE unique_name = 'Abihu@Exo.6.23-1Ch'").fetchone()[0]
+    aaron = con.execute("SELECT brief FROM context_names WHERE unique_name = 'Aaron@Exo.4.14-Heb'").fetchone()[0]
+    without = con.execute("SELECT COUNT(*) FROM context_names WHERE summary = ''").fetchone()[0]
     return [
         ('Genesis 12: Abram at 12:1, not Abraham', has(genesis_12, 'Abram', 'person', 1)
          and not any(row[0] == 'Abraham' for row in genesis_12)),
@@ -379,6 +428,9 @@ def spot_checks(con):
         ('Psalm 51: Nathan and Bathsheba in the title, Jerusalem at 51:18', has(psalm_51, 'Nathan', 'person', 0)
          and has(psalm_51, 'Bathsheba', 'person', 0) and has(psalm_51, 'Jerusalem', 'place', 18)),
         (f'people who share a name stay apart (Zechariah: {zechariahs} people)', zechariahs > 20),
+        (f"Aaron's @Brief ({aaron!r})", aaron == "Moses' brother, first high priest of Israel"),
+        (f"Abihu's @Short with its reference as text ({abihu!r})", abihu.endswith('(Exodus 6:23)')),
+        (f'every name has an @Short ({without} without)', without == 0),
     ], {'Genesis 12': genesis_12, 'John 3': john_3, 'Psalm 3': psalm_3}
 
 
@@ -388,7 +440,7 @@ def build(raw_dir, output, ship):
     report_upstream_position()
 
     slips = collections.Counter()
-    name_rows, chapter_rows, counts = build_rows(read_records(source), kjv_verses(), slips)
+    name_rows, chapter_rows, counts = build_rows(read_records(source), kjv_verses(), book_names(), slips)
     write_database(output, name_rows, chapter_rows)
 
     problems = []
