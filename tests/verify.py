@@ -1097,6 +1097,19 @@ def scenario_info(app):
         const body = el?.closest('.help-guide-body') || el?.parentElement;
         return el && [el.textContent, Math.abs(el.getBoundingClientRect().top - body.getBoundingClientRect().top) < 80]; })()""")
     check(heading == ['The 1611 chapter summaries', True], f"the label opens the guide at the note ({heading})")
+    # The manual's map links: Show me outlines each control, not its neighbour.
+    for name, outlined, other in (('summary-spelling', 'info-summary-spelling', 'info-summary-source'),
+                                  ('summary-label', 'info-summary-source', 'info-summary-spelling')):
+        if not p.evaluate("!document.getElementById('help-guide')?.classList.contains('hidden')"):
+            p.click('#info-tab .info-summary-source')
+            wait_guide_rendered(p)
+        click_map_link(p, name)
+        p.click('#help-guide .help-map-show-me')
+        p.wait_for_timeout(150)
+        shown = p.evaluate(f"""[document.querySelector('#info-tab .{outlined}').classList.contains('help-show-me'),
+                                document.querySelector('#info-tab .{other}').classList.contains('help-show-me')]""")
+        check(shown == [True, False], f'Show me for map:{name} outlines .{outlined} only ({shown})')
+        p.wait_for_function("!document.querySelector('#info-tab .help-show-me')", timeout=5_000)   # gone after 1.5 s
     p.keyboard.press('Escape')
     p.wait_for_timeout(200)
     p.click('#global-settings-btn')

@@ -221,6 +221,7 @@ function fillChapterSummary(slot, summary, book, chapter, verseCount) {
     source.addEventListener('click', () => openHelpGuide(SUMMARY_HELP_SECTION));
     const toggle = document.createElement('button');
     toggle.className = 'info-summary-spelling';
+    toggle.dataset.helpTarget = 'summary-spelling';
     toggle.textContent = spelling === 'original' ? '1611 spelling' : 'spelling modernized';
     toggle.title = spelling === 'original' ? 'Show modern spelling' : 'Show the 1611 spelling';
     toggle.setAttribute('aria-pressed', String(spelling === 'original'));
