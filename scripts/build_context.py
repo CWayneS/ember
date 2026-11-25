@@ -29,12 +29,15 @@ What goes in, and what doesn't:
 
     People:  PERSON(s) records of type Male or Female. TIPNR already tells
              apart people who share a name (each Zechariah is his own record).
+    Peoples: PERSON(s) records of type Group (the Amorites); every "– Group"
+             sub-record (gentilics: Levite, Philistine, Egyptian, Gibeonite), one
+             entry per record they're under; and the records in ANCESTOR_PEOPLES,
+             whose own name TIPNR uses for the people too (see there).
     Places:  PLACE and PLACE+PERSON records.
-    Left out: Group records (the Amorites) and "– Group" sub-records (gentilics
-             such as Abiezrite); "– Mentioned" sub-records (people with no name
-             in the text); "– Form" sub-records (verbs and adjectives made from a
-             name); LXX-only references; OTHER and EXCLUDED OTHER records (God,
-             Sheol, months, titles).
+    Left out: "– Mentioned" sub-records (people with no name in the text);
+             "– Form" sub-records (verbs and adjectives made from a name);
+             LXX-only references; OTHER and EXCLUDED OTHER records (God, Sheol,
+             months, titles).
     Descriptions: @Brief (up to ten words) and @Short (one sentence) are kept.
              TIPNR says they were "adapted from the output by Claude 3 Opus AI in
              April 2024"; STEPBible uses them itself (TIPNR's own extraction recipe
@@ -47,7 +50,7 @@ What goes in, and what doesn't:
     (TIPNR's AltName|UnifiedName gives it), with the unified name kept beside it.
 
 Tables written:
-    context_names     one row per person or place
+    context_names     one row per person, people or place
     chapter_names     each name's appearances in a chapter: the form shown,
                       its first verse there, and how many verses
     context_meta      source commit, sha256, licence
@@ -106,14 +109,37 @@ INCLUDED_SUBRECORDS = {
     '– (same form with alt. meaning)', '– (same ref[s] with Variant)',
     '– (same ref[s] with alt Tags)', '– LXX addition',
 }
-EXCLUDED_SUBRECORDS = {'– Group', '– Mentioned', '– Total', '– Form (verb)', '– Form (adjective)',
+GENTILIC_SUBRECORD = '– Group'
+EXCLUDED_SUBRECORDS = {'– Mentioned', '– Total', '– Form (verb)', '– Form (adjective)',
                        '– Form (verb) OR (adjective)'}
 
 RECORD_KINDS = {'PERSON(s)': 'person', 'PLACE': 'place', 'PLACE+PERSON': 'place'}
 PERSON_TYPES = {'Male', 'Female'}
 
+# Records whose own name TIPNR uses both for the man and for the tribe or nation
+# named after him, with nothing to say which a verse means: all 2,501 Old
+# Testament "Israel"s are under Israel@Gen.25.26, the patriarch, and Judah's
+# record is the man, the tribe, the kingdom and "Jews". These go under Peoples,
+# marked `ambiguous`, so the app says the verse may mean either (Wayne chose this,
+# 2026-11-25). Chosen by hand: no rule in the data finds them (one on references
+# long after the man's life also catches David, Moses and Abraham). Each name is
+# used for its people outside Genesis: the tribes in Numbers, Joshua, Judges and
+# Revelation 7; Esau for Edom (Obadiah, Malachi 1:2-3); Javan for Greece (Isaiah
+# 66:19, Ezekiel 27:13); Kedar for the tribe (Isaiah 21:16-17, Jeremiah 49:28).
+# Nations TIPNR already keeps apart from their ancestor (Moab, Edom, Amalek,
+# Dan, Cush, Midian, Canaan) need nothing here; ANCESTOR_PEOPLES_MISSING stops
+# the build if one of these goes missing.
+ANCESTOR_PEOPLES = (
+    'Israel@Gen.25.26-Rev', 'Reuben@Gen.29.32-Rev', 'Simeon@Gen.29.33-Rev', 'Levi@Gen.29.34-Rev',
+    'Judah@Gen.29.35-Rev', 'Issachar@Gen.30.18-Rev', 'Zebulun@Gen.30.20-Rev', 'Gad@Gen.30.11-Rev',
+    'Asher@Gen.30.13-Rev', 'Naphtali@Gen.30.8-Rev', 'Joseph@Gen.30.24-Rev', 'Benjamin@Gen.35.18-Rev',
+    'Ephraim@Gen.41.52-Zec', 'Manasseh@Gen.41.51-Rev', 'Esau@Gen.25.25-Heb', 'Javan@Gen.10.2-Col',
+    'Kedar@Gen.25.13-Ezk',
+)
+
 # Exact because the source is pinned: a difference means this script changed.
-EXPECTED_COUNTS = {'people': 3054, 'places': 1006, 'chapter rows': 13571}
+# Entries with no verse left (only "– Mentioned" or LXX references) aren't kept.
+EXPECTED_COUNTS = {'people': 2979, 'peoples': 271, 'places': 1003, 'chapter rows': 14697}
 
 # A reference: "Gen.12.8", "Gen.12.8a" (a second occurrence in the verse),
 # "LXX.Est.3.1" (only in the Septuagint).
@@ -251,11 +277,40 @@ def parse_references(text, slips):
     return references
 
 
+def gentilic_form(translated):
+    """The form a gentilic sub-record's translations column gives, ESV's if marked:
+    'Gibeonite =ESV,NIV,KJV; Gibeon =ESV,NIV' → 'Gibeonite'; 'Egyptian,Egypt' →
+    'Egyptian'. '' if there's none ('[ ] =ESV')."""
+    segments = [segment.strip() for segment in translated.split(';') if segment.strip()]
+    chosen = next((segment for segment in segments if 'ESV' in segment.partition('=')[2]), segments[0] if segments else '')
+    form = chosen.partition('=')[0].split(',')[0].strip()
+    return '' if form.startswith('[') else form
+
+
 def build_rows(records, verses, book_names, slips):
-    """context_names rows, chapter_names rows, and counts for the report."""
-    names = []            # (unique_name, name, kind, type, description, brief, summary)
+    """context_names rows, chapter_names rows, and counts for the report.
+
+    An entry is one person, people or place. A record becomes one entry, and its
+    gentilic sub-records a second one (kind 'group', unique name + '#group'),
+    except for Group records, whose gentilics are part of the record's own
+    entry. ANCESTOR_PEOPLES keep theirs apart: "Jew" means the people, so only
+    Judah's own name is marked ambiguous."""
+    entries = {}          # unique_name → (name, kind, type, description, brief, summary, ambiguous)
     appearances = {}      # (unique_name, book, chapter) → {verse: form}
     counts = collections.Counter()
+    found_ancestors = set()
+
+    def add_references(entry_name, sub, form):
+        for book, chapter, verse, lxx_only in parse_references(sub[4] if len(sub) > 4 else '', slips):
+            if lxx_only:
+                counts['LXX-only references left out'] += 1
+                continue
+            if (book, chapter, verse) not in verses:
+                slips[f'no such verse: {STEPBIBLE_BOOK_ORDER[book - 1]}.{chapter}.{verse} ({entry_name})'] += 1
+                continue
+            appearances.setdefault((entry_name, book, chapter), {}).setdefault(verse, form)
+            counts['references'] += 1
+
     for record in records:
         kind = RECORD_KINDS.get(record['kind'])
         head = record['head']
@@ -263,51 +318,62 @@ def build_rows(records, verses, book_names, slips):
         if kind is None:
             counts[f'skipped record: {record["kind"]}'] += 1
             continue
-        if kind == 'person' and record_type not in PERSON_TYPES:
-            counts[f'skipped person type: {record_type}'] += 1
-            continue
         unique_name = head[0].split('=', 1)[0].strip()
         _, unified = display_names(unique_name)
+        ambiguous = unique_name in ANCESTOR_PEOPLES
+        if kind == 'person' and (record_type == 'Group' or ambiguous):
+            kind = 'group'
+            if ambiguous:
+                found_ancestors.add(unique_name)
+        elif kind == 'person' and record_type not in PERSON_TYPES:
+            counts[f'skipped person type: {record_type}'] += 1
+            continue
         # People: "Man living at the time of the Patriarchs". Places' first field
         # is OpenBible's name, so the geographical area stands in when there is one.
-        if kind == 'person':
-            description = head[1].strip()
-        else:
+        if kind == 'place':
             area = head[6].strip() if len(head) > 6 else ''
             description = '' if area in ('', '>') else area
+        else:
+            description = head[1].strip()
         brief = record.get('brief', '')
         summary = plain_references(record.get('short', ''), book_names)
         if '<' in summary:
             sys.exit(f'markup left in the @Short of {unique_name}: {summary}')
-        names.append((unique_name, unified, kind, record_type, description, brief, summary))
+        entries[unique_name] = (unified, kind, record_type, description, brief, summary, int(ambiguous))
         counts[kind] += 1
 
+        gentilic_entry = unique_name if record_type == 'Group' else f'{unique_name}#group'
         for sub in record['subs']:
             label = sub[0].strip()
             label = '– ' + label[1:].strip() if label.startswith('–') else label
             if label in EXCLUDED_SUBRECORDS:
                 counts[f'sub-record left out: {label}'] += 1
-                continue
-            if label not in INCLUDED_SUBRECORDS:
+            elif label == GENTILIC_SUBRECORD:
+                form = gentilic_form(sub[3] if len(sub) > 3 else '') or display_names(sub[1])[0]
+                if gentilic_entry not in entries:
+                    # "Descendants of Amram", "People of Gibeon": who they're named after.
+                    named_after = 'People of' if kind == 'place' else 'Descendants of'
+                    entries[gentilic_entry] = (form, 'group', 'Group', f'{named_after} {unified}', '', '', 0)
+                    counts['group'] += 1
+                    counts['gentilic entries'] += 1
+                add_references(gentilic_entry, sub, form)
+            elif label in INCLUDED_SUBRECORDS:
+                add_references(unique_name, sub, display_names(sub[1])[0])
+            else:
                 sys.exit(f'unknown sub-record {label!r} in {unique_name}: decide whether it names the person or place')
-            form, _ = display_names(sub[1])
-            for book, chapter, verse, lxx_only in parse_references(sub[4] if len(sub) > 4 else '', slips):
-                if lxx_only:
-                    counts['LXX-only references left out'] += 1
-                    continue
-                if (book, chapter, verse) not in verses:
-                    slips[f'no such verse: {STEPBIBLE_BOOK_ORDER[book - 1]}.{chapter}.{verse} ({unique_name})'] += 1
-                    continue
-                chapter_verses = appearances.setdefault((unique_name, book, chapter), {})
-                chapter_verses.setdefault(verse, form)
-                counts['references'] += 1
 
-    ids = {unique_name: index + 1 for index, (unique_name, *_rest) in enumerate(sorted(names))}
-    name_rows = [(ids[row[0]], *row) for row in sorted(names)]
+    missing = set(ANCESTOR_PEOPLES) - found_ancestors
+    if missing:
+        sys.exit(f'ANCESTOR_PEOPLES not found in TIPNR: {sorted(missing)}')
+    # A gentilic entry with no verse left (all LXX-only) isn't kept.
+    used = {entry_name for entry_name, _book, _chapter in appearances}
+    ids = {unique_name: index + 1 for index, unique_name in enumerate(sorted(name for name in entries if name in used))}
+    name_rows = [(ids[name], name, *entries[name]) for name in sorted(ids)]
     chapter_rows = []
     for (unique_name, book, chapter), by_verse in sorted(appearances.items(), key=lambda item: (item[0][1], item[0][2], ids[item[0][0]])):
         first_verse = min(by_verse)
         chapter_rows.append((book, chapter, ids[unique_name], by_verse[first_verse], first_verse, len(by_verse)))
+    counts['entries kept'] = len(ids)
     return name_rows, chapter_rows, counts
 
 
@@ -337,11 +403,12 @@ CREATE TABLE context_names (
     id           INTEGER PRIMARY KEY,
     unique_name  TEXT NOT NULL UNIQUE,   -- TIPNR's UniqueName, e.g. Abraham@Gen.11.26-1Pe
     name         TEXT NOT NULL,          -- the name it's filed under, e.g. Abraham
-    kind         TEXT NOT NULL CHECK (kind IN ('person', 'place')),
-    type         TEXT NOT NULL,          -- Male, Female or Place
+    kind         TEXT NOT NULL CHECK (kind IN ('person', 'group', 'place')),
+    type         TEXT NOT NULL,          -- Male, Female, Group or Place
     description  TEXT NOT NULL,          -- e.g. "Man living at the time of the Patriarchs"; '' if none
     brief        TEXT NOT NULL,          -- @Brief, e.g. "Moses' brother, first high priest of Israel"; '' if none
-    summary      TEXT NOT NULL           -- @Short, one sentence, references as plain text
+    summary      TEXT NOT NULL,          -- @Short, one sentence, references as plain text
+    ambiguous    INTEGER NOT NULL        -- 1: the name may mean the people or their ancestor (ANCESTOR_PEOPLES)
 );
 CREATE TABLE chapter_names (
     book         INTEGER NOT NULL,
@@ -373,7 +440,7 @@ def write_database(path, name_rows, chapter_rows):
     con.execute('PRAGMA page_size = 4096')
     con.execute('PRAGMA journal_mode = DELETE')
     con.executescript(SCHEMA)
-    con.executemany('INSERT INTO context_names VALUES (?, ?, ?, ?, ?, ?, ?, ?)', name_rows)
+    con.executemany('INSERT INTO context_names VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', name_rows)
     con.executemany('INSERT INTO chapter_names VALUES (?, ?, ?, ?, ?, ?)', chapter_rows)
     con.executemany('INSERT INTO context_meta VALUES (?, ?)', meta_rows())
     con.commit()
@@ -415,7 +482,13 @@ def spot_checks(con):
     zechariahs = con.execute("SELECT COUNT(*) FROM context_names WHERE name = 'Zechariah' AND kind = 'person'").fetchone()[0]
     abihu = con.execute("SELECT summary FROM context_names WHERE unique_name = 'Abihu@Exo.6.23-1Ch'").fetchone()[0]
     aaron = con.execute("SELECT brief FROM context_names WHERE unique_name = 'Aaron@Exo.4.14-Heb'").fetchone()[0]
-    without = con.execute("SELECT COUNT(*) FROM context_names WHERE summary = ''").fetchone()[0]
+    without = con.execute("SELECT COUNT(*) FROM context_names WHERE summary = '' AND unique_name NOT LIKE '%#group'").fetchone()[0]
+    ambiguous = [row[0] for row in con.execute("SELECT name FROM context_names WHERE ambiguous = 1 ORDER BY name")]
+    jew = con.execute("""SELECT n.ambiguous, n.description FROM chapter_names c JOIN context_names n ON n.id = c.name_id
+                         WHERE c.book = 43 AND c.chapter = 3 AND c.shown_as = 'Jew'""").fetchone()
+    numbers_26_peoples = con.execute("""SELECT COUNT(*) FROM chapter_names c JOIN context_names n ON n.id = c.name_id
+                                         WHERE c.book = 4 AND c.chapter = 26 AND n.kind = 'group'""").fetchone()[0]
+    genesis_32 = chapter(1, 32)
     return [
         ('Genesis 12: Abram at 12:1, not Abraham', has(genesis_12, 'Abram', 'person', 1)
          and not any(row[0] == 'Abraham' for row in genesis_12)),
@@ -430,7 +503,15 @@ def spot_checks(con):
         (f'people who share a name stay apart (Zechariah: {zechariahs} people)', zechariahs > 20),
         (f"Aaron's @Brief ({aaron!r})", aaron == "Moses' brother, first high priest of Israel"),
         (f"Abihu's @Short with its reference as text ({abihu!r})", abihu.endswith('(Exodus 6:23)')),
-        (f'every name has an @Short ({without} without)', without == 0),
+        (f'every record has an @Short; gentilics have none of their own ({without} without)', without == 0),
+        (f'{len(ambiguous)} ancestor peoples marked ambiguous', len(ambiguous) == 17 and 'Israel' in ambiguous and 'Judah' in ambiguous),
+        ('Genesis 12: the Canaanite at 12:6 and the Egyptians at 12:12 are peoples',
+         has(genesis_12, 'Canaanite', 'group', 6) and has(genesis_12, 'Egyptian', 'group', 12)),
+        ('John 3: the Jews at 3:1 and Israel at 3:10 are peoples, not people',
+         has(john_3, 'Jew', 'group', 1) and has(john_3, 'Israel', 'group', 10) and not any(row[1] == 'person' and row[0] == 'Israel' for row in john_3)),
+        (f'John 3: "Jew" is a plain people, not marked ambiguous ({jew})', jew == (0, 'Descendants of Judah')),
+        ('Genesis 32: Jacob is under Peoples too, as the data can\'t tell', has(genesis_32, 'Jacob', 'group', 1)),
+        (f'Numbers 26: the clans are peoples ({numbers_26_peoples})', numbers_26_peoples > 40),
     ], {'Genesis 12': genesis_12, 'John 3': john_3, 'Psalm 3': psalm_3}
 
 
@@ -450,7 +531,9 @@ def build(raw_dir, output, ship):
     print(f'  chapter rows: {len(chapter_rows)}')
     chapters_covered = len({(row[0], row[1]) for row in chapter_rows})
     print(f'  chapters with at least one person or place: {chapters_covered} of 1189')
-    measured = {'people': counts['person'], 'places': counts['place'], 'chapter rows': len(chapter_rows)}
+    kinds = collections.Counter(row[3] for row in name_rows)
+    measured = {'people': kinds['person'], 'peoples': kinds['group'], 'places': kinds['place'],
+                'chapter rows': len(chapter_rows)}
     for label, expected in EXPECTED_COUNTS.items():
         passed = measured[label] == expected
         print(f'{"ok  " if passed else "FAR "} {label}: {measured[label]} (expected exactly {expected})')
@@ -500,7 +583,7 @@ def build(raw_dir, output, ship):
 
 # Every slip the pinned file has in the records this build reads, each checked by
 # hand; see docs/DATA_QUIRKS.md. (Its other slips are in records left out.)
-EXPECTED_SLIPS = {'Num.13.8,16': 1}
+EXPECTED_SLIPS = {'Num.13.8,16': 1, 'comma between references': 1}
 
 
 if __name__ == '__main__':

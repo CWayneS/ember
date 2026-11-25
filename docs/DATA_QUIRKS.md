@@ -215,5 +215,5 @@ Four "– Named"/"– Greek" lines of the LORD record (`LORD@Gen.1.1-Rev`, `God|
 
 - **TBESG** (`js/greek-lexicon.js`): items 1, 7, 8, 9 and 11 are repaired for display; item 2's outer reference is kept as text and the inner one used; items 3 and 12 stay unlinked; item 4 links as its attribute says, so its last "3" opens 1 Peter 3:3; items 5 and 6 are read as written.
 - **BDB** (`js/hebrew-lexicon.js`): item 23's book names are read as the printed book, except `Jos.21.23`, which stays text; in item 24, `Exod24.17`, `Ezra,6,15` and `Job.37:23` are read anyway and `Ezra.814` stays text; items 25–27 stay text.
-- **TIPNR** (`scripts/build_context.py`): item 28 is read as Numbers 13:8 and 13:16; items 29 and 30 are in records Ember leaves out (groups and OTHER), and the build would read item 29's pairs as two references.
+- **TIPNR** (`scripts/build_context.py`): item 28 is read as Numbers 13:8 and 13:16; item 29's pairs are read as two references (Gentile's is in a record Ember leaves out); item 30 is in the OTHER records, which Ember leaves out.
 - **TAHOT**: items 13–15 are handled in `scripts/build_language.py` (`docs/HEBREW_ANATOMY_DATA_REPORT.md`); 16–21 are shown as written; item 22's Ketiv line is skipped (`js/manuscript-variants.js`).

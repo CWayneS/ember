@@ -95,7 +95,7 @@ ember/
 │   ├── build_crossrefs.py     # Ingests OpenBible cross-references into core.db
 │   ├── build_language.py      # Builds language.db from STEPBible-Data
 │   ├── build_lexicon_hebrew.py # Builds lexicon-hebrew.db from Open Scriptures (pinned, sha256-checked sources)
-│   ├── build_context.py       # Builds context.db (the Info tab's people and places) from STEPBible's TIPNR (pinned, sha256-checked)
+│   ├── build_context.py       # Builds context.db (the Info tab's people, peoples and places) from STEPBible's TIPNR (pinned, sha256-checked)
 │   ├── build_hebrew_versification.py # Generates js/hebrew-versification.js from TAHOT
 │   ├── gen_stress_data.py     # Generates 1/10/25/40-year user data for tests/stress.py (output gitignored)
 │   ├── analysis/              # Data investigation and checking scripts (not part of the app or build);
@@ -160,7 +160,7 @@ python scripts/build_language.py --ship
 # The same sources always give a byte-identical file.
 python scripts/build_lexicon_hebrew.py --ship
 
-# The Info tab's people and places, from STEPBible's TIPNR at the same pinned commit as language.db.
+# The Info tab's people, peoples and places, from STEPBible's TIPNR at the same pinned commit as language.db.
 # Builds into data/context-prep/output/; --ship also copies it to data/context.db and rewrites the catalogs.
 # The same source always gives a byte-identical file.
 python scripts/build_context.py --ship
@@ -254,7 +254,7 @@ The World English Bible appears as the **Verse-only World English Bible**: its v
 
 | Source | License | Powers |
 |---|---|---|
-| [STEPBible-Data](https://www.stepbible.org) | CC BY 4.0 | Language tab — original-language word data (Hebrew/Greek text, glosses, lexicon entries, and Greek and Hebrew grammar decoding: the TAHOT, TAGNT, TBESG, TEGMC and TEHMC datasets) — and the people and places in the Info tab's Chapter section (TIPNR), from Tyndale House, Cambridge |
+| [STEPBible-Data](https://www.stepbible.org) | CC BY 4.0 | Language tab — original-language word data (Hebrew/Greek text, glosses, lexicon entries, and Greek and Hebrew grammar decoding: the TAHOT, TAGNT, TBESG, TEGMC and TEHMC datasets) — and the people, peoples and places in the Info tab's Chapter section (TIPNR), from Tyndale House, Cambridge |
 | [OpenBible.info](https://www.openbible.info) | CC BY 4.0 | Related tab — cross-reference data |
 | [Open Scriptures Hebrew Bible Project](https://hb.openscriptures.org) | CC BY 4.0 | Hebrew lexicon (Brown-Driver-Briggs and Strong's Hebrew Dictionary) powering the Language tab's Lexicon for Hebrew words. When a word has several BDB entries, their order comes from word frequencies in the OSHB text |
 

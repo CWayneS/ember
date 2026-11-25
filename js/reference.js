@@ -144,8 +144,8 @@ function chapterSection(book, chapter, verseId) {
     return section.element;
 }
 
-// People and places named in the chapter (context.db, from STEPBible's TIPNR),
-// each a link to its first verse here. context.db is read asynchronously, so a
+// People, peoples and places named in the chapter (context.db, from
+// STEPBible's TIPNR), each a link to its first verse here. context.db is read asynchronously, so a
 // slot goes in now and fills when the rows come; a slot the tab has since
 // redrawn over is left alone. Nothing shows if context.db can't be had yet
 // (offline before its first download).
@@ -170,12 +170,11 @@ function appendChapterNames(container, book, chapter, credit) {
     container.appendChild(slot);
     chapterNames(book.id, chapter).then(rows => {
         if (!slot.isConnected) return;
-        const people = rows.filter(row => row.kind === 'person');
-        const places = rows.filter(row => row.kind === 'place');
-        if (people.length === 0 && places.length === 0) return;
+        if (rows.length === 0) return;
         const list = document.createElement('dl');
         list.className = 'info-fields';
-        for (const [label, group] of [['People', people], ['Places', places]]) {
+        for (const [label, kind] of [['People', 'person'], ['Peoples', 'group'], ['Places', 'place']]) {
+            const group = rows.filter(row => row.kind === kind);
             if (group.length === 0) continue;
             const term = document.createElement('dt');
             term.textContent = label;
@@ -186,7 +185,7 @@ function appendChapterNames(container, book, chapter, credit) {
             list.append(term, detail);
         }
         slot.appendChild(list);
-        credit.textContent = 'People and places: STEPBible TIPNR';
+        credit.textContent = 'People, peoples and places: STEPBible TIPNR';
     }).catch(warnContextUnavailable);
 }
 
@@ -212,8 +211,10 @@ function nameLink(row, book, chapter) {
     link.textContent = row.shown_as;
     const where = row.first_verse === 0 ? `${book.name} ${chapter}, title` : `${book.name} ${chapter}:${row.first_verse}`;
     // TIPNR's one-sentence @Short says who they are; @Brief, then the plain
-    // description ("Man living at the time of the Patriarchs"), stand in.
+    // description ("Man living at the time of the Patriarchs", "Descendants of
+    // Amram"), stand in. An ancestor's name that may mean his people says so.
     link.title = [
+        row.ambiguous ? `The people named after ${row.shown_as}, or ${row.shown_as} himself: STEPBible's data doesn't say which` : null,
         row.name !== row.shown_as ? `Also called ${row.name}` : null,
         row.summary || row.brief || row.description || null,
         row.verse_count > 1 ? `first at ${where}, in ${row.verse_count} verses` : where,

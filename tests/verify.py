@@ -990,8 +990,11 @@ def scenario_info(app):
     check(people == ['Abram', 'Lot', 'Sarai', 'Pharaoh'], f'Genesis 12: people as named there, in order ({people})')
     check(places[:3] == ['Haran', 'Canaan', 'Moreh'] and 'Bethel' in places and 'Egypt' in places,
           f'Genesis 12: places ({places})')
+    peoples = names('group')
+    check(peoples == ['Canaanite', 'Egyptian'], f'Genesis 12: peoples, the gentilics TIPNR gives ({peoples})')
     fields = info_state(p)['sections']['chapter']['fields']
-    check([label for label, _ in fields][:3] == ['People', 'Places', 'Verses'], f'people and places come before the verse count ({fields})')
+    check([label for label, _ in fields][:4] == ['People', 'Peoples', 'Places', 'Verses'],
+          f'people, peoples and places come before the verse count ({fields})')
     title = p.evaluate("document.querySelector('#info-tab .info-name').title")
     check(title.startswith('Also called Abraham · Abraham') and title.endswith('. · first at Genesis 12:1, in 11 verses'),
           f"a name's tooltip: its other name, TIPNR's one-line summary, where ({title!r})")
@@ -1010,6 +1013,16 @@ def scenario_info(app):
     st = info_state(p)
     check(shown == ['1012015', True], f'a name shows its first verse in the chapter ({shown})')
     check(st['selected'] == 0 and st['level'] == 'chapter', 'without selecting it, so Info stays where it was')
+    # A people named after its ancestor: under Peoples, saying the data can't tell which.
+    app.navigate(43, 3)
+    wait_names()
+    check('Israel' not in names('person') and names('group') == ['Jew', 'Israel'],
+          f"John 3: Israel (3:10) and the Jews (3:1) are peoples, not people ({names('person')}, {names('group')})")
+    tips = p.evaluate("""Object.fromEntries([...document.querySelectorAll('#info-tab .info-name-list[data-kind="group"] .info-name')]
+        .map(el => [el.textContent, el.title]))""")
+    check(tips['Israel'].startswith("The people named after Israel, or Israel himself: STEPBible's data doesn't say which · Israel, also named Jacob"),
+          f"an ancestor's name says it may mean either ({tips['Israel'][:90]!r})")
+    check(tips['Jew'].startswith('Descendants of Judah'), f"a gentilic says who it's named after ({tips['Jew']!r})")
     app.navigate(19, 3)
     wait_names()
     check(names('person') == ['Absalom', 'David'], f"Psalm 3: the title's people ({names('person')})")

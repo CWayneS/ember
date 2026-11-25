@@ -218,7 +218,7 @@ Info answers "what am I reading?" It has [three sections](#info "map:info-sectio
 
 - **Translation**: the abbreviation, its full name, year and license.
 - **Book**: the name and genre; open, its testament and number of chapters.
-- **Chapter**: the book and chapter and its number of verses; open, the people and places named in it, any headings (below), and your notes on the selected verse.
+- **Chapter**: the book and chapter and its number of verses; open, the people, peoples and places named in it, any headings (below), and your notes on the selected verse.
 
 What you've selected in the reader decides which section is open, and folds the other two:
 
@@ -229,9 +229,11 @@ What you've selected in the reader decides which section is open, and folds the 
 
 You can also open or fold any section yourself by clicking its header, and have more than one open. A section only shows what Ember has for it: a field with nothing in it is left out.
 
-**People and places.** Chapter lists the people and places the chapter names, in the order they first appear, from STEPBible's list of proper names (TIPNR). Each is called what the chapter calls them: "Abram" in Genesis 12, "Abraham" from Genesis 17. Hover over a name to see who they are, in a sentence from STEPBible ("Aaron was Moses' older brother and served as the first high priest of Israel."), any other name they go by, and where they first appear in the chapter; click it to bring that verse into view. People who share a name are kept apart, so the Zechariah of 2 Chronicles 24 isn't the one in Luke 1. A long list shows its first 24 names, with "N more" for the rest. Groups and nations (the Amorites), and people the text doesn't name, aren't listed.
+**People, peoples and places.** Chapter lists the people, peoples and places the chapter names, in the order they first appear, from STEPBible's list of proper names (TIPNR). Each is called what the chapter calls them: "Abram" in Genesis 12, "Abraham" from Genesis 17. Hover over a name to see who they are, in a sentence from STEPBible ("Aaron was Moses' older brother and served as the first high priest of Israel."), any other name they go by, and where they first appear in the chapter; click it to bring that verse into view. People who share a name are kept apart, so the Zechariah of 2 Chronicles 24 isn't the one in Luke 1. A long list shows its first 24 names, with "N more" for the rest. People the text doesn't name aren't listed.
 
-The list comes in a small file Ember downloads soon after it first starts. Until it has, for instance on a first start without a connection, Chapter leaves people and places out.
+**Peoples** are tribes, nations and clans: the Amorites, the Levites, the Philistines, and words like "Canaanite" or "Jew" (hover to see whom they're named after). Some names are both a man and the people descended from him. "Israel" is Jacob and the nation; "Judah", "Benjamin" and the other tribes are a son of Jacob and his tribe; "Esau" is also Edom. STEPBible's list doesn't say which a verse means, so these are always under Peoples, even where the man himself is meant (Jacob in Genesis 32), and hovering says it could be either.
+
+The list comes in a small file Ember downloads soon after it first starts. Until it has, for instance on a first start without a connection, Chapter leaves these lists out.
 
 The WEB is shown verse-only, so its headings — Psalm 119's Hebrew letters (ALEPH, BETH…), the speakers in the Song of Songs (Beloved, Lover, Friends), and the five books of the Psalms — aren't in the reading text. When the pane shows the WEB, the Info tab lists the chapter's headings and where each falls, such as "BETH — before 119:9".
 
