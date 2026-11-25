@@ -2469,6 +2469,68 @@ details.info-section[open] > .info-section-header::before {
     color: var(--text-primary);
 }
 
+/* The 1611 chapter summary in the Chapter section: a quotation, with its source */
+.info-summary:empty { display: none; }
+
+.info-summary {
+    padding: 2px 16px 10px 34px;
+}
+
+.info-summary-text {
+    margin: 0;
+    padding-left: 10px;
+    border-left: 2px solid var(--border-light);
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+.info-summary-added {
+    color: var(--text-muted);
+}
+
+.info-summary-verse {
+    font: inherit;
+    font-size: 0.8em;
+    padding: 0 2px;
+    border-radius: 3px;
+    color: var(--accent);
+    vertical-align: 0.15em;
+}
+
+.info-summary-verse:hover {
+    background: var(--accent-light);
+}
+
+.info-gloss {
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+    cursor: help;
+}
+
+.info-summary-label {
+    margin-top: 4px;
+    padding-left: 12px;
+    font-family: var(--font-display);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+}
+
+.info-summary-source,
+.info-summary-spelling {
+    font: inherit;
+    padding: 0;
+    color: var(--text-muted);
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+}
+
+.info-summary-source:hover,
+.info-summary-spelling:hover {
+    color: var(--accent);
+}
+
 /* People and places in the Chapter section (context.db) */
 .info-name-list {
     display: flex;

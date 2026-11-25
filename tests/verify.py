@@ -865,13 +865,15 @@ def scenario_info(app):
     p.click('#reference-tabs [data-tab="info"]')
 
     # First load: nothing selected is the chapter level.
+    p.wait_for_selector('#info-tab .info-summary-text', timeout=30_000)
     st = info_state(p)
     check(st['order'] == ['translation', 'book', 'chapter'], f"three sections in order ({st['order']})")
     check(open_sections(st) == ['chapter'] and st['level'] == 'chapter', f"first load opens Chapter only ({open_sections(st)}, {st['level']})")
     t, b, c = (st['sections'][n] for n in ('translation', 'book', 'chapter'))
     check((t['title'], t['summary']) == ('KJV', 'King James Version · 1611 · Public Domain'), f"Translation header and summary ({t['title']!r}, {t['summary']!r})")
     check((b['title'], b['summary']) == ('Genesis', 'Law'), f"Book header and summary ({b['title']!r}, {b['summary']!r})")
-    check((c['title'], c['summary']) == ('Genesis 1', '31 verses'), f"Chapter header and summary ({c['title']!r}, {c['summary']!r})")
+    check(c['title'] == 'Genesis 1' and c['summary'].startswith('The creation of Heaven and Earth, of the light,'),
+          f"Chapter header: its 1611 summary's first line ({c['title']!r}, {c['summary'][:40]!r})")
     check(['Chapters', '50'] in b['fields'] and ['Testament', 'Old Testament'] in b['fields'], f"Book fields ({b['fields']})")
     check(all(value.strip() for sec in st['sections'].values() for _, value in sec['fields']) and '—' not in st['infoText'],
           'no empty field and no "—" placeholder')
@@ -1013,6 +1015,79 @@ def scenario_info(app):
     st = info_state(p)
     check(shown == ['1012015', True], f'a name shows its first verse in the chapter ({shown})')
     check(st['selected'] == 0 and st['level'] == 'chapter', 'without selecting it, so Info stays where it was')
+    # The 1611 chapter summary: spelling modernized, verse numbers as links, the
+    # header's one line, the label switching to the 1611 spelling and back.
+    summary = lambda: p.evaluate("""(() => {
+        const slot = document.querySelector('#info-tab .info-summary');
+        return slot && {
+            text: slot.querySelector('.info-summary-text')?.textContent,
+            verses: [...slot.querySelectorAll('.info-summary-verse')].map(el => el.textContent),
+            glosses: [...slot.querySelectorAll('.info-gloss')].map(el => [el.textContent, el.title]),
+            label: slot.querySelector('.info-summary-label')?.textContent,
+            header: document.querySelector('#info-tab details[data-section="chapter"] .info-section-summary').textContent,
+        };
+    })()""")
+    wait_summary = lambda: p.wait_for_selector('#info-tab .info-summary-text', timeout=30_000)
+    app.navigate(43, 3)
+    wait_summary()
+    st = summary()
+    check(st['text'] == '1 Christ teacheth Nicodemus the necessity of regeneration. 14 Of faith in his death. 16 The great love '
+                        'of God towards the world. 18 Condemnation for unbelief. 23 The baptism, witness & doctrine of John concerning Christ.',
+          f"John 3's 1611 summary, spelling modernized ({st['text']!r})")
+    check(st['verses'] == ['1', '14', '16', '18', '23'], f"its verse numbers are links ({st['verses']})")
+    check(st['header'].startswith('Christ teacheth Nicodemus the necessity of regeneration. Of faith in his death.'),
+          f"the header's one line is the summary without verse numbers ({st['header'][:60]!r})")
+    check(st['label'] == '1611 King James Bible · spelling modernized', f"the label names the source and the spelling ({st['label']!r})")
+    p.evaluate("document.querySelector('#reader-pane-a .pane-content').scrollTop = 0")
+    p.click('#info-tab .info-summary-verse:text-is("16")')
+    p.wait_for_timeout(200)
+    check(p.evaluate("document.querySelector('#reader-pane-a .verse.shown')?.dataset.verseId") == '43003016'
+          and info_state(p)['selected'] == 0, 'a verse number shows that verse, without selecting it')
+    p.click('#info-tab .info-summary-spelling')
+    st = summary()
+    check('The great loue of God' in st['text'] and 'doctrine of Iohn' in st['text'] and st['label'].endswith('1611 spelling'),
+          f"the label switches to the 1611 spelling ({st['text'][:80]!r})")
+    app.navigate(43, 4)
+    wait_summary()
+    check('1611 spelling' in summary()['label'], 'the 1611 spelling is remembered from chapter to chapter')
+    p.click('#info-tab .info-summary-spelling')
+    check(summary()['label'].endswith('spelling modernized'), 'and switches back')
+    # Hard words glossed in the modern spelling; not in the 1611 one.
+    app.navigate(46, 13)
+    wait_summary()
+    check(summary()['glosses'] == [['charity', 'love'], ['prelation', 'preference: being ranked above']],
+          f"1 Corinthians 13: charity and prelation glossed ({summary()['glosses']})")
+    p.click('#info-tab .info-summary-spelling')
+    check(summary()['glosses'] == [] and 'charitie' in summary()['text'], 'no glosses on the 1611 spelling')
+    p.click('#info-tab .info-summary-spelling')
+    # Proverbs 11-24 have none in the 1611: Proverbs 10's note, in Ember's brackets.
+    app.navigate(20, 15)
+    wait_summary()
+    st = summary()
+    check(st['text'].startswith('[From Proverbs 10:] From this Chapter to the five and twentieth, are sundry observations of moral virtues')
+          and st['verses'] == [], f"Proverbs 15: Proverbs 10's note, marked as Ember's addition ({st['text'][:70]!r})")
+    # A number that's no verse of the chapter (a count, or a slip) stays text.
+    app.navigate(2, 24)
+    wait_summary()
+    check('40' not in summary()['verses'] and '40. days' in summary()['text'], f"Exodus 24: '40. days' isn't a verse link ({summary()['verses']})")
+    app.navigate(12, 7)
+    wait_summary()
+    check(summary()['verses'] == ['1', '3', '17'], f"2 Kings 7: the slip '22' (20 verses) isn't a link ({summary()['verses']})")
+    # The label opens the manual's note on what was changed.
+    p.click('#info-tab .info-summary-source')
+    wait_guide_rendered(p)
+    heading = p.evaluate("""(() => { const el = document.getElementById('help-the-1611-chapter-summaries');
+        const body = el?.closest('.help-guide-body') || el?.parentElement;
+        return el && [el.textContent, Math.abs(el.getBoundingClientRect().top - body.getBoundingClientRect().top) < 80]; })()""")
+    check(heading == ['The 1611 chapter summaries', True], f"the label opens the guide at the note ({heading})")
+    p.keyboard.press('Escape')
+    p.wait_for_timeout(200)
+    p.click('#global-settings-btn')
+    credits = p.evaluate("document.querySelector('#global-settings-popover .settings-credits-list')?.textContent || ''")
+    check('Lou Burnard, KJV_1611' in credits and 'Public domain text; no licence stated.' in credits
+          and credits.count('CC BY 4.0.') == 3, 'Data & Attribution credits the 1611 transcription, without a CC licence')
+    p.keyboard.press('Escape')
+
     # A people named after its ancestor: under Peoples, saying the data can't tell which.
     app.navigate(43, 3)
     wait_names()
@@ -1072,8 +1147,9 @@ def info_without_context_db(browser):
     app.navigate(1, 12)
     page.wait_for_timeout(1500)
     st = info_state(page)
-    check(page.evaluate("document.querySelectorAll('#info-tab .info-name').length") == 0
-          and [label for label, _ in st['sections']['chapter']['fields']] == ['Verses'],
+    check(page.evaluate("document.querySelectorAll('#info-tab .info-name, #info-tab .info-summary-text').length") == 0
+          and [label for label, _ in st['sections']['chapter']['fields']] == ['Verses']
+          and st['sections']['chapter']['summary'] == '20 verses',
           f"without context.db: no people or places, the rest as usual ({st['sections']['chapter']['fields']})")
     check(app.errors == [], f"without context.db: no console errors but the browser's own failed-request lines ({app.errors})")
     ctx.close()

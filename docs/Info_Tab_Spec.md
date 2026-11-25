@@ -1,6 +1,6 @@
 # Ember Bible Study — Info Tab Spec
 
-**Status:** Draft 2026-11-24. Steps 1 and 2 built 2026-11-25 (see "Step 1 as built" and "Step 2 as built" below); steps 3–5 not built.
+**Status:** Draft 2026-11-24. Steps 1–3 built 2026-11-25 (see "Step 1 as built", "Step 2 as built" and "Step 3 as built" below); steps 4–5 not built.
 **Ground rule:** the code wins where it and this spec disagree. "Current state" claims were checked against `js/reference.js`, `js/reader.js`, `index.html` and `data/core.db` on 2026-11-24. Re-check before building.
 
 ---
@@ -179,6 +179,16 @@ Where the code and the table in Item 1 part ways, the code chose:
 - **The name shown** is the form the chapter uses, from TIPNR's own AltName|UnifiedName ("Abram" in Genesis 12); the tooltip gives the other name, TIPNR's one-sentence @Short, and where they first appear. A click shows the verse without selecting it (as a BDB reference does), so Info stays where it was.
 - **TIPNR's descriptions:** @Brief and @Short are kept and @Short is shown. TIPNR marks them as adapted from AI output, but STEPBible uses them in its own lexicon (TIPNR's extraction recipe maps them to @STEPSuperMeaning and @ShortDef), and Wayne decided (2026-11-25) that STEPBible's use is the review: they're outside the "Review" rule above, which covers copy Ember writes or chooses itself. Their `<ref>` markup becomes plain references. @Article isn't used. With them, and the peoples, the file is 1.34 MB.
 - **Upstream slips** are items 28–30 in `docs/DATA_QUIRKS.md`.
+
+### Step 3 as built (2026-11-25)
+
+- **Licence (Wayne, 2026-11-25):** shipped. The 1611 text is public domain, the repository states no licence, and the summaries are the 1611's own words; Ember credits the repository (Settings → Data & Attribution, README, the manual's note). Wayne is contacting Lou Burnard.
+- **Source:** lb42/KJV_1611 at `c62d87f` (2017-10-29), the 1,189 chapter files of the 66 books, fetched from raw.githubusercontent.com one by one (the archive download is blocked here) and checked by one sha256 over all of them. The summaries are plain text in the files: no markup to keep. Coverage as surveyed: 1,175 summaries, Proverbs 11–24 borrowing Proverbs 10's note (`borrowed_from`).
+- **Spelling (the editorial convention's "fixed, reviewable word list"):** `build/context/1611-spelling.tsv`, 1,557 changes, each with its evidence, made by `scripts/analysis/kjv1611/derive_spelling.py`. Most (1,085) come from aligning the 1611 verse text with Ember's KJV, the 1769 edition: a word takes the 1769 spelling it's paired with at least 90% of the time, when the two differ only in spelling (u/v, i/j, y/i, e, doubled letters, macrons). So "then" stays "then" (1769 often changed it to "than", a different word), and a word the 1769 wrote two ways (doeth/doth, borne/born) stays as printed. The rest come from narrow rules checked against real words, stems with their endings kept, the printers' own conventions, and a manual list with a reason for each. 464 words stay as printed, listed at the end of the file for review. Where 1769 changed a spelling that's already today's (fulfill→fulfil, scepter→sceptre, Kiriath→Kirjath), the 1611 one stays. No apostrophes are added ("Davids", "Gods"), as the convention keeps punctuation.
+- **Glosses:** `build/context/1611-glosses.tsv`, 40 entries kept by hand (meaning, an example chapter, and an empty `reviewed` column), phrases allowed so only the old sense is glossed ("no let", not "let the people go"). The build stops if one matches no summary. Shown only on the modern spelling.
+- **Verse numbers** become links when they're a verse of the chapter: all 5,300-odd are, except four counts ("40. dayes", "70000", "2300. daies") and three slips (DATA_QUIRKS item 32), listed in the build, which stops if that changes. Lists such as Jeremiah 50's "1. 9.21. 35." link each number.
+- **In the tab:** the summary is Chapter's first field, as a quotation (`<blockquote>`), under it "1611 King James Bible · spelling modernized": the first opens the manual's note ("The 1611 chapter summaries"), the second switches to the 1611 spelling and back, remembered in localStorage (`ember.info.summarySpelling`). The header's one line is the summary without its verse numbers, replacing the verse count once it arrives.
+- **Size:** `context.db` is 1.93 MB; the build's limit is now 3 MB.
 
 ## Out of Scope
 

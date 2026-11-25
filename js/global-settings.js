@@ -76,7 +76,7 @@ const SECTIONS = [
         render(container) {
             const desc = document.createElement('p');
             desc.className = 'settings-section-desc';
-            desc.textContent = 'Ember bundles data from several sources. The six Bible translations, Nave’s Topical Bible, and the Brown-Driver-Briggs (1906) and Strong’s (1890) Hebrew dictionaries are public domain. The World English Bible appears as the Verse-only World English Bible: its verses without headings, footnotes or speaker labels. “World English Bible” is a trademark of eBible.org. Three sources are licensed CC BY 4.0 and credited here as required:';
+            desc.textContent = 'Ember bundles data from several sources. The six Bible translations, Nave’s Topical Bible, and the Brown-Driver-Briggs (1906) and Strong’s (1890) Hebrew dictionaries are public domain. The World English Bible appears as the Verse-only World English Bible: its verses without headings, footnotes or speaker labels. “World English Bible” is a trademark of eBible.org. Three sources are licensed CC BY 4.0 and credited here as required, and the 1611 chapter summaries come from a public-domain transcription credited with them:';
             container.appendChild(desc);
 
             const list = document.createElement('ul');
@@ -99,6 +99,12 @@ const SECTIONS = [
                     name: 'Open Scriptures Hebrew Bible Project',
                     url: 'https://hb.openscriptures.org',
                     note: 'Hebrew lexicon (Brown-Driver-Briggs and Strong’s Hebrew Dictionary) powering the Language tab’s Lexicon for Hebrew words. When a word has several BDB entries, their order comes from word frequencies in the OSHB text.'
+                },
+                {
+                    name: 'Lou Burnard, KJV_1611',
+                    url: 'https://github.com/lb42/KJV_1611',
+                    note: 'A TEI transcription of the 1611 King James Bible, from the page images at kingjamesbibleonline.org: the chapter summaries in the Info tab.',
+                    license: 'Public domain text; no licence stated.'
                 }
             ]) {
                 const li = document.createElement('li');
@@ -113,7 +119,7 @@ const SECTIONS = [
 
                 const note = document.createElement('span');
                 note.className = 'settings-credit-note';
-                note.textContent = ` — ${credit.note} CC BY 4.0.`;
+                note.textContent = ` — ${credit.note} ${credit.license ?? 'CC BY 4.0.'}`;
 
                 li.appendChild(link);
                 li.appendChild(note);

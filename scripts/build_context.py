@@ -49,11 +49,30 @@ What goes in, and what doesn't:
     The name shown for a chapter is the form used there: "Abram" in Genesis 12
     (TIPNR's AltName|UnifiedName gives it), with the unified name kept beside it.
 
+Second source, the chapter summaries (Item 4):
+    lb42/KJV_1611     chaps/<Book>_<NN>.xml for the 66 books, Lou Burnard's TEI
+                      edition of the 1611 King James Bible. Pinned at c62d87f
+                      (2017-10-29); fetched file by file and checked by one sha256
+                      over all of them (KJV1611_SHA256). No licence is stated; the
+                      1611 text is in the public domain, and Ember credits the
+                      repository (Wayne's call, 2026-11-25).
+    Each chapter's second <head> is the 1611 summary ("1 Christ teacheth
+    Nicodemus the necessitie of regeneration. 14 Of faith in his death. ...").
+    The original is kept as printed (entities decoded, whitespace collapsed);
+    the modern form changes spelling only, by build/context/1611-spelling.tsv
+    (made by scripts/analysis/kjv1611/derive_spelling.py, which says how).
+    Proverbs 11-24 have none in the 1611 either: they get Proverbs 10's note
+    ("From this Chapter to the five and twentieth, are sundry observations of
+    moral virtues ..."), with borrowed_from = 10 so the app can say so.
+    build/context/1611-glosses.tsv, kept by hand, glosses the hard words.
+
 Tables written:
     context_names     one row per person, people or place
     chapter_names     each name's appearances in a chapter: the form shown,
                       its first verse there, and how many verses
-    context_meta      source commit, sha256, licence
+    chapter_summaries each chapter's 1611 summary, as printed and modernized
+    summary_glosses   the hard words and their meanings
+    context_meta      source commits, sha256, licence
 
 Rebuilding from unchanged sources with the same SQLite version gives a
 byte-identical file: no build date, rows inserted in sorted order. Upstream
@@ -67,6 +86,7 @@ installs replace their copy in the background after their next online launch.
 import argparse
 import collections
 import hashlib
+import html
 import re
 import shutil
 import sqlite3
@@ -89,7 +109,12 @@ TIPNR_PATH   = 'Proper Nouns/TIPNR - Translators Individualised Proper Names wit
 TIPNR_FILE   = 'TIPNR.txt'
 TIPNR_SHA256 = 'd595b9163d32a400bb0ef96b27a6de58335a63da840b82531fe9f5e1d16a318c'
 
-MAX_SIZE_BYTES = 2 * 1024 * 1024   # the spec expects "likely under 1 MB"
+KJV1611_COMMIT = 'c62d87f7945403bcd2df4712ecaa83246ed9930d'  # 2017-10-29
+KJV1611_SHA256 = '487fbcc5d6d990b4268d72b8025e5bda51289a5826d75d120775073a1b51d39f'   # over every chapter file used; see kjv1611_digest()
+SPELLING_LIST = PROJECT_ROOT / 'build' / 'context' / '1611-spelling.tsv'
+GLOSS_LIST = PROJECT_ROOT / 'build' / 'context' / '1611-glosses.tsv'
+
+MAX_SIZE_BYTES = 3 * 1024 * 1024   # the spec guessed "likely under 1 MB"; the 1611 summaries, kept as printed and modernized, take it near 2 MB
 
 STEPBIBLE_BOOK_ORDER = [
     'Gen', 'Exo', 'Lev', 'Num', 'Deu', 'Jos', 'Jdg', 'Rut', '1Sa', '2Sa',
@@ -396,6 +421,144 @@ def kjv_verses():
         con.close()
 
 
+# ---- The 1611 chapter summaries ------------------------------------------------
+
+def kjv1611_file_names(book_names_by_id, chapter_counts):
+    """chaps/<Book>_<NN>.xml for the 66 books: "Song-of-Solomon_01.xml"."""
+    return [f"{book_names_by_id[book].replace(' ', '-')}_{chapter:02d}.xml"
+            for book in sorted(book_names_by_id) for chapter in range(1, chapter_counts[book] + 1)]
+
+
+def kjv1611_digest(directory, names):
+    """One sha256 over the files used: each name, a NUL, its own sha256, a newline."""
+    digest = hashlib.sha256()
+    for name in names:
+        digest.update(name.encode() + b'\0' + hashlib.sha256((directory / name).read_bytes()).hexdigest().encode() + b'\n')
+    return digest.hexdigest()
+
+
+def fetch_and_verify_kjv1611(raw_dir, names):
+    """Downloads missing chapter files at the pinned commit, eight at a time, and
+    refuses them unless together they match KJV1611_SHA256."""
+    from concurrent.futures import ThreadPoolExecutor
+    directory = raw_dir / 'KJV_1611' / 'chaps'
+    directory.mkdir(parents=True, exist_ok=True)
+    missing = [name for name in names if not (directory / name).exists()]
+
+    def fetch(name):
+        url = f'https://raw.githubusercontent.com/lb42/KJV_1611/{KJV1611_COMMIT}/chaps/{urllib.parse.quote(name)}'
+        with urllib.request.urlopen(url, timeout=120) as response:
+            (directory / name).write_bytes(response.read())
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(fetch, missing))
+    digest = kjv1611_digest(directory, names)
+    if KJV1611_SHA256 is None:
+        sys.exit(f'KJV1611_SHA256 is not set; the {len(names)} files give {digest}. Check them, then pin it.')
+    if digest != KJV1611_SHA256:
+        sys.exit(f'sha256 mismatch, not building:\n  KJV_1611 chapter files: expected {KJV1611_SHA256}, got {digest}')
+    print(f'{len(names)} KJV_1611 chapter files match their pinned sha256 {KJV1611_SHA256[:12]} ({len(missing)} downloaded)')
+    return directory
+
+
+def tei_text(markup):
+    """Text of a TEI fragment: tags removed, entities decoded, whitespace collapsed."""
+    return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', '', markup))).strip()
+
+
+def read_spelling_list():
+    """{printed word, lower case: modern spelling} from 1611-spelling.tsv."""
+    changes = {}
+    for line in SPELLING_LIST.read_text(encoding='utf-8').splitlines():
+        if line.startswith('#') or not line.strip():
+            continue
+        printed, modern = line.split('\t')[:2]
+        changes[printed] = modern
+    return changes
+
+
+SUMMARY_WORD = re.compile(r"[A-Za-zÀ-ÿĀ-ſ]+")
+
+
+def modernize(text, changes):
+    """Spelling only: each word the list names takes its modern spelling, with
+    the printed word's capital. Everything else, punctuation included, as printed."""
+    def replace(match):
+        word = match.group(0)
+        modern = changes.get(word.lower())
+        if modern is None:
+            return word
+        return modern[0].upper() + modern[1:] if word[0].isupper() else modern
+    return SUMMARY_WORD.sub(replace, text)
+
+
+# Numbers in a summary that aren't verses of its chapter: counts, and slips
+# (docs/DATA_QUIRKS.md). The app links only numbers within the chapter's verses.
+NOT_VERSES = {
+    (2, 24): {40},            # "he continueth 40. dayes, and 40. nights" (a count)
+    (13, 21): {70000},        # "after the death of 70000" (a count)
+    (27, 8): {2300},          # "The 2300. daies" (a count)
+    (12, 7): {22},            # a slip: 2 Kings 7 has 20 verses; probably 12
+    (26, 15): {16},           # a slip: Ezekiel 15 has 8 verses; probably 6
+    (38, 3): {18},            # a slip: Zechariah 3 has 10 verses; probably 8
+}
+VERSE_NUMBER = re.compile(r'(?<![\w])(\d+)(?!\w)')
+BORROWED_SUMMARIES = {(20, chapter): 10 for chapter in range(11, 25)}   # Proverbs 11-24 from 10
+
+
+def read_summaries(directory, names, book_ids, verse_counts, changes, problems):
+    """chapter_summaries rows: (book, chapter, original, modern, borrowed_from)."""
+    rows = {}
+    for name in names:
+        stem, _, number = name[:-4].rpartition('_')
+        book, chapter = book_ids[stem.replace('-', ' ')], int(number)
+        heads = [tei_text(head) for head in re.findall(r'<head>(.*?)</head>', (directory / name).read_text(encoding='utf-8'), re.S)]
+        if len(heads) > 1:
+            original = heads[1]
+            rows[(book, chapter)] = (book, chapter, original, modernize(original, changes), None)
+            # Every number is a verse of this chapter, or a listed count or slip.
+            numbers = {int(found) for found in VERSE_NUMBER.findall(original)}
+            stray = {number for number in numbers if not 1 <= number <= verse_counts[(book, chapter)]}
+            if stray != NOT_VERSES.get((book, chapter), set()):
+                problems.append(f'{name}: numbers that are no verse of the chapter {sorted(stray)}, '
+                                f'expected {sorted(NOT_VERSES.get((book, chapter), set()))}')
+        elif (book, chapter) not in BORROWED_SUMMARIES:
+            problems.append(f'{name}: no summary')
+    for (book, chapter), source_chapter in BORROWED_SUMMARIES.items():
+        if (book, chapter) in rows:
+            problems.append(f'Proverbs {chapter} has its own summary now: drop it from BORROWED_SUMMARIES')
+            continue
+        _, _, original, modern, _ = rows[(book, source_chapter)]
+        rows[(book, chapter)] = (book, chapter, original, modern, source_chapter)
+    return [rows[key] for key in sorted(rows)]
+
+
+def read_glosses(summary_rows, problems):
+    """summary_glosses rows: (phrase, meaning, example, reviewed). Each phrase must
+    occur, as whole words, in some modernized summary."""
+    texts = [row[3] for row in summary_rows]
+    rows = []
+    for line in GLOSS_LIST.read_text(encoding='utf-8').splitlines():
+        if line.startswith('#') or not line.strip():
+            continue
+        fields = line.split('\t') + ['', '']
+        phrase, meaning, example, reviewed = (field.strip() for field in fields[:4])
+        pattern = re.compile(r'(?<![\w])' + re.escape(phrase) + r'(?!\w)', re.I)
+        if not any(pattern.search(text) for text in texts):
+            problems.append(f'gloss "{phrase}" matches no summary')
+        rows.append((phrase.lower(), meaning, example, reviewed))
+    return sorted(rows)
+
+
+def verse_counts():
+    con = sqlite3.connect(f'file:{KJV_DB}?mode=ro', uri=True)
+    try:
+        return dict(((book, chapter), count) for book, chapter, count in
+                    con.execute('SELECT book, chapter, COUNT(*) FROM verses WHERE verse > 0 GROUP BY book, chapter'))
+    finally:
+        con.close()
+
+
 # ---- Writing -----------------------------------------------------------------
 
 SCHEMA = """
@@ -419,13 +582,32 @@ CREATE TABLE chapter_names (
     verse_count  INTEGER NOT NULL,
     PRIMARY KEY (book, chapter, name_id)
 ) WITHOUT ROWID;
+CREATE TABLE chapter_summaries (
+    book          INTEGER NOT NULL,
+    chapter       INTEGER NOT NULL,
+    original      TEXT NOT NULL,        -- as printed in 1611 ("loue", "Iohn")
+    modern        TEXT NOT NULL,        -- spelling modernized by 1611-spelling.tsv, nothing else
+    borrowed_from INTEGER,              -- Proverbs 11-24: 10, whose note covers them; else NULL
+    PRIMARY KEY (book, chapter)
+) WITHOUT ROWID;
+CREATE TABLE summary_glosses (
+    phrase   TEXT PRIMARY KEY,          -- lower case, modern spelling: "humane", "no let"
+    meaning  TEXT NOT NULL,
+    example  TEXT NOT NULL,             -- a chapter it's used in
+    reviewed TEXT NOT NULL              -- who checked it and when; '' while a draft
+);
 CREATE TABLE context_meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
 
 def meta_rows():
-    """Source and licence, and deliberately no build date."""
+    """Sources and licences, and deliberately no build date."""
     return sorted([
+        ('kjv1611_commit', KJV1611_COMMIT),
+        ('sha256:KJV_1611 chapter files', KJV1611_SHA256),
+        ('kjv1611_source', 'Chapter summaries from the 1611 King James Bible, transcribed by Lou Burnard '
+                           '(github.com/lb42/KJV_1611) from www.kingjamesbibleonline.org. Public domain text; '
+                           'the repository states no licence.'),
         ('stepbible_commit', STEPBIBLE_COMMIT),
         (f'sha256:{TIPNR_PATH}', TIPNR_SHA256),
         ('source', 'TIPNR, STEPBible.org (github.com/STEPBible/STEPBible-Data)'),
@@ -433,7 +615,7 @@ def meta_rows():
     ])
 
 
-def write_database(path, name_rows, chapter_rows):
+def write_database(path, name_rows, chapter_rows, summary_rows, gloss_rows):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.unlink(missing_ok=True)
     con = sqlite3.connect(path)
@@ -442,6 +624,8 @@ def write_database(path, name_rows, chapter_rows):
     con.executescript(SCHEMA)
     con.executemany('INSERT INTO context_names VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', name_rows)
     con.executemany('INSERT INTO chapter_names VALUES (?, ?, ?, ?, ?, ?)', chapter_rows)
+    con.executemany('INSERT INTO chapter_summaries VALUES (?, ?, ?, ?, ?)', summary_rows)
+    con.executemany('INSERT INTO summary_glosses VALUES (?, ?, ?, ?)', gloss_rows)
     con.executemany('INSERT INTO context_meta VALUES (?, ?)', meta_rows())
     con.commit()
     con.execute('VACUUM')
@@ -520,11 +704,20 @@ def build(raw_dir, output, ship):
     source = fetch_and_verify_source(raw_dir)
     report_upstream_position()
 
-    slips = collections.Counter()
-    name_rows, chapter_rows, counts = build_rows(read_records(source), kjv_verses(), book_names(), slips)
-    write_database(output, name_rows, chapter_rows)
+    names_by_id = book_names()
+    counts_by_chapter = verse_counts()
+    chapter_counts = collections.Counter(book for book, _chapter in counts_by_chapter)
+    chapter_files = kjv1611_file_names(names_by_id, chapter_counts)
+    kjv1611 = fetch_and_verify_kjv1611(raw_dir, chapter_files)
 
     problems = []
+    slips = collections.Counter()
+    name_rows, chapter_rows, counts = build_rows(read_records(source), kjv_verses(), names_by_id, slips)
+    summary_rows = read_summaries(kjv1611, chapter_files, {name: book for book, name in names_by_id.items()},
+                                  counts_by_chapter, read_spelling_list(), problems)
+    gloss_rows = read_glosses(summary_rows, problems)
+    write_database(output, name_rows, chapter_rows, summary_rows, gloss_rows)
+
     heading('Counts')
     for label, value in sorted(counts.items()):
         print(f'  {label}: {value}')
@@ -539,6 +732,16 @@ def build(raw_dir, output, ship):
         print(f'{"ok  " if passed else "FAR "} {label}: {measured[label]} (expected exactly {expected})')
         if not passed:
             problems.append(f'{label}: {measured[label]}, expected {expected}')
+
+    heading('1611 summaries')
+    borrowed = sum(1 for row in summary_rows if row[4] is not None)
+    print(f'  {len(summary_rows)} chapters: {len(summary_rows) - borrowed} with their own summary, '
+          f'{borrowed} with Proverbs 10\'s note; {len(gloss_rows)} glosses')
+    if (len(summary_rows), borrowed) != (1189, 14):
+        problems.append(f'summaries: {len(summary_rows)} chapters, {borrowed} borrowed; expected 1189 and 14')
+    for book, chapter in ((43, 3), (19, 23), (20, 15)):
+        row = next(row for row in summary_rows if row[:2] == (book, chapter))
+        print(f'  {names_by_id[book]} {chapter}: {row[3]}')
 
     heading('Upstream slips (docs/DATA_QUIRKS.md)')
     for label, value in sorted(slips.items()):

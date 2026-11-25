@@ -4,8 +4,9 @@ import {
     getBook, parseVerseId, formatReference,
     getChapterVerseCount, getTopicsForVerse, getUserTagsForVerse,
     getNotesForVerse, getCrossReferencesForVerse, getHeadingsForChapter,
-    getChapterNames, warnContextUnavailable
+    getChapterNames, getChapterSummary, getSummaryGlosses, warnContextUnavailable
 } from './db.js';
+import { openHelpGuide } from './help-guide.js';
 import { navigateTo, showVerse, getCurrentLocation, getActivePaneId, getActivePaneTranslation, getActivePaneTranslationId, getActivePaneTranslationAbbrev } from './reader.js';
 import { selectVerseRange, getSelectionLevel, getSelectedVerseOnScreen } from './selection.js';
 import { openStudy, openTagView } from './panels.js';
@@ -134,6 +135,7 @@ function chapterSection(book, chapter, verseId) {
     const verses = verseCount ? `${verseCount} verse${verseCount !== 1 ? 's' : ''}` : '';
     // Until chapters have summaries, the verse count is the header's line.
     const section = infoSection('chapter', `${book.name} ${chapter}`, [verses]);
+    appendChapterSummary(section, book, chapter, verseCount);
     const credit = document.createElement('div');
     credit.className = 'info-source';
     appendChapterNames(section.body, book, chapter, credit);
@@ -142,6 +144,123 @@ function chapterSection(book, chapter, verseId) {
     if (verseId !== null) appendVerseNotes(section.body, verseId);
     section.body.appendChild(credit);
     return section.element;
+}
+
+// The chapter's summary from the 1611 King James Bible (context.db), shown as
+// a quotation with its source, never as Ember's words (docs/Info_Tab_Spec.md,
+// Item 4). Its verse numbers link to the verses; hard words have a dotted
+// underline with their meaning; the label switches between modernized and
+// 1611 spelling, which is remembered. Until the summary arrives, the header
+// keeps the verse count; once it does, the header shows it on one line.
+const SUMMARY_SPELLING_KEY = 'ember.info.summarySpelling';   // 'modern' | 'original'
+const SUMMARY_HELP_SECTION = 'the-1611-chapter-summaries';
+const chapterSummaryCache = new Map();  // 'book:chapter' → Promise of the row
+
+function chapterSummary(bookId, chapter) {
+    const key = `${bookId}:${chapter}`;
+    if (!chapterSummaryCache.has(key)) {
+        const row = Promise.all([getChapterSummary(bookId, chapter), getSummaryGlosses()])
+            .then(([summary, glosses]) => summary && { ...summary, glosses });
+        row.catch(() => chapterSummaryCache.delete(key));
+        chapterSummaryCache.set(key, row);
+    }
+    return chapterSummaryCache.get(key);
+}
+
+function summarySpelling() {
+    return localStorage.getItem(SUMMARY_SPELLING_KEY) === 'original' ? 'original' : 'modern';
+}
+
+function appendChapterSummary(section, book, chapter, verseCount) {
+    const slot = document.createElement('div');
+    slot.className = 'info-summary';
+    section.body.appendChild(slot);
+    chapterSummary(book.id, chapter).then(summary => {
+        if (!summary || !slot.isConnected) return;
+        const headerLine = section.element.querySelector('.info-section-summary');
+        if (headerLine) headerLine.textContent = summaryLine(summary.modern);
+        fillChapterSummary(slot, summary, book, chapter, verseCount);
+    }).catch(warnContextUnavailable);
+}
+
+// The header's one line: the summary without its verse numbers.
+function summaryLine(text) {
+    return text.replace(/(^|\s)\d+(?:\.\s?\d+)*\.?(?=\s)/g, '$1').replace(/\s+/g, ' ').trim();
+}
+
+function fillChapterSummary(slot, summary, book, chapter, verseCount) {
+    slot.replaceChildren();
+    const spelling = summarySpelling();
+    const quote = document.createElement('blockquote');
+    quote.className = 'info-summary-text';
+    quote.lang = spelling === 'original' ? 'en-GB-x-1611' : 'en';
+    if (summary.borrowed_from) {
+        // Square brackets: words Ember adds (the spec's editorial convention).
+        const added = document.createElement('span');
+        added.className = 'info-summary-added';
+        added.textContent = `[From ${book.name} ${summary.borrowed_from}:] `;
+        quote.appendChild(added);
+    }
+    const text = spelling === 'original' ? summary.original : summary.modern;
+    // Verse links only within the chapter the summary is the summary of.
+    const ownChapter = summary.borrowed_from ?? chapter;
+    const linkVerses = summary.borrowed_from ? 0 : verseCount;
+    appendSummaryText(quote, text, spelling === 'modern' ? summary.glosses : [], book, ownChapter, linkVerses);
+    slot.appendChild(quote);
+
+    const label = document.createElement('div');
+    label.className = 'info-summary-label';
+    const source = document.createElement('button');
+    source.className = 'info-summary-source';
+    source.dataset.helpTarget = 'summary-label';
+    source.textContent = '1611 King James Bible';
+    source.title = 'What was changed, and the source';
+    source.addEventListener('click', () => openHelpGuide(SUMMARY_HELP_SECTION));
+    const toggle = document.createElement('button');
+    toggle.className = 'info-summary-spelling';
+    toggle.textContent = spelling === 'original' ? '1611 spelling' : 'spelling modernized';
+    toggle.title = spelling === 'original' ? 'Show modern spelling' : 'Show the 1611 spelling';
+    toggle.setAttribute('aria-pressed', String(spelling === 'original'));
+    toggle.addEventListener('click', () => {
+        localStorage.setItem(SUMMARY_SPELLING_KEY, spelling === 'original' ? 'modern' : 'original');
+        fillChapterSummary(slot, summary, book, chapter, verseCount);
+    });
+    label.append(source, document.createTextNode(' · '), toggle);
+    slot.appendChild(label);
+}
+
+// The text as DOM: verse numbers within the chapter as links, glossed phrases
+// as <abbr> with the meaning, everything else as text nodes.
+function appendSummaryText(container, text, glosses, book, chapter, verseCount) {
+    const phrases = glosses.map(gloss => gloss.phrase).sort((a, b) => b.length - a.length);
+    const meanings = new Map(glosses.map(gloss => [gloss.phrase, gloss.meaning]));
+    const escaped = phrases.map(phrase => phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const pattern = new RegExp(
+        (escaped.length ? `(?<![\\p{L}\\d])(${escaped.join('|')})(?![\\p{L}\\d])|` : '') + '(?<![\\p{L}\\d])(\\d+)(?![\\p{L}\\d])',
+        'giu');
+    let last = 0;
+    for (const match of text.matchAll(pattern)) {
+        const [whole, phrase, number] = escaped.length ? match : [match[0], undefined, match[1]];
+        const verse = number ? parseInt(number, 10) : 0;
+        if (number && !(verse >= 1 && verse <= verseCount)) continue;   // a count, or a slip
+        container.appendChild(document.createTextNode(text.slice(last, match.index)));
+        if (phrase) {
+            const glossed = document.createElement('abbr');
+            glossed.className = 'info-gloss';
+            glossed.title = meanings.get(phrase.toLowerCase());
+            glossed.textContent = whole;
+            container.appendChild(glossed);
+        } else {
+            const link = document.createElement('button');
+            link.className = 'info-summary-verse';
+            link.textContent = number;
+            link.title = `${book.name} ${chapter}:${verse}`;
+            link.addEventListener('click', () => showVerse(book.id, chapter, book.id * 1000000 + chapter * 1000 + verse));
+            container.appendChild(link);
+        }
+        last = match.index + whole.length;
+    }
+    container.appendChild(document.createTextNode(text.slice(last)));
 }
 
 // People, peoples and places named in the chapter (context.db, from

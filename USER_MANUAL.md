@@ -218,7 +218,7 @@ Info answers "what am I reading?" It has [three sections](#info "map:info-sectio
 
 - **Translation**: the abbreviation, its full name, year and license.
 - **Book**: the name and genre; open, its testament and number of chapters.
-- **Chapter**: the book and chapter and its number of verses; open, the people, peoples and places named in it, any headings (below), and your notes on the selected verse.
+- **Chapter**: the book and chapter and the first line of its 1611 summary (below); open, the whole summary, the people, peoples and places named in it, its number of verses, any headings, and your notes on the selected verse.
 
 What you've selected in the reader decides which section is open, and folds the other two:
 
@@ -233,9 +233,23 @@ You can also open or fold any section yourself by clicking its header, and have 
 
 **Peoples** are tribes, nations and clans: the Amorites, the Levites, the Philistines, and words like "Canaanite" or "Jew" (hover to see whom they're named after). Some names are both a man and the people descended from him. "Israel" is Jacob and the nation; "Judah", "Benjamin" and the other tribes are a son of Jacob and his tribe; "Esau" is also Edom. STEPBible's list doesn't say which a verse means, so these are always under Peoples, even where the man himself is meant (Jacob in Genesis 32), and hovering says it could be either.
 
-The list comes in a small file Ember downloads soon after it first starts. Until it has, for instance on a first start without a connection, Chapter leaves these lists out.
+The summaries and these lists come in a small file Ember downloads soon after it first starts. Until it has, for instance on a first start without a connection, Chapter leaves them out.
 
 The WEB is shown verse-only, so its headings — Psalm 119's Hebrew letters (ALEPH, BETH…), the speakers in the Song of Songs (Beloved, Lover, Friends), and the five books of the Psalms — aren't in the reading text. When the pane shows the WEB, the Info tab lists the chapter's headings and where each falls, such as "BETH — before 119:9".
+
+#### The 1611 chapter summaries
+
+The 1611 King James Bible printed a short summary at the head of every chapter, and Chapter shows it as a quotation: "1 Christ teacheth Nicodemus the necessity of regeneration. 14 Of faith in his death. 16 The great love of God towards the world…". The numbers are the verses each part is about; click one to bring that verse into view. These are the 1611 translators' words, not Ember's, and the summaries of 1611 read some Old Testament passages as speaking of Christ and the Church (Song of Solomon 2: "The mutual love of Christ and his Church"), as Christians of their day did.
+
+**What was changed: the spelling, and nothing else.** "loue" is shown as "love", "Iohn" as "John", "vnbeliefe" as "unbelief": u and v, i and j, y and i, a final or doubled letter, a printer's mark for a dropped m or n. Each change comes from a fixed list, mostly taken from how the 1769 edition (the King James text Ember shows) spells the same word in the verses. The words, their order and the punctuation stay as printed, so "Davids confidence in Gods grace" keeps its 1611 lack of apostrophes, and "-eth" endings stay. A word the list doesn't cover is left as printed. Four obvious slips in the transcription or the print ("miraracles" for miracles) are put right in the modern spelling only.
+
+**Original spelling.** Click [**spelling modernized**](#the-1611-chapter-summaries "map:summary-label") under a summary to see it as printed in 1611; click **1611 spelling** to come back. Ember remembers which you chose. Clicking **1611 King James Bible** opens this note.
+
+**Hard words** whose meaning has changed or dropped out of use keep their place and get a dotted underline; hover for the meaning: "humane" (human), "prelation" (preference), "no let" (no hindrance). The list of these is short and kept by hand, and hasn't yet been checked by a scholar.
+
+**Square brackets** mark the only words Ember adds. Proverbs 11 to 24 have no summary of their own in the 1611; the note at Proverbs 10 covers them, so they show it, beginning "[From Proverbs 10:]".
+
+The summaries come from Lou Burnard's transcription of the 1611 King James Bible ([github.com/lb42/KJV_1611](https://github.com/lb42/KJV_1611)), made from the page images at kingjamesbibleonline.org.
 
 ### Tags
 

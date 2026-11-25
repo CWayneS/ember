@@ -1,6 +1,6 @@
 // sw.js — Cache-first service worker for offline support
 
-const CACHE_NAME = 'ember-v41'; // bumped: Peoples row in the Info tab (reference.js, db.js, global-settings.js, USER_MANUAL.md)
+const CACHE_NAME = 'ember-v42'; // bumped: 1611 chapter summaries in the Info tab (reference.js, db.js, help-map.js, global-settings.js, style.css, USER_MANUAL.md)
 
 // Files that must be cached on install for the app to work offline.
 // Every ES module app.js reaches, directly or transitively, must be here:

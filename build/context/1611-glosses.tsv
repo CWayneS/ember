@@ -1,0 +1,48 @@
+# 1611 chapter summaries: hard words, glossed rather than replaced (docs/Info_Tab_Spec.md, Item 4).
+# Kept by hand. A word whose meaning has changed or dropped out of use keeps its place in the summary
+# and gets a dotted underline with the meaning on hover. Matched in the modernized text, whole words,
+# any case; a phrase glosses only that use of a word ("no let" is a hindrance; "let them go" isn't).
+# scripts/build_context.py stops if an entry matches no summary.
+# Every entry is a draft until someone qualified has checked it (the spec's "Review"): put their name
+# and the date in `reviewed`.
+# Columns: word or phrase (modern spelling), meaning, an example chapter, reviewed.
+admired	wondered at	Psalms 49
+admireth	wonders at, marvels at	1 Kings 10
+apology	defence: a speech in one's own defence	Jeremiah 26
+careful for	anxious about	Matthew 6
+bewrayed	exposed, given away	Jonah 1
+blains	blisters, sores	Exodus 9
+calumniation	slander, false accusation	Job 1
+carriage	what they carried; their load	Numbers 4
+charity	love	1 Corinthians 13
+comfortable	comforting	Isaiah 51
+condole	grieve with someone	Job 2
+conversation	conduct, way of life	1 Peter 1
+convinceth	proves wrong, convicts	1 Kings 18
+dehorteth	urges against; the opposite of "exhorteth"	Proverbs 7
+dereliction	abandonment, being forsaken	Isaiah 50
+determinate	fixed, settled beforehand	Acts 2
+diffidence	distrust, lack of faith (not shyness)	Psalms 73
+dukes	chiefs, clan leaders	Genesis 36
+embassage	embassy; a message sent by envoys	2 Chronicles 32
+expostulate	protest, reason earnestly	2 Samuel 19
+expostulateth	protests, reasons earnestly	Job 10
+fealty	sworn loyalty	Joshua 1
+humane	human, of people (not "kind")	Psalms 12
+imbecility	weakness, feebleness	Job 38
+importunity	persistent asking	Genesis 27
+insultation	triumphing over another, taunting	Isaiah 14
+lenity	gentleness, mildness	2 Corinthians 1
+meat	food (the meat offering was of grain, not flesh)	Leviticus 2
+mortification	putting to death one's sinful desires	Proverbs 3
+no let	no hindrance	Deuteronomy 15
+noisome	harmful, deadly (not "noisy")	Ezekiel 14
+over careful	too anxious	Luke 12
+prelation	preference: being ranked above	1 Corinthians 13
+propinquity	nearness	Amos 8
+receipt of custom	the tax office, where duties were received	Matthew 9
+redound	come back, result	2 Corinthians 4
+sith	since	Romans 5
+sundry	various, several	Leviticus 19
+suretiship	standing surety: guaranteeing another's debt	Proverbs 6
+vail	veil	Exodus 34

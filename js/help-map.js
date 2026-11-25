@@ -64,6 +64,8 @@ export const TARGETS = {
     'tab-info':          { label: 'Info tab', section: 'info', anchor: '#reference-tabs', region: 'reference' },
     'info-sections':     { label: 'Translation, Book and Chapter', section: 'info', anchor: '#reference-tabs', region: 'reference',
                            when: 'In the Info tab' },
+    'summary-label':     { label: '1611 summary label', section: 'the-1611-chapter-summaries', anchor: '#reference-tabs', region: 'reference',
+                           when: 'In the Info tab, under a chapter\'s summary' },
     'tab-tags':          { label: 'Tags tab', section: 'tags', anchor: '#reference-tabs', region: 'reference' },
     'tab-related':       { label: 'Related tab', section: 'related', anchor: '#reference-tabs', region: 'reference' },
     'tab-language':      { label: 'Language tab', section: 'language', anchor: '#reference-tabs', region: 'reference' },

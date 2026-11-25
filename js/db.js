@@ -2793,6 +2793,26 @@ export async function getChapterNames(bookId, chapter) {
     );
 }
 
+// A chapter's 1611 summary: { original, modern, borrowed_from } (borrowed_from
+// is 10 for Proverbs 11-24, which carry Proverbs 10's note), or null.
+export async function getChapterSummary(bookId, chapter) {
+    const contextDb = await openReferenceDb(CONTEXT_DB);
+    return queryOne(contextDb,
+        'SELECT original, modern, borrowed_from FROM chapter_summaries WHERE book = ? AND chapter = ?',
+        [bookId, chapter]);
+}
+
+// The summaries' hard words: [{ phrase, meaning }], phrases in lower case and
+// modern spelling ("humane", "no let"). Read once.
+let _summaryGlosses = null;
+export async function getSummaryGlosses() {
+    if (!_summaryGlosses) {
+        const contextDb = await openReferenceDb(CONTEXT_DB);
+        _summaryGlosses = queryAll(contextDb, 'SELECT phrase, meaning FROM summary_glosses');
+    }
+    return _summaryGlosses;
+}
+
 export function warnContextUnavailable(e) {
     warnReferenceDbUnavailable(CONTEXT_DB, e);
 }

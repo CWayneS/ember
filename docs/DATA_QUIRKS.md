@@ -12,6 +12,7 @@ These are small next to what the sources get right, and Ember is grateful for bo
 | Open Scriptures HebrewLexicon (BDB, Strong's) | commit `21c9add13bc727d3a951361778e97e3ff7afd1ce` |
 | Open Scriptures morphhb | commit `3d15126fb1ef74867fc1434be1942e837932691f` |
 | STEPBible-Data (TIPNR, proper names) | commit `be4191f0082aeedddb0eff0c02c966292b2bd641` (2026-10-24), file sha256 `d595b916…16a318c` |
+| lb42/KJV_1611 (1611 King James Bible, TEI) | commit `c62d87f7945403bcd2df4712ecaa83246ed9930d` (2017-10-29) |
 
 Created 2026-11-10.
 
@@ -211,9 +212,32 @@ Four "– Named"/"– Greek" lines of the LORD record (`LORD@Gen.1.1-Rev`, `God|
 
 ---
 
+## lb42/KJV_1611: chapter summaries
+
+The second `<head>` of each chapter file in `chaps/`, the 1611 King James Bible's chapter summary. Lou Burnard's TEI edition, transcribed from kingjamesbibleonline.org, whose page images of the 1611 (linked from each file's `<pb facs>`) would settle whether each item below is in the 1611 print or the transcription. Everything else checked out: every chapter of the 66 books has a summary except Proverbs 11–24, which the 1611 itself leaves without (its note at Proverbs 10 covers them), and every chapter's verses number as in the 1769 KJV.
+
+### 31. A verse number printed as a letter — *probably a slip*
+
+Genesis 39 begins `I Ioseph aduanced in Potiphars house. 7 Hee resisteth…`: "I" where every other summary has the verse number "1".
+
+### 32. Verse numbers past the end of the chapter — *probably slips*
+
+| Chapter | Verses | Printed | Context | Probably |
+|---|---|---|---|---|
+| 2 Kings 7 | 20 | 22 | `3 Foure Lepers … bring tydings of their flight. 22 The king finding by spies the newes to be true … 17 The Lord…` | 12 |
+| Ezekiel 15 | 8 | 16 | `1 By the vnfitnesse of the Vine branch for any worke, 16 is shewed the reiection of Ierusalē.` | 6 |
+| Zechariah 3 | 10 | 18 | `1 Under the type of Ioshua, the restauration of the Church. 18 Christ the Branch is promised.` | 8 |
+
+### 33. Misspelt words — *probably transcription slips*
+
+`miraracles` (Acts 8), `canstlesticks` (2 Chronicles 4), `triumpheh` (Micah 7: "She triumpheh ouer her enemies"), `iudement` (Ezekiel 39: "Gods iudement vpon Gog"). The 1611's own spelling elsewhere is "miracles", "candlesticks", "triumpheth", "iudgement".
+
+---
+
 ## How Ember handles these
 
 - **TBESG** (`js/greek-lexicon.js`): items 1, 7, 8, 9 and 11 are repaired for display; item 2's outer reference is kept as text and the inner one used; items 3 and 12 stay unlinked; item 4 links as its attribute says, so its last "3" opens 1 Peter 3:3; items 5 and 6 are read as written.
 - **BDB** (`js/hebrew-lexicon.js`): item 23's book names are read as the printed book, except `Jos.21.23`, which stays text; in item 24, `Exod24.17`, `Ezra,6,15` and `Job.37:23` are read anyway and `Ezra.814` stays text; items 25–27 stay text.
 - **TIPNR** (`scripts/build_context.py`): item 28 is read as Numbers 13:8 and 13:16; item 29's pairs are read as two references (Gentile's is in a record Ember leaves out); item 30 is in the OTHER records, which Ember leaves out.
+- **KJV_1611** (`scripts/build_context.py`, `build/context/1611-spelling.tsv`): item 31 is shown as printed; item 32's numbers stay text rather than links (the build stops if another number falls outside its chapter); item 33's words are put right in the modernized spelling only, and shown as printed in the 1611 spelling.
 - **TAHOT**: items 13–15 are handled in `scripts/build_language.py` (`docs/HEBREW_ANATOMY_DATA_REPORT.md`); 16–21 are shown as written; item 22's Ketiv line is skipped (`js/manuscript-variants.js`).
