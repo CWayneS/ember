@@ -1035,6 +1035,10 @@ def scenario_info(app):
                         'of God towards the world. 18 Condemnation for unbelief. 23 The baptism, witness & doctrine of John concerning Christ.',
           f"John 3's 1611 summary, spelling modernized ({st['text']!r})")
     check(st['verses'] == ['1', '14', '16', '18', '23'], f"its verse numbers are links ({st['verses']})")
+    lines = lambda: p.evaluate("[...document.querySelectorAll('#info-tab .info-summary-part')].map(el => el.textContent.trim())")
+    check(lines() == ['1 Christ teacheth Nicodemus the necessity of regeneration.', '14 Of faith in his death.',
+                      '16 The great love of God towards the world.', '18 Condemnation for unbelief.',
+                      '23 The baptism, witness & doctrine of John concerning Christ.'], f'one line per verse reference ({lines()})')
     check(st['header'].startswith('Christ teacheth Nicodemus the necessity of regeneration. Of faith in his death.'),
           f"the header's one line is the summary without verse numbers ({st['header'][:60]!r})")
     check(st['label'] == '1611 King James Bible · spelling modernized', f"the label names the source and the spelling ({st['label']!r})")
@@ -1052,6 +1056,9 @@ def scenario_info(app):
     check('1611 spelling' in summary()['label'], 'the 1611 spelling is remembered from chapter to chapter')
     p.click('#info-tab .info-summary-spelling')
     check(summary()['label'].endswith('spelling modernized'), 'and switches back')
+    app.navigate(11, 8)
+    wait_summary()
+    check(lines()[1] == '12. and 54. Solomon’s blessing.', f'verses that share a heading share a line ({lines()})')
     # Possessives get the apostrophe the 1611 didn't print; plurals don't.
     app.navigate(19, 23)
     wait_summary()

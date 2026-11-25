@@ -206,6 +206,9 @@ function fillChapterSummary(slot, summary, book, chapter, verseCount) {
     const ownChapter = summary.borrowed_from ?? chapter;
     const linkVerses = summary.borrowed_from ? 0 : verseCount;
     appendSummaryText(quote, text, spelling === 'modern' ? summary.glosses : [], book, ownChapter, linkVerses);
+    // The bracketed words open the first line rather than sit above it.
+    const added = quote.querySelector(':scope > .info-summary-added');
+    quote.querySelector('.info-summary-part')?.prepend(added ?? '');
     slot.appendChild(quote);
 
     const label = document.createElement('div');
@@ -230,7 +233,12 @@ function fillChapterSummary(slot, summary, book, chapter, verseCount) {
 }
 
 // The text as DOM: verse numbers within the chapter as links, glossed phrases
-// as <abbr> with the meaning, everything else as text nodes.
+// as <abbr> with the meaning, everything else as text nodes. Each verse
+// reference starts a line of its own (a block <span>), so the summary reads as
+// a list; numbers that share one heading stay together ("7. 13 Of their…",
+// "12. and 54. Solomon’s blessing").
+const SAME_HEADING = /^[\s.,;]*(?:and|&)?[\s.,;]*$/i;
+
 function appendSummaryText(container, text, glosses, book, chapter, verseCount) {
     const phrases = glosses.map(gloss => gloss.phrase).sort((a, b) => b.length - a.length);
     const meanings = new Map(glosses.map(gloss => [gloss.phrase, gloss.meaning]));
@@ -238,29 +246,51 @@ function appendSummaryText(container, text, glosses, book, chapter, verseCount) 
     const pattern = new RegExp(
         (escaped.length ? `(?<![\\p{L}\\d])(${escaped.join('|')})(?![\\p{L}\\d])|` : '') + '(?<![\\p{L}\\d])(\\d+)(?![\\p{L}\\d])',
         'giu');
+
+    let part = null;
+    const newPart = () => {
+        part = document.createElement('span');
+        part.className = 'info-summary-part';
+        container.appendChild(part);
+    };
+    const appendText = (piece) => {
+        if (!piece) return;
+        if (!part) newPart();
+        part.appendChild(document.createTextNode(piece));
+    };
+
     let last = 0;
+    let lastLinkEnd = -1;   // where the previous verse link ended
     for (const match of text.matchAll(pattern)) {
         const [whole, phrase, number] = escaped.length ? match : [match[0], undefined, match[1]];
         const verse = number ? parseInt(number, 10) : 0;
         if (number && !(verse >= 1 && verse <= verseCount)) continue;   // a count, or a slip
-        container.appendChild(document.createTextNode(text.slice(last, match.index)));
+        const before = text.slice(last, match.index);
         if (phrase) {
+            appendText(before);
             const glossed = document.createElement('abbr');
             glossed.className = 'info-gloss';
             glossed.title = meanings.get(phrase.toLowerCase());
             glossed.textContent = whole;
-            container.appendChild(glossed);
+            if (!part) newPart();
+            part.appendChild(glossed);
         } else {
+            const sameHeading = lastLinkEnd >= 0 && SAME_HEADING.test(text.slice(lastLinkEnd, match.index));
+            // The space stays at the end of the line it follows, where it doesn't
+            // show, so copied text and screen readers still have it.
+            appendText(before);
+            if (!part || (!sameHeading && part.textContent.trim())) newPart();
             const link = document.createElement('button');
             link.className = 'info-summary-verse';
             link.textContent = number;
             link.title = `${book.name} ${chapter}:${verse}`;
             link.addEventListener('click', () => showVerse(book.id, chapter, book.id * 1000000 + chapter * 1000 + verse));
-            container.appendChild(link);
+            part.appendChild(link);
+            lastLinkEnd = match.index + whole.length;
         }
         last = match.index + whole.length;
     }
-    container.appendChild(document.createTextNode(text.slice(last)));
+    appendText(text.slice(last));
 }
 
 // People, peoples and places named in the chapter (context.db, from
