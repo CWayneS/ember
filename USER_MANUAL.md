@@ -70,6 +70,12 @@ If you restore a backup made on another computer, you keep every translation thi
 
 Click the split-reader icon in the reader header to open a second pane. Each pane navigates and switches translations independently — a common use is the same chapter in two translations, or two different passages, side by side. Click the icon again to close the second pane.
 
+The pane you last clicked in is the active one. With two panes open it has a faint outline round its edge, and the reference panel describes what it shows.
+
+### The chapter title
+
+Above each chapter's text (and above a Psalm's title) is a quiet title line, such as "JOHN 3". Its two parts can be clicked separately: [the book name](#the-chapter-title "map:chapter-title") opens **Book** in the [Info tab](#info), and the chapter number opens **Chapter**. Whichever you clicked gets the same outline as a selected verse, so you can see what Info is describing. Clicking either clears any verse selection; clicking a verse, or in the margin, moves off it again. To go somewhere else, use the translation and chapter button at the top of the pane, as before.
+
 ### Navigating chapters
 
 Click [**‹**](#navigating-chapters "map:chapter-arrows") to go back one chapter, **›** to go forward. At the end of a book, the arrows cross into the next or previous book automatically. At Genesis 1, the back arrow does nothing. At Revelation 22, the forward arrow does nothing.
@@ -204,11 +210,24 @@ The reference panel sits beside the notes panel (or below it, if you've stacked 
 
 Selecting a verse leaves the open tab alone. To have a particular tab come up every time you select a verse instead, choose it under [the panel's **⚙**](#the-reference-panel "map:reference-settings") → Default tab; **Keep** (the default) leaves the tab as it is.
 
-Select a verse in the reader to populate the first four tabs. Without a selection, each shows "Select a verse to see reference material." Plans doesn't depend on a selection — see below.
+Info always describes what the reader shows; see below. Tags, Related and Language need a selected verse: without one, each says "Select a verse to see…". Plans doesn't depend on a selection — see below.
 
 ### Info
 
-Shows the book name, testament, and genre. Below that, the current chapter number and verse count. If the selected verse has notes, they're listed here too — with their text, tags, and a button to open the parent study.
+Info answers "what am I reading?" It has [three sections](#info "map:info-sections") for the active pane: **Translation**, **Book** and **Chapter**. Each one's header shows its name and a one-line summary, so the tab is useful with everything folded:
+
+- **Translation**: the abbreviation, its full name, year and license.
+- **Book**: the name and genre; open, its testament and number of chapters.
+- **Chapter**: the book and chapter and its number of verses; open, any headings (below), and your notes on the selected verse.
+
+What you've selected in the reader decides which section is open, and folds the other two:
+
+- Nothing selected, a verse or range, or [the chapter number](#the-chapter-title) clicked: **Chapter**. With a verse selected, its notes are listed there, with their text, tags, and a button to open the parent study.
+- The book name clicked: **Book**.
+- The pane switched to another translation: **Translation**. A selected verse stays selected.
+- Another chapter: **Chapter**, describing it.
+
+You can also open or fold any section yourself by clicking its header, and have more than one open. A section only shows what Ember has for it: a field with nothing in it is left out.
 
 The WEB is shown verse-only, so its headings — Psalm 119's Hebrew letters (ALEPH, BETH…), the speakers in the Song of Songs (Beloved, Lover, Friends), and the five books of the Psalms — aren't in the reading text. When the pane shows the WEB, the Info tab lists the chapter's headings and where each falls, such as "BETH — before 119:9".
 

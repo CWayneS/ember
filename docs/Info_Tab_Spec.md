@@ -1,6 +1,6 @@
 # Ember Bible Study — Info Tab Spec
 
-**Status:** Draft 2026-11-24. Not built.
+**Status:** Draft 2026-11-24. Step 1 built 2026-11-25 (see "Step 1 as built" below); steps 2–5 not built.
 **Ground rule:** the code wins where it and this spec disagree. "Current state" claims were checked against `js/reference.js`, `js/reader.js`, `index.html` and `data/core.db` on 2026-11-24. Re-check before building.
 
 ---
@@ -159,6 +159,16 @@ Where OPFS can't be written, it is online-only, like `language.db`.
 3. Chapter summaries from the 1611 KJV (lb42/KJV_1611), spelling modernized.
 4. Translation and book copy, drafted for review.
 5. Review (Wayne finds help); corrections ship through the update path.
+
+### Step 1 as built (2026-11-25)
+
+Where the code and the table in Item 1 part ways, the code chose:
+
+- **Navigating keeps the verse selection.** It always has (the Language tab's lexicon references and the way back rely on it). Info describes the chapter on screen at the chapter level, and shows the verse level again when the selected verse's chapter is back. Tags, Related and Language keep showing the selected verse.
+- **Switching translation keeps the verse selection** too, for the same reason; Info opens Translation, and the verse's notes stay under Chapter.
+- **Esc doesn't clear the selection;** it never has. Left as a question in `docs/TODO.md`.
+- **Chapter's header summary is the verse count** until chapters have summaries (step 3).
+- A click in the pane's margin clears a chosen book, chapter or translation as well as the verses.
 
 ## Out of Scope
 

@@ -11,6 +11,8 @@ Usage (from the repo root):
                                          #   tabs, search, plans, template bar, templates,
                                          #   translation switch, split view, global settings
    python3 tests/verify.py indicators    # note/bookmark dots on a titled Psalm (verse=0 row)
+   python3 tests/verify.py info          # Info tab: selection levels and the sections they open, the chapter
+                                         #   title, hidden empty fields, split view's active pane, placeholders
    python3 tests/verify.py notes         # removing tags and verse anchors from a note, long anchors,
                                          #   a 300-note study: scrolling, find, autocomplete, in-place edits
    python3 tests/verify.py sw            # service worker installs and precaches every js/ file
@@ -818,6 +820,186 @@ def check_long_anchors(p):
     check(res['pastLimit'] == [True, True, True, False, False], f"anchor one past the long-anchor limit ({res['pastLimit']})")
     check(res['crossBook'] == [True, True, False, False], f"anchor across a book boundary ({res['crossBook']})")
     check(res['atLimitChapter'] == 2, f"chapter count reaches an anchor's last verse, plus the whole-Bible note ({res['atLimitChapter']})")
+
+
+# ---------------------------------------------------------------- info tab
+
+def info_state(p):
+    """The Info tab as the user sees it: each section's header and whether it's open,
+    the selection level, which title targets are outlined, and the other tabs' text."""
+    return p.evaluate("""() => {
+        const sections = {};
+        for (const d of document.querySelectorAll('#info-tab details.info-section')) {
+            sections[d.dataset.section] = {
+                open: d.open,
+                title: d.querySelector('.info-section-title')?.textContent,
+                summary: d.querySelector('.info-section-summary')?.textContent ?? null,
+                fields: [...d.querySelectorAll('.info-fields dt')].map(dt => [dt.textContent, dt.nextElementSibling.textContent]),
+            };
+        }
+        return {
+            order: [...document.querySelectorAll('#info-tab details.info-section')].map(d => d.dataset.section),
+            sections,
+            level: document.querySelector('#info-tab .info-accordion')?.dataset.level,
+            outlined: [...document.querySelectorAll('.chapter-title-target.selected')]
+                .map(el => el.closest('.reader-pane').id.slice(-1) + ':' + el.dataset.level),
+            selected: document.querySelectorAll('.verse.selected').length,
+            notes: document.querySelectorAll('#info-tab .ref-note-card').length,
+            tags: document.getElementById('tags-tab').textContent,
+            related: document.getElementById('related-tab').textContent,
+            language: document.getElementById('language-tab').textContent,
+            infoText: document.getElementById('info-tab').textContent,
+        };
+    }""")
+
+
+def open_sections(st):
+    return [name for name in st['order'] if st['sections'][name]['open']]
+
+
+def scenario_info(app):
+    """docs/Info_Tab_Spec.md step 1: selection levels, the chapter title, the active
+    pane's outline, and the Translation / Book / Chapter accordions on today's data."""
+    p = app.page
+    p.click('#reference-tabs [data-tab="info"]')
+
+    # First load: nothing selected is the chapter level.
+    st = info_state(p)
+    check(st['order'] == ['translation', 'book', 'chapter'], f"three sections in order ({st['order']})")
+    check(open_sections(st) == ['chapter'] and st['level'] == 'chapter', f"first load opens Chapter only ({open_sections(st)}, {st['level']})")
+    t, b, c = (st['sections'][n] for n in ('translation', 'book', 'chapter'))
+    check((t['title'], t['summary']) == ('KJV', 'King James Version · 1611 · Public Domain'), f"Translation header and summary ({t['title']!r}, {t['summary']!r})")
+    check((b['title'], b['summary']) == ('Genesis', 'Law'), f"Book header and summary ({b['title']!r}, {b['summary']!r})")
+    check((c['title'], c['summary']) == ('Genesis 1', '31 verses'), f"Chapter header and summary ({c['title']!r}, {c['summary']!r})")
+    check(['Chapters', '50'] in b['fields'] and ['Testament', 'Old Testament'] in b['fields'], f"Book fields ({b['fields']})")
+    check(all(value.strip() for sec in st['sections'].values() for _, value in sec['fields']) and '—' not in st['infoText'],
+          'no empty field and no "—" placeholder')
+    check('Select a verse' in st['tags'] and 'Select a verse' in st['related'], 'other tabs wait for a verse at the chapter level')
+
+    # Empty fields are hidden: a translation row with no year or license shows neither.
+    sparse = p.evaluate("""async () => {
+        const reader = await import('./js/reader.js');
+        const ref = await import('./js/reference.js');
+        const row = reader.getActivePaneTranslation();
+        const saved = { year: row.year, license: row.license };
+        row.year = null; row.license = '  ';
+        ref.refreshReference(1001001);
+        const section = document.querySelector('#info-tab details[data-section="translation"]');
+        const result = [section.querySelector('.info-section-summary')?.textContent,
+                        [...section.querySelectorAll('.info-fields dt')].map(dt => dt.textContent)];
+        Object.assign(row, saved);
+        ref.refreshReference(1001001);
+        return result;
+    }""")
+    check(sparse == ['King James Version', ['Name']], f'empty fields are left out of the header and the body ({sparse})')
+
+    # The chapter title sits above the text, and above a Psalm's title.
+    app.navigate(19, 3)
+    order = p.evaluate("""[...document.querySelector('#reader-pane-a .scripture-text').children].slice(0, 2)
+        .map(el => el.className)""")
+    check(order[0] == 'chapter-title' and 'verse-title' in order[1], f'chapter title above the Psalm title ({order})')
+    title = p.evaluate("[...document.querySelectorAll('#reader-pane-a .chapter-title-target')].map(el => [el.dataset.level, el.textContent])")
+    check(title == [['book', 'Psalms'], ['chapter', '3']], f'book and chapter are separate targets ({title})')
+    check(p.evaluate("document.querySelectorAll('[data-help-target=\"chapter-title\"]').length") >= 1
+          and p.evaluate("!!document.querySelector('[data-help-target=\"info-sections\"]')"), 'help targets on the chapter title and the accordion')
+
+    # A verse: Chapter, with the verse's notes; the other tabs show the verse.
+    app.navigate(43, 3)
+    app.select_verse(43003016)
+    p.click('#notes-tab-add')
+    p.click('.add-note-btn')
+    p.wait_for_selector('.note-block-body')
+    p.click('.note-block-body')
+    p.keyboard.type('Info note')
+    p.wait_for_timeout(1000)
+    app.select_verse(43003016)
+    st = info_state(p)
+    check(st['level'] == 'verse' and open_sections(st) == ['chapter'], f"a verse opens Chapter ({st['level']}, {open_sections(st)})")
+    check(st['notes'] == 1 and 'Notes on John 3:16' in st['infoText'], f"the verse's notes under Chapter ({st['notes']})")
+    check('Select a verse' not in st['tags'] and 'John 3:16' in st['related'], 'Tags and Related show the verse')
+
+    # The book name: Book, outlined; the verse selection goes, and the other tabs wait.
+    p.click('#reader-pane-a .chapter-title-book')
+    p.wait_for_timeout(100)
+    st = info_state(p)
+    check(st['level'] == 'book' and open_sections(st) == ['book'], f"the book name opens Book only ({st['level']}, {open_sections(st)})")
+    check(st['outlined'] == ['a:book'] and st['selected'] == 0, f"the book name is outlined, no verse selected ({st['outlined']}, {st['selected']})")
+    check('Select a verse' in st['tags'] and 'Select a verse' in st['related'] and 'Select a verse' in st['language'],
+          'Tags, Related and Language show their placeholders at the book level')
+    check(st['notes'] == 0, 'no verse notes above the verse level')
+    check(st['sections']['book']['summary'] == 'Gospel', f"John is a Gospel ({st['sections']['book']['summary']})")
+
+    # The chapter number: Chapter, outlined.
+    p.click('#reader-pane-a .chapter-title-chapter')
+    p.wait_for_timeout(100)
+    st = info_state(p)
+    check(st['level'] == 'chapter' and open_sections(st) == ['chapter'] and st['outlined'] == ['a:chapter'],
+          f"the chapter number opens Chapter, outlined ({st['level']}, {open_sections(st)}, {st['outlined']})")
+
+    # Opened by hand: more than one at once, kept through a re-render of the same place.
+    p.click('#info-tab details[data-section="translation"] > summary')
+    p.wait_for_timeout(100)
+    check(open_sections(info_state(p)) == ['translation', 'chapter'], 'a section opens by hand beside the open one')
+    p.evaluate("import('./js/reference.js').then(m => m.refreshReference(43003016))")
+    check(open_sections(info_state(p)) == ['translation', 'chapter'], 'a re-render (a note written) keeps what was opened by hand')
+    p.click('#info-tab details[data-section="chapter"] > summary')
+    p.wait_for_timeout(100)
+    check(open_sections(info_state(p)) == ['translation'], 'a section folds by hand')
+
+    # A click in the margin: back to the chapter level.
+    p.click('#reader-pane-a .chapter-title-book')
+    p.mouse.click(*p.evaluate("""(() => { const r = document.querySelector('#reader-pane-a .pane-content').getBoundingClientRect();
+        return [r.left + 6, r.bottom - 6]; })()"""))
+    p.wait_for_timeout(100)
+    st = info_state(p)
+    check(st['level'] == 'chapter' and open_sections(st) == ['chapter'] and st['outlined'] == [],
+          f"a click in the margin goes back to the chapter ({st['level']}, {open_sections(st)}, {st['outlined']})")
+
+    # Switching the translation: Translation; a selected verse stays selected.
+    app.select_verse(43003016)
+    p.click('#reader-pane-a .pane-book-btn')
+    p.click('.translation-btn:has-text("BSB")')
+    p.keyboard.press('Escape')
+    p.wait_for_timeout(300)
+    st = info_state(p)
+    check(st['level'] == 'translation' and open_sections(st) == ['translation'], f"switching translation opens Translation ({st['level']}, {open_sections(st)})")
+    t = st['sections']['translation']
+    check(t['title'] == 'BSB' and t['summary'].startswith('Berean Standard Bible'), f"Translation describes the new one ({t['title']}, {t['summary']})")
+    check(st['selected'] == 1 and st['notes'] == 1, 'the verse stays selected, its notes still under Chapter')
+    app.select_verse(43003017)
+    check(info_state(p)['level'] == 'verse', 'selecting a verse after a switch is the verse level again')
+
+    # Another chapter: Chapter, describing it; a chosen book goes.
+    p.click('#reader-pane-a .chapter-title-book')
+    p.click('#reader-pane-a .pane-next')
+    p.wait_for_timeout(300)
+    st = info_state(p)
+    check(st['level'] == 'chapter' and open_sections(st) == ['chapter'] and st['outlined'] == [],
+          f"another chapter opens Chapter ({st['level']}, {open_sections(st)}, {st['outlined']})")
+    check(st['sections']['chapter']['title'] == 'John 4', f"Chapter follows the pane ({st['sections']['chapter']['title']})")
+
+    # Split view: the active pane is outlined, and Info describes it.
+    p.click('#split-toggle-btn')
+    p.wait_for_timeout(300)
+    outline = lambda pane: p.evaluate(f"getComputedStyle(document.getElementById('reader-pane-{pane}')).outlineStyle")
+    check(outline('a') == 'solid' and outline('b') == 'none', f"the active pane is outlined ({outline('a')}, {outline('b')})")
+    p.click('#reader-pane-b .chapter-title-book')
+    p.wait_for_timeout(100)
+    st = info_state(p)
+    check(outline('b') == 'solid' and outline('a') == 'none', 'clicking the other pane moves the outline')
+    check(st['level'] == 'book' and st['sections']['book']['title'] == 'Genesis' and st['outlined'] == ['b:book'],
+          f"Info follows the active pane ({st['level']}, {st['sections']['book']['title']}, {st['outlined']})")
+    check(st['sections']['translation']['title'] == 'KJV', 'and its translation')
+    p.click('#reader-pane-a .verse[data-verse-id="43004001"]')
+    p.wait_for_timeout(100)
+    st = info_state(p)
+    check(st['level'] == 'verse' and st['sections']['chapter']['title'] == 'John 4' and st['outlined'] == [],
+          f"back in the first pane, Info describes it ({st['level']}, {st['sections']['chapter']['title']}, {st['outlined']})")
+    p.click('#split-toggle-btn')
+    p.wait_for_timeout(200)
+    check(outline('a') == 'none', 'no outline without split view')
+
+    return FAILURES
 
 
 # ---------------------------------------------------------------- service worker
@@ -4356,6 +4538,7 @@ def main():
             elif args[0] == 'popovers': failures = scenario_popovers(app)
             elif args[0] == 'smoke':    failures = scenario_smoke(app)
             elif args[0] == 'indicators': failures = scenario_indicators(app)
+            elif args[0] == 'info':       failures = scenario_info(app)
             elif args[0] == 'notes':      failures = scenario_notes(app)
             elif args[0] == 'hebrew':     failures = scenario_hebrew(app)
             elif args[0] == 'export':     failures = scenario_export(app)

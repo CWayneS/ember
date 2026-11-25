@@ -64,6 +64,8 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 31b. Psalm superscription/title rows (`verse=0`, `Psalm_Title_Fix_Spec.md`): 116 titled psalms carry an addressable title row in KJV/ASV/Darby/WEB, rendered with distinct styling (`.verse-title` — italic, no verse-number bubble) above verse 1; notes/tags/bookmarks can attach to it like any other verse. WEB's row holds WEB's own title wording, which its USFM source marks apart from verse 1 (`docs/BUILD_6.1_ACTUAL_STATE.md` §17). YLT/BSB are unchanged — their titles are merged into verse 1's own text by their source data — reader.js:renderPane, css:`.verse-title`
 31c. Since KJV/ASV/Darby's own base text has no title wording to show, the title row is filled asynchronously with TAHOT's joined, `/`-marker-cleaned contextual gloss from `data/language.db` once it resolves (Build 6 — e.g. Psalm 3: "a psalm of David when fled he from before Absalom his son") — chapter rendering itself never blocks on this fetch; a row with no gloss data available, or whose `language.db` can't be loaded yet, removes itself rather than show empty — reader.js:populateTitleGloss. This is also the second of two independent triggers (alongside the Language tab being open) that opens `language.db` in a session
 31d. The selection outlives the chapter on screen: whenever a pane renders a chapter (navigation, a translation switch, a lexicon reference or occurrence and the way back), it dispatches `chapter-rendered`, and the selected verses of that pane that are in it get their `.selected` outline back, without a new `selection-changed` — reader.js:renderPane, selection.js:initSelection
+31e. Chapter title: a quiet uppercase line ("JOHN  3") above each chapter's text, and above a Psalm's title row. The book name and chapter number are separate buttons (`.chapter-title-target`, `data-level` book / chapter); clicking one clears the verse selection and selects that level, outlined like a selected verse (`.chapter-title-target.selected`). `data-help-target="chapter-title"` — reader.js:chapterTitle, selection.js:selectLevel, style.css:`.chapter-title`
+31f. Selection levels (`docs/Info_Tab_Spec.md`, Item 1): translation, book, chapter or verse. A selected verse in the active pane's chapter is the verse level; a book or chapter clicked in the title, or a translation switch (`chapter-rendered` with `cause: 'translation'`), sets that level for its pane; going to another chapter, a click in the pane's margin, or a different active pane drops it back to chapter (or verse). A translation switch keeps the verse selection. Each change dispatches `level-changed` — selection.js:getSelectionLevel, getSelectedVerseOnScreen, onChapterRendered
 
 ---
 
@@ -72,7 +74,7 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 32. Split toggle button (⊞) in reader header: shows/hides second reader pane side-by-side — reader.js:toggleSplit
 33. Opening split: pane B restores its saved `ember.pane.right.state`; first-ever open defaults to Genesis 1 KJV — reader.js
 34. Each pane has independent book/chapter navigation, translation, and scroll position — reader.js
-35. Active pane highlighted with accent underline on its nav bar in split mode — style.css:`#reader.split-active`
+35. Active pane highlighted with accent underline on its nav bar and a 1px accent outline round its edge in split mode — style.css:`#reader.split-active`
 36. Draggable resize handle between split panes; minimum 200px per pane — reader.js:initSplitResize
 36a. Split-view on/off state persisted to `localStorage` (`ember.reader.split`); restored on reload — reader.js:initReader, toggleSplit
 37. Clicking a verse in either pane activates that pane and sets it as the active selection for notes and reference — selection.js, reader.js:setActivePane
@@ -248,13 +250,13 @@ Items marked **[UNCONFIRMED]** or **[NON-FUNCTIONAL]** are noted at the end.
 
 ## Reference Panel — Info Tab
 
-130. Active when a verse is selected; placeholder "Select a verse to see reference material." otherwise — reference.js
-131. Shows: book name, testament label ("Old Testament" / "New Testament"), genre — reference.js:57-69
-132. Shows: chapter number, verse count for that chapter — reference.js:76-88
-132a. When the active pane's translation keeps headings out of its verse text (only WEB: Psalm 119's 22 letters, the 33 Song of Songs speaker labels, the Psalms' 5 book divisions), a "Headings · WEB" section lists the chapter's, each with where it falls: "before 119:9", "before the title", or for a label inside a verse "in 1:4, before “We will be glad and rejoice…”". Re-rendered when the pane's translation or the active pane changes. From `web.db`'s `headings` table (book, chapter, verse, offset, text), which other translation files don't have — reference.js:appendChapterHeadings, db.js:getHeadingsForChapter
-133. If the selected verse has notes: shows a "Notes" section with each note's body, tag chips, and a "StudyName →" link button — reference.js:appendVerseNotes
-134. Clicking tag chip in reference panel: opens tag view — reference.js:118
-135. Clicking study link in reference panel: opens that study in a tab — reference.js:127
+130. Always describes the active pane, selection or not: three `<details>` accordions, Translation, Book and Chapter (`.info-section`, `data-section`), in `.info-accordion` (`data-help-target="info-sections"`, `data-level` = the selection level). Each header shows a name and a one-line summary: Translation "KJV" + "King James Version · 1611 · Public Domain"; Book "John" + genre; Chapter "John 3" + "36 verses". Bodies are label/value lists (`.info-fields`): Translation name, year, license; Book testament, genre, chapters; Chapter verses. A field or summary part with no value is left out, never shown as "—" — reference.js:renderInfoTab, infoSection, appendFields
+131. The selection level opens its section and folds the other two: translation → Translation, book → Book, chapter or verse → Chapter. Sections open and fold by hand too, more than one at a time; a re-render of the same pane, translation, chapter, level and verse (a note written, the same chapter drawn again) keeps the hand-set state, any change resets it — reference.js:SECTION_FOR_LEVEL, openSections
+132. Re-rendered on `selection-changed`, `level-changed`, `chapter-rendered` and `pane-changed` — reference.js:initReference
+132a. When the active pane's translation keeps headings out of its verse text (only WEB: Psalm 119's 22 letters, the 33 Song of Songs speaker labels, the Psalms' 5 book divisions), a "Headings · WEB" list in Chapter shows the chapter's, each with where it falls: "before 119:9", "before the title", or for a label inside a verse "in 1:4, before “We will be glad and rejoice…”". From `web.db`'s `headings` table (book, chapter, verse, offset, text), which other translation files don't have — reference.js:appendChapterHeadings, db.js:getHeadingsForChapter
+133. If a selected verse is in the chapter on screen and has notes: a "Notes on John 3:16" list in Chapter with each note's body, tag chips, and a "StudyName →" link button — reference.js:appendVerseNotes
+134. Clicking tag chip in reference panel: opens tag view — reference.js:appendVerseNotes
+135. Clicking study link in reference panel: opens that study in a tab — reference.js:appendVerseNotes
 
 ---
 

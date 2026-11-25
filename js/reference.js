@@ -5,8 +5,8 @@ import {
     getChapterVerseCount, getTopicsForVerse, getUserTagsForVerse,
     getNotesForVerse, getCrossReferencesForVerse, getHeadingsForChapter
 } from './db.js';
-import { navigateTo, getCurrentLocation, getActivePaneTranslationId, getActivePaneTranslationAbbrev } from './reader.js';
-import { selectVerseRange } from './selection.js';
+import { navigateTo, getCurrentLocation, getActivePaneId, getActivePaneTranslation, getActivePaneTranslationId, getActivePaneTranslationAbbrev } from './reader.js';
+import { selectVerseRange, getSelectionLevel, getSelectedVerseOnScreen } from './selection.js';
 import { openStudy, openTagView } from './panels.js';
 import { initLanguageTab, renderLanguageTab as renderLanguageTabContent } from './language.js';
 
@@ -16,26 +16,17 @@ const EMPTY_MSG = 'Select a verse to see reference material.';
 // content derives from the user's own notes: Info (the verse's notes) and
 // Tags ("Your Tags"). Related and Language depend only on reference data.
 export function refreshReference(verseId) {
-    const parsed = parseVerseId(verseId);
-    const book   = getBook(parsed.book);
-    renderInfoTab(book, parsed.chapter, verseId);
+    renderInfoTab();
     renderTagsTab(verseId);
 }
 
-// The verse the Info tab is showing, so it can be shown again when the active
-// pane's translation changes (its headings section depends on it).
-let infoVerseId = null;
-
 export function initReference() {
     initLanguageTab();
-    const refreshInfo = () => {
-        if (infoVerseId === null) return;
-        const parsed = parseVerseId(infoVerseId);
-        renderInfoTab(getBook(parsed.book), parsed.chapter, infoVerseId);
-    };
-    // A translation switch re-renders the pane; switching panes may change translation.
-    document.addEventListener('chapter-rendered', refreshInfo);
-    document.addEventListener('pane-changed', refreshInfo);
+    // Selecting something opens its section; a re-render (a note written, the
+    // same chapter drawn again) keeps whatever the user opened or folded.
+    document.addEventListener('level-changed', () => renderInfoTab({ reopen: true }));
+    document.addEventListener('chapter-rendered', () => renderInfoTab());
+    document.addEventListener('pane-changed', () => renderInfoTab());
     document.addEventListener('selection-changed', (e) => {
         const { verseIds } = e.detail;
         if (verseIds.length > 0) {
@@ -43,81 +34,161 @@ export function initReference() {
         } else {
             clearAll();
         }
+        renderInfoTab({ reopen: true });
     });
+    // Nothing is selected yet: the verse tabs wait for one.
+    for (const id of ['tags-tab', 'related-tab']) {
+        setPlaceholder(document.getElementById(id), EMPTY_MSG);
+    }
+    renderInfoTab({ reopen: true });
 }
 
-// Info/Tags/Related are single-verse tabs (always keyed to the first verse of
+// Tags/Related are single-verse tabs (always keyed to the first verse of
 // a range, unchanged pre-Build-6 behavior). Language is the only tab that
 // uses the full range — an interlinear naturally extends across a multi-verse
-// selection the way a single "current verse" concept doesn't.
+// selection the way a single "current verse" concept doesn't. Info follows
+// the selection level instead (renderInfoTab).
 function renderAll(verseIds) {
     const verseId = verseIds[0];
     const parsed  = parseVerseId(verseId);
     const book    = getBook(parsed.book);
-    renderInfoTab(book, parsed.chapter, verseId);
     renderTagsTab(verseId);
     renderRelatedTab(verseId, book, parsed);
     renderLanguageTabContent(verseIds);
 }
 
 function clearAll() {
-    for (const id of ['info-tab', 'tags-tab', 'related-tab']) {
+    for (const id of ['tags-tab', 'related-tab']) {
         setPlaceholder(document.getElementById(id), EMPTY_MSG);
     }
     renderLanguageTabContent([]);
 }
 
 // ============================================================
-// Info tab — book metadata + chapter info
+// Info tab — Translation, Book and Chapter accordions
+// (docs/Info_Tab_Spec.md). The selection level decides which is open:
+// translation → Translation, book → Book, chapter or verse → Chapter. Any of
+// them can be opened or folded by hand, more than one at a time.
 // ============================================================
 
-function renderInfoTab(book, chapter, verseId) {
-    const container = document.getElementById('info-tab');
-    container.innerHTML = '';
-    infoVerseId = book ? verseId : null;
+const SECTION_FOR_LEVEL = { translation: 'translation', book: 'book', chapter: 'chapter', verse: 'chapter' };
 
+let openSections = new Set(['chapter']);
+let infoContext  = '';   // what the tab last described; a change opens the level's section
+
+function renderInfoTab({ reopen = false } = {}) {
+    const container = document.getElementById('info-tab');
+    const translation = getActivePaneTranslation();
+    const { book: bookId, chapter } = getCurrentLocation();
+    const book = getBook(bookId);
     if (!book) {
         setPlaceholder(container, EMPTY_MSG);
         return;
     }
 
+    const level   = getSelectionLevel();
+    const verseId = getSelectedVerseOnScreen();
+    const context = [getActivePaneId(), translation?.id, bookId, chapter, level, verseId].join('|');
+    if (reopen || context !== infoContext) {
+        openSections = new Set([SECTION_FOR_LEVEL[level]]);
+    }
+    infoContext = context;
+
+    container.innerHTML = '';
+    const accordion = document.createElement('div');
+    accordion.className = 'info-accordion';
+    accordion.dataset.helpTarget = 'info-sections';
+    accordion.dataset.level = level;
+    if (translation) accordion.appendChild(translationSection(translation));
+    accordion.appendChild(bookSection(book));
+    accordion.appendChild(chapterSection(book, chapter, verseId));
+    container.appendChild(accordion);
+}
+
+function translationSection(translation) {
+    const section = infoSection('translation', translation.abbreviation,
+        [translation.name, translation.year, translation.license]);
+    appendFields(section.body, [
+        ['Name', translation.name],
+        ['Year', translation.year],
+        ['License', translation.license],
+    ]);
+    return section.element;
+}
+
+function bookSection(book) {
     const testament = book.testament === 'OT' ? 'Old Testament' : 'New Testament';
+    const genre = capitalize(book.genre);
+    const section = infoSection('book', book.name, [genre]);
+    appendFields(section.body, [
+        ['Testament', testament],
+        ['Genre', genre],
+        ['Chapters', book.chapters],
+    ]);
+    return section.element;
+}
 
-    // Book section
-    const bookSection = document.createElement('div');
-    bookSection.className = 'ref-section';
-
-    const bookName = document.createElement('div');
-    bookName.className   = 'ref-book-name';
-    bookName.textContent = book.name;
-
-    const bookMeta = document.createElement('div');
-    bookMeta.className   = 'ref-meta';
-    bookMeta.textContent = `${testament} · ${book.genre}`;
-
-    bookSection.appendChild(bookName);
-    bookSection.appendChild(bookMeta);
-    container.appendChild(bookSection);
-
-    // Chapter section
+function chapterSection(book, chapter, verseId) {
     const verseCount = getChapterVerseCount(book.id, chapter);
+    const verses = verseCount ? `${verseCount} verse${verseCount !== 1 ? 's' : ''}` : '';
+    // Until chapters have summaries, the verse count is the header's line.
+    const section = infoSection('chapter', `${book.name} ${chapter}`, [verses]);
+    appendFields(section.body, [['Verses', verseCount]]);
+    appendChapterHeadings(section.body, book, chapter);
+    if (verseId !== null) appendVerseNotes(section.body, verseId);
+    return section.element;
+}
 
-    const chapterSection = document.createElement('div');
-    chapterSection.className = 'ref-section';
+// A folded-or-open section: a <details> whose summary carries the name and a
+// one-line digest (empty parts left out). Returns the element and its body.
+function infoSection(name, title, summaryParts) {
+    const details = document.createElement('details');
+    details.className = 'info-section';
+    details.dataset.section = name;
+    details.open = openSections.has(name);
+    details.addEventListener('toggle', () => {
+        if (details.open) openSections.add(name);
+        else openSections.delete(name);
+    });
 
-    const chapterLabel = document.createElement('div');
-    chapterLabel.className   = 'ref-chapter-label';
-    chapterLabel.textContent = `Chapter ${chapter}`;
+    const summary = document.createElement('summary');
+    summary.className = 'info-section-header';
+    const titleEl = document.createElement('span');
+    titleEl.className = 'info-section-title';
+    titleEl.textContent = title;
+    summary.appendChild(titleEl);
+    const line = summaryParts.filter(part => part !== null && part !== undefined && String(part).trim() !== '').join(' · ');
+    if (line) {
+        const lineEl = document.createElement('span');
+        lineEl.className = 'info-section-summary';
+        lineEl.textContent = line;
+        summary.appendChild(lineEl);
+    }
 
-    const chapterMeta = document.createElement('div');
-    chapterMeta.className   = 'ref-meta';
-    chapterMeta.textContent = `${verseCount} verse${verseCount !== 1 ? 's' : ''}`;
+    const body = document.createElement('div');
+    body.className = 'info-section-body';
+    details.append(summary, body);
+    return { element: details, body };
+}
 
-    chapterSection.appendChild(chapterLabel);
-    chapterSection.appendChild(chapterMeta);
-    container.appendChild(chapterSection);
-    appendChapterHeadings(container, book, chapter);
-    appendVerseNotes(container, verseId);
+// Label/value rows; a field with no value is left out, never shown as "—".
+function appendFields(container, fields) {
+    const present = fields.filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '');
+    if (present.length === 0) return;
+    const list = document.createElement('dl');
+    list.className = 'info-fields';
+    for (const [label, value] of present) {
+        const term = document.createElement('dt');
+        term.textContent = label;
+        const detail = document.createElement('dd');
+        detail.textContent = String(value);
+        list.append(term, detail);
+    }
+    container.appendChild(list);
+}
+
+function capitalize(text) {
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 }
 
 // Headings the active pane's translation keeps out of its verse text (only
@@ -166,7 +237,7 @@ function appendVerseNotes(container, verseId) {
     const notes = getNotesForVerse(verseId);
     if (notes.length === 0) return;
 
-    container.appendChild(refHeading('Notes'));
+    container.appendChild(refHeading(`Notes on ${formatReference(verseId)}`));
 
     for (const note of notes) {
         const card     = document.createElement('div');

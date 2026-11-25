@@ -46,7 +46,8 @@ OPFS → IndexedDB fallback done 2026-11-23: without OPFS, without `createWritab
 
 **Polish**
 
-- **Rebuild the Info tab.** Translation, Book and Chapter accordions with summary-line headers, opened by a new selection level in the reading pane; people and places from STEPBible's TIPNR; chapter summaries from the 1611 KJV. Spec: `docs/Info_Tab_Spec.md` (draft, 2026-11-24).
+- **Rebuild the Info tab.** Spec: `docs/Info_Tab_Spec.md`. Step 1 is done (2026-11-25): selection levels, the chapter title, the active pane's outline, and the Translation, Book and Chapter accordions on today's data (`python3 tests/verify.py info`). Still to do: step 2, `context.db` and people and places from STEPBible's TIPNR; step 3, chapter summaries from the 1611 KJV; step 4, translation and book copy drafted for review.
+  - **Esc doesn't clear the verse selection.** The spec's table lists "after Esc" as a way back to the chapter level, but Esc has never cleared the selection, and it's owned by several popovers and the picker. Step 1 left it alone; decide whether it should.
   - **Reminder for Wayne: find a reviewer for the Info tab copy, or a better source.** The book and translation copy and the chapter summaries need checking by someone qualified before release. Also keep looking for a more modern source of chapter summaries to replace the 1611 ones. See "Review" in the spec.
 - **Add the PWA icons.** `manifest.json` lists them, but `icons/` has none. See `FEATURE_INVENTORY.md` item 3. Three concepts were sketched (a glowing coal, a flame rising from an open book, a spark over a page corner); the coal was the one that stayed readable at 16px. No final choice recorded yet. Warm amber on dark; keep the mark inside the central ~80% for the maskable version.
 - **Finish the PWA install prompt.** The page element and styles exist, but there's no `beforeinstallprompt` handler. See `docs/BUILD_6.1_ACTUAL_STATE.md` §7.
