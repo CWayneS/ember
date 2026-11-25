@@ -59,7 +59,8 @@ Second source, the chapter summaries (Item 4):
     Each chapter's second <head> is the 1611 summary ("1 Christ teacheth
     Nicodemus the necessitie of regeneration. 14 Of faith in his death. ...").
     The original is kept as printed (entities decoded, whitespace collapsed);
-    the modern form changes spelling only, by build/context/1611-spelling.tsv
+    the modern form changes spelling, and adds the apostrophe of a possessive
+    (Wayne, 2026-11-25), only by build/context/1611-spelling.tsv
     (made by scripts/analysis/kjv1611/derive_spelling.py, which says how).
     Proverbs 11-24 have none in the 1611 either: they get Proverbs 10's note
     ("From this Chapter to the five and twentieth, are sundry observations of
@@ -467,7 +468,8 @@ def tei_text(markup):
 
 
 def read_spelling_list():
-    """{printed word, lower case: modern spelling} from 1611-spelling.tsv."""
+    """{printed: modern} from 1611-spelling.tsv: spellings keyed in lower case,
+    possessives exactly as printed ("Gods", "Lots wife")."""
     changes = {}
     for line in SPELLING_LIST.read_text(encoding='utf-8').splitlines():
         if line.startswith('#') or not line.strip():
@@ -481,10 +483,17 @@ SUMMARY_WORD = re.compile(r"[A-Za-zÀ-ÿĀ-ſ]+")
 
 
 def modernize(text, changes):
-    """Spelling only: each word the list names takes its modern spelling, with
-    the printed word's capital. Everything else, punctuation included, as printed."""
+    """Spelling, and the apostrophe of a possessive, by the list: phrases first
+    ("Lots wife" → "Lot’s wife"), then each word as printed ("Gods" → "God’s", not
+    "gods"), then its spelling in lower case with the printed word's capital.
+    Everything else, other punctuation included, as printed."""
+    for phrase in sorted((key for key in changes if ' ' in key), key=len, reverse=True):
+        text = re.sub(r'(?<![\w’])' + re.escape(phrase) + r'(?![\w’])', changes[phrase], text)
+
     def replace(match):
         word = match.group(0)
+        if word in changes and word != word.lower():
+            return changes[word]
         modern = changes.get(word.lower())
         if modern is None:
             return word
@@ -586,7 +595,7 @@ CREATE TABLE chapter_summaries (
     book          INTEGER NOT NULL,
     chapter       INTEGER NOT NULL,
     original      TEXT NOT NULL,        -- as printed in 1611 ("loue", "Iohn")
-    modern        TEXT NOT NULL,        -- spelling modernized by 1611-spelling.tsv, nothing else
+    modern        TEXT NOT NULL,        -- spelling and possessives' apostrophes by 1611-spelling.tsv, nothing else
     borrowed_from INTEGER,              -- Proverbs 11-24: 10, whose note covers them; else NULL
     PRIMARY KEY (book, chapter)
 ) WITHOUT ROWID;
@@ -742,6 +751,16 @@ def build(raw_dir, output, ship):
     for book, chapter in ((43, 3), (19, 23), (20, 15)):
         row = next(row for row in summary_rows if row[:2] == (book, chapter))
         print(f'  {names_by_id[book]} {chapter}: {row[3]}')
+    expected = {(19, 23): 'David’s confidence in God’s grace.',
+                (1, 19): 'Lot’s wife is a pillar of salt',
+                (17, 3): 'He casteth Lots.',
+                (43, 21): 'his Lambs and sheep'}
+    for (book, chapter), wanted in expected.items():
+        modern = next(row[3] for row in summary_rows if row[:2] == (book, chapter))
+        ok = wanted in modern
+        print(f'{"ok  " if ok else "FAIL"} {names_by_id[book]} {chapter}: "{wanted}"')
+        if not ok:
+            problems.append(f'{names_by_id[book]} {chapter}: "{wanted}" not in "{modern}"')
 
     heading('Upstream slips (docs/DATA_QUIRKS.md)')
     for label, value in sorted(slips.items()):

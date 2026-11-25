@@ -27,9 +27,13 @@ Each summary word gets its modern spelling from evidence, in this order:
               first result that is a word in the 1769 KJV or, failing that, in
               modern English as Ember's other texts use it (ASV, WEB, BSB, Darby,
               STEPBible's descriptions, the Greek and Hebrew lexicons' English).
-3. possessive: "Dauids" is "Davids" when "Dauid" is "David" (no apostrophe is added:
-              punctuation stays as printed).
-4. manual:    MANUAL below, each with its reason.
+3. stem:      "perswadeth" is "persuade" + eth when "perswade" is "persuade"; the
+              ending is kept, never invented.
+4. convention: the printers' own u/v, i/j and -ie conventions, last of all.
+5. manual:    MANUAL below, each with its reason.
+Then possessives get the apostrophe the 1611 didn't print ("Dauids" → "David’s";
+Wayne, 2026-11-25), by the evidence described above possessive_of().
+No other punctuation changes.
 A word with none of these stays as printed and is listed as such, for review.
 REJECTED removes a derived change that is wrong, with its reason.
 """
@@ -48,6 +52,9 @@ OUTPUT = PROJECT_ROOT / 'build' / 'context' / '1611-spelling.tsv'
 DATA = PROJECT_ROOT / 'data'
 
 WORD = re.compile(r"[A-Za-zÀ-ÿĀ-ſ]+")
+# The 1769 text's words, a possessive's apostrophe kept: "God’s", "fathers’".
+MODERN_WORD = re.compile(r"[A-Za-zÀ-ÿ]+(?:’s?)?")
+APOSTROPHE = '’'
 MACRON = {'ā': 'a', 'ē': 'e', 'ī': 'i', 'ō': 'o', 'ū': 'u'}
 AGREEMENT = 0.9
 
@@ -174,7 +181,7 @@ def skeleton(word, printed=False):
     """What spelling changes can't alter: lower case, þ as th, u/v, i/j and y/i
     merged, doubled letters single, no e. In a 1611 word a macron vowel keeps a
     "~" mark for the m or n it stands for."""
-    word = word.lower().replace('þ', 'th').replace('æ', 'ae')
+    word = word.lower().replace('þ', 'th').replace('æ', 'ae').replace(APOSTROPHE, '')
     if printed:
         word = ''.join(MACRON[letter] + '~' if letter in MACRON else letter for letter in word)
     word = word.replace('v', 'u').replace('j', 'i').replace('y', 'i')
@@ -187,22 +194,101 @@ def same_word(printed, modern):
 
 
 def aligned_pairs(chapters):
-    """{1611 word: Counter of the 1769 spellings it's paired with}."""
+    """({1611 word: Counter of the 1769 spellings it's paired with}, {1611 word as
+    printed, capital and all: Counter of 'possessive' / 'plain'}): the second says
+    how often the 1769 edition writes the paired word with an apostrophe."""
     con = sqlite3.connect(f'file:{DATA / "translations" / "kjv.db"}?mode=ro', uri=True)
     pairs = collections.defaultdict(collections.Counter)
+    possessives = collections.defaultdict(collections.Counter)
     for (book, chapter), (_summary, verses) in chapters.items():
         modern = dict(con.execute('SELECT verse, text FROM verses WHERE book = ? AND chapter = ? AND verse > 0', (book, chapter)))
         for verse, text in verses.items():
-            old_words, new_words = WORD.findall(text), WORD.findall(modern.get(verse, ''))
+            old_words = WORD.findall(text)
+            new_words = MODERN_WORD.findall(modern.get(verse, ''))
             matcher = difflib.SequenceMatcher(None, [skeleton(word, True) for word in old_words],
                                               [skeleton(word) for word in new_words], autojunk=False)
             for tag, i1, i2, j1, j2 in matcher.get_opcodes():
                 if tag == 'equal' or (tag == 'replace' and i2 - i1 == j2 - j1):
                     for old, new in zip(old_words[i1:i2], new_words[j1:j2]):
                         if same_word(old, new):
-                            pairs[old.lower()][new.lower()] += 1
+                            pairs[old.lower()][new.replace(APOSTROPHE, '').lower()] += 1
+                            if old.lower().endswith('s'):
+                                possessives[old]['possessive' if APOSTROPHE in new else 'plain'] += 1
     con.close()
-    return pairs
+    return pairs, possessives
+
+
+def kjv_forms():
+    """(the 1769 KJV's words as written, capitals kept, without an apostrophe;
+    and those it writes with one: "Solomon’s", "brethren’s")."""
+    con = sqlite3.connect(f'file:{DATA / "translations" / "kjv.db"}?mode=ro', uri=True)
+    plain, possessive = set(), set()
+    for (text,) in con.execute('SELECT text FROM verses'):
+        for word in MODERN_WORD.findall(text):
+            (possessive if APOSTROPHE in word else plain).add(word)
+    con.close()
+    return plain, possessive
+
+
+# ---- Possessives ---------------------------------------------------------------
+#
+# The 1611 wrote possessives without an apostrophe ("Dauids confidence in Gods
+# grace"). The modern form adds one (Wayne, 2026-11-25), and only to a
+# possessive, never a plural: "Gods grace" is God’s, "strange gods" isn't. Each
+# word as printed, capital and all, is decided by
+#   1. the 1769 edition, where the word is in the verse text: it takes the
+#      apostrophe if the 1769 has one at least 90% of the time (so "Gods" with a
+#      capital does, "gods" doesn't);
+#   2. otherwise, the 1769's words: "Solomons" takes one because "Solomons" isn't
+#      a word there and "Solomon’s" is; "Levites" stays because it is a word.
+
+# By hand. (printed, modern, reason): a phrase where the word alone can be either.
+MANUAL_POSSESSIVES = [
+    ('Gods', 'God’s', 'every use in the summaries is possessive (checked); the 1611 verses also print the plural "Gods", so the evidence is split'),
+    ('Lots wife', 'Lot’s wife', 'Genesis 19; "Lots" alone is also the plural (Esther 3, "Hee casteth Lots")'),
+    ('fathers brothers', 'father’s brother’s', 'Numbers 36, "their fathers brothers sonnes"; "fathers" alone is mostly a plural'),
+]
+# Derived possessives that are wrong. (printed, reason)
+REJECTED_POSSESSIVES = [
+    ('Lambes', 'John 21, "feed his Lambes": a plural (the evidence is Revelation\'s "Lambs book")'),
+    ('Lots', 'Esther 3, "Hee casteth Lots": a plural; Genesis 19 is in MANUAL_POSSESSIVES as a phrase'),
+    ('Macedonians', '2 Corinthians 8, "the example of the Macedonians": a plural'),
+]
+
+
+def possessive_of(word, evidence, kjv_plain, kjv_possessive, names=frozenset()):
+    """The possessive form of `word` (already in modern spelling), with the basis,
+    or None. Plural possessives ("fathers’") aren't made: they can't be told
+    from plurals."""
+    if not word.endswith('s') or word.endswith('ss') or len(word) < 3:
+        return None
+    candidate = word[:-1] + APOSTROPHE + 's'
+    total = sum(evidence.values()) if evidence else 0
+    if total >= 2:   # one case is too few to decide on; the rules below do
+        if evidence['possessive'] / total >= AGREEMENT:
+            return candidate, f"possessive: the 1769 writes it so {evidence['possessive']}/{total}"
+        return None
+    plain_known = word in kjv_plain or word.lower() in kjv_plain
+    if plain_known:
+        return None
+    if candidate in kjv_possessive:
+        return candidate, f'possessive: {candidate} is in the 1769 text, {word} isn\'t'
+    # A people's name in the plural ("the Macedonians") isn't a possessive.
+    if word[0].isupper() and word[:-1] in names and not re.search(r'(ian|ite|ine)$', word[:-1]):
+        return candidate, f'possessive: {word[:-1]} is a name, {word} isn\'t a word'
+    return None
+
+
+def known_names(kjv_plain):
+    """Names: TIPNR's people and places (context.db), and the 1769's capitalized
+    words that never appear in lower case."""
+    con = sqlite3.connect(f'file:{DATA / "context.db"}?mode=ro', uri=True)
+    try:
+        names = {name for (name,) in con.execute("SELECT name FROM context_names WHERE kind IN ('person', 'place')")}
+    finally:
+        con.close()
+    lower = {word for word in kjv_plain if word.islower()}
+    return names | {word for word in kjv_plain if word[0].isupper() and word.lower() not in lower}
 
 
 def vocabularies():
@@ -333,7 +419,7 @@ ENDINGS = (('nesse', 'ness'), ('lesse', 'less'), ('eth', 'eth'), ('ing', 'ing'),
 def derive(chaps_dir):
     chapters = read_chapters(chaps_dir)
     summary_words = words_of(summary for summary, _ in chapters.values() if summary)
-    pairs = aligned_pairs(chapters)
+    pairs, possessive_evidence = aligned_pairs(chapters)
     kjv, modern = vocabularies()
     rejected = dict(REJECTED)
     changes, kept, unresolved = {}, collections.Counter(), []
@@ -393,28 +479,53 @@ def derive(chaps_dir):
             kept[how] += 1
     for printed, modern_form, reason in MANUAL:
         changes[printed] = (modern_form, f'manual: {reason}')
-    return changes, unresolved, kept, summary_words, rejected
+
+    # Possessives, word by word as printed (capitals matter: Gods, gods).
+    kjv_plain, kjv_possessive = kjv_forms()
+    names = known_names(kjv_plain)
+    rejected_possessives = dict(REJECTED_POSSESSIVES)
+    printed_words = collections.Counter(word for summary, _ in chapters.values() if summary
+                                        for word in WORD.findall(summary))
+    possessives = {}
+    for word, uses in sorted(printed_words.items()):
+        spelled = changes.get(word.lower(), (word.lower(), ''))[0]
+        spelled = spelled[0].upper() + spelled[1:] if word[0].isupper() else spelled
+        found = possessive_of(spelled, possessive_evidence.get(word), kjv_plain, kjv_possessive, names)
+        if found and word not in rejected_possessives:
+            possessives[word] = (found[0], uses, found[1])
+    summaries = [summary for summary, _ in chapters.values() if summary]
+    for printed, modern_form, reason in MANUAL_POSSESSIVES:
+        uses = sum(len(re.findall(r'(?<![\w])' + re.escape(printed) + r'(?!\w)', summary)) for summary in summaries)
+        possessives[printed] = (modern_form, uses, f'manual: {reason}')
+    return changes, unresolved, kept, summary_words, rejected, possessives
 
 
-def write(changes, unresolved, summary_words, rejected):
+def write(changes, unresolved, summary_words, rejected, possessives):
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         '# 1611 chapter summaries: spelling modernized by this list, and only this list.',
         '# Generated by scripts/analysis/kjv1611/derive_spelling.py, which says how each change was found;',
         '# change MANUAL or REJECTED there and rerun it rather than editing this file.',
-        '# A change is spelling only (u/v, i/j, y/i, e, doubled letters, macrons); words, word order and',
-        '# punctuation stay as printed. Case follows the printed word.',
-        '# Columns: printed (lower case), modern, uses in the summaries, basis.',
+        '# A change is spelling only (u/v, i/j, y/i, e, doubled letters, macrons), and the apostrophe of a',
+        '# possessive (the last section); words, word order and other punctuation stay as printed. Case',
+        '# follows the printed word.',
+        '# Columns: printed (lower case; the possessives exactly as printed), modern, uses in the summaries, basis.',
     ]
     for word in sorted(changes):
         modern_form, basis = changes[word]
         lines.append(f'{word}\t{modern_form}\t{summary_words.get(word, 0)}\t{basis}')
     lines.append('#')
+    lines.append(f'# Possessives ({len(possessives)}): the apostrophe the 1611 didn\'t print. Matched exactly as printed,')
+    lines.append('# so "Gods" (God’s) and "gods" (a plural) are told apart; a phrase is matched as a whole, before single words.')
+    for word in sorted(possessives):
+        modern_form, uses, basis = possessives[word]
+        lines.append(f'{word}\t{modern_form}\t{uses}\t{basis}')
+    lines.append('#')
     lines.append(f'# Left as printed, no evidence or rule found ({len(unresolved)}): review these.')
     for word in unresolved:
         lines.append(f'#\t{word}\t{summary_words[word]}')
-    lines.append(f'# Rejected changes ({len(rejected)}):')
-    for word, reason in sorted(rejected.items()):
+    lines.append(f'# Rejected changes ({len(rejected) + len(REJECTED_POSSESSIVES)}):')
+    for word, reason in sorted(rejected.items()) + sorted(REJECTED_POSSESSIVES):
         lines.append(f'#\t{word}\t{reason}')
     OUTPUT.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
@@ -422,14 +533,15 @@ def write(changes, unresolved, summary_words, rejected):
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
-    changes, unresolved, kept, summary_words, rejected = derive(Path(sys.argv[1]))
-    write(changes, unresolved, summary_words, rejected)
+    changes, unresolved, kept, summary_words, rejected, possessives = derive(Path(sys.argv[1]))
+    write(changes, unresolved, summary_words, rejected, possessives)
     bases = collections.Counter('convention' if basis.startswith('the printers') else basis.split(' ')[0].rstrip(';:')
                                 for _modern, basis in changes.values())
     print(f'{len(summary_words)} distinct words in the summaries')
     print(f'  changed: {len(changes)} ({dict(bases)})')
     print(f'  unchanged: {dict(kept)}')
     print(f'  left as printed, unresolved: {len(unresolved)}')
+    print(f'  possessives given an apostrophe: {len(possessives)}')
     print(f'Wrote {OUTPUT.relative_to(PROJECT_ROOT)}')
 
 

@@ -1052,6 +1052,16 @@ def scenario_info(app):
     check('1611 spelling' in summary()['label'], 'the 1611 spelling is remembered from chapter to chapter')
     p.click('#info-tab .info-summary-spelling')
     check(summary()['label'].endswith('spelling modernized'), 'and switches back')
+    # Possessives get the apostrophe the 1611 didn't print; plurals don't.
+    app.navigate(19, 23)
+    wait_summary()
+    check(summary()['text'] == 'David’s confidence in God’s grace.', f"Psalm 23: possessives' apostrophes ({summary()['text']!r})")
+    p.click('#info-tab .info-summary-spelling')
+    check(summary()['text'] == 'Dauids confidence in Gods grace.', 'the 1611 spelling keeps them as printed')
+    p.click('#info-tab .info-summary-spelling')
+    app.navigate(17, 3)
+    wait_summary()
+    check('He casteth Lots.' in summary()['text'], f"Esther 3: the plural 'Lots' has none ({summary()['text'][:120]!r})")
     # Hard words glossed in the modern spelling; not in the 1611 one.
     app.navigate(46, 13)
     wait_summary()
