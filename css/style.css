@@ -735,9 +735,15 @@ body.theme-dark #theme-icon-moon { display: none;  }
     gap: 6px;
 }
 
-/* Active pane indicator in split mode */
+/* Active pane indicator in split mode: the accent under its nav bar and a
+   faint outline round its edge, so it's clear which pane Info describes. */
 #reader.split-active .reader-pane.active .pane-nav {
     border-bottom-color: var(--accent);
+}
+
+#reader.split-active .reader-pane.active {
+    outline: 1px solid var(--accent);
+    outline-offset: -1px;
 }
 
 .pane-book-btn {
@@ -880,6 +886,40 @@ body.markup-mode-on .verse.markup-circle {
 #reader.verse-per-line .verse {
     display: block;
     margin-bottom: 0.35em;
+}
+
+/* The chapter title above the text ("JOHN  3"). The book name and the
+   chapter number each select that level for the Info tab. */
+.chapter-title {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6em;
+    margin-bottom: 0.9em;
+    font-family: var(--font-display);
+    font-size: var(--size-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.chapter-title-target {
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+.chapter-title-target:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+}
+
+.chapter-title-target.selected {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    color: var(--text-secondary);
 }
 
 /* Psalm title row (verse=0) — Psalm_Title_Fix_Spec.md. Its own line, not
@@ -2336,31 +2376,6 @@ body.markup-mode-on .verse.markup-circle {
     margin: 0;
 }
 
-.ref-section {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-light);
-}
-
-.ref-section:last-child {
-    border-bottom: none;
-}
-
-.ref-book-name {
-    font-family: var(--font-display);
-    font-size: var(--size-base);
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-}
-
-.ref-chapter-label {
-    font-family: var(--font-display);
-    font-size: var(--size-small);
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 2px;
-}
-
 .ref-meta {
     font-family: var(--font-reading);
     font-size: var(--size-xs);
@@ -2375,6 +2390,186 @@ body.markup-mode-on .verse.markup-circle {
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 10px 16px 4px;
+}
+
+/* Info tab: Translation, Book and Chapter accordions */
+.info-section {
+    border-bottom: 1px solid var(--border-light);
+}
+
+.info-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    min-width: 0;
+}
+
+.info-section-header::-webkit-details-marker { display: none; }
+
+.info-section-header::before {
+    content: '▸';
+    flex-shrink: 0;
+    width: 0.8em;
+    font-size: 0.75em;
+    color: var(--text-muted);
+}
+
+details.info-section[open] > .info-section-header::before {
+    content: '▾';
+}
+
+.info-section-header:hover {
+    background: var(--bg-hover);
+}
+
+.info-section-title {
+    flex-shrink: 0;
+    font-family: var(--font-display);
+    font-size: var(--size-small);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.info-section-summary {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-family: var(--font-reading);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+}
+
+.info-section-body {
+    padding-bottom: 8px;
+}
+
+.info-fields {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: 12px;
+    row-gap: 3px;
+    margin: 0;
+    padding: 0 16px 6px 34px;
+    font-size: var(--size-xs);
+}
+
+.info-fields dt {
+    font-family: var(--font-display);
+    color: var(--text-muted);
+}
+
+.info-fields dd {
+    margin: 0;
+    font-family: var(--font-reading);
+    color: var(--text-primary);
+}
+
+/* The 1611 chapter summary in the Chapter section: a quotation, with its source */
+.info-summary:empty { display: none; }
+
+.info-summary {
+    padding: 2px 16px 10px 34px;
+}
+
+.info-summary-text {
+    margin: 0;
+    padding-left: 10px;
+    border-left: 2px solid var(--border-light);
+    font-family: var(--font-reading);
+    font-size: var(--size-small);
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+/* One line per verse reference; a long one wraps under its own text. */
+.info-summary-part {
+    display: block;
+    padding-left: 1.6em;
+    text-indent: -1.6em;
+}
+
+.info-summary-added {
+    color: var(--text-muted);
+}
+
+.info-summary-verse {
+    font: inherit;
+    font-size: 0.8em;
+    padding: 0 2px;
+    border-radius: 3px;
+    color: var(--accent);
+    vertical-align: 0.15em;
+}
+
+.info-summary-verse:hover {
+    background: var(--accent-light);
+}
+
+.info-gloss {
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+    cursor: help;
+}
+
+.info-summary-label {
+    margin-top: 4px;
+    padding-left: 12px;
+    font-family: var(--font-display);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+}
+
+.info-summary-source,
+.info-summary-spelling {
+    font: inherit;
+    padding: 0;
+    color: var(--text-muted);
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+}
+
+.info-summary-source:hover,
+.info-summary-spelling:hover {
+    color: var(--accent);
+}
+
+/* People and places in the Chapter section (context.db) */
+.info-name-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 4px;
+}
+
+.info-name,
+.info-name-more {
+    font: inherit;
+    padding: 0 3px;
+    border-radius: 3px;
+    color: var(--accent);
+}
+
+.info-name:hover,
+.info-name-more:hover {
+    background: var(--accent-light);
+}
+
+.info-name-more {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.info-source:empty { display: none; }
+
+.info-source {
+    padding: 6px 16px 0 34px;
+    font-family: var(--font-display);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
 }
 
 /* Headings a translation keeps out of its verse text (Info tab) */

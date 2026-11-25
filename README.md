@@ -95,6 +95,8 @@ ember/
 │   ├── build_crossrefs.py     # Ingests OpenBible cross-references into core.db
 │   ├── build_language.py      # Builds language.db from STEPBible-Data
 │   ├── build_lexicon_hebrew.py # Builds lexicon-hebrew.db from Open Scriptures (pinned, sha256-checked sources)
+│   ├── build_context.py       # Builds context.db (the Info tab's people, peoples and places, and the 1611 chapter summaries)
+│   │                          #   from STEPBible's TIPNR and lb42/KJV_1611 (pinned, sha256-checked)
 │   ├── build_hebrew_versification.py # Generates js/hebrew-versification.js from TAHOT
 │   ├── gen_stress_data.py     # Generates 1/10/25/40-year user data for tests/stress.py (output gitignored)
 │   ├── analysis/              # Data investigation and checking scripts (not part of the app or build);
@@ -102,8 +104,10 @@ ember/
 │   └── convert-canonical.js, convert-mcheyne.js, convert-chronological.js
 │                               # One-off converters that produced the bundled reading-plan JSON in data/plans/
 ├── build/
-│   └── build_db.py            # Builds core.db's schema, books table, and Nave's Topical Bible topics/topic_verses
-│                               # (run before scripts/build_crossrefs.py, which adds cross-references to the same file)
+│   ├── build_db.py            # Builds core.db's schema, books table, and Nave's Topical Bible topics/topic_verses
+│   │                           # (run before scripts/build_crossrefs.py, which adds cross-references to the same file)
+│   └── context/               # Reviewable lists build_context.py reads: 1611-spelling.tsv (the summaries' spelling
+│                               #   changes, with their evidence) and 1611-glosses.tsv (hard words, kept by hand)
 ├── tests/
 │   ├── verify.py              # Live Playwright verification of the running app — see "Verifying Changes"
 │   └── stress.py              # Longevity stress test measurements — see docs/STRESS_TEST_RESULTS.md
@@ -158,6 +162,14 @@ python scripts/build_language.py --ship
 # Builds into data/lexicon-prep/output/; --ship also copies it to data/lexicon-hebrew.db.
 # The same sources always give a byte-identical file.
 python scripts/build_lexicon_hebrew.py --ship
+
+# The Info tab's people, peoples and places, from STEPBible's TIPNR at the same pinned commit as language.db,
+# and the 1611 chapter summaries from lb42/KJV_1611 (pinned, sha256-checked), spelling modernized by
+# build/context/1611-spelling.tsv (from scripts/analysis/kjv1611/derive_spelling.py) and glossed by
+# build/context/1611-glosses.tsv. Builds into data/context-prep/output/; --ship also copies it to data/context.db
+# and rewrites the catalogs.
+# The same source always gives a byte-identical file.
+python scripts/build_context.py --ship
 
 # Hebrew-to-English verse numbering for BDB's scripture references, from the same
 # pinned TAHOT files as language.db. Writes js/hebrew-versification.js.
@@ -242,14 +254,15 @@ Build 1 (core reading + notes) → Build 1.5 (polish) → Build 2 (cross-referen
 
 Ember bundles data from several sources. The same information is shown in-app under **Settings → Data & Attribution**; the table below mirrors it exactly.
 
-The six bundled translations (KJV, ASV, WEB, YLT, Darby, BSB), Nave's Topical Bible, and the Brown-Driver-Briggs (1906) and Strong's (1890) Hebrew dictionaries are public domain and don't require attribution.
+The six bundled translations (KJV, ASV, WEB, YLT, Darby, BSB), Nave's Topical Bible, the Brown-Driver-Briggs (1906) and Strong's (1890) Hebrew dictionaries, and the 1611 King James Bible's chapter summaries are public domain and don't require attribution; the transcription the summaries come from is credited below all the same.
 
 The World English Bible appears as the **Verse-only World English Bible**: its verses without headings, footnotes or speaker labels in the reading text (the Info tab lists the headings and speaker labels separately). Its publisher asks that a changed text not be called the World English Bible, and "World English Bible" is a trademark of eBible.org. Ember changes no verse text, but the plainer name makes clear what is left out.
 
 | Source | License | Powers |
 |---|---|---|
-| [STEPBible-Data](https://www.stepbible.org) | CC BY 4.0 | Language tab — original-language word data (Hebrew/Greek text, glosses, lexicon entries, and Greek and Hebrew grammar decoding: the TAHOT, TAGNT, TBESG, TEGMC and TEHMC datasets), from Tyndale House, Cambridge |
+| [STEPBible-Data](https://www.stepbible.org) | CC BY 4.0 | Language tab — original-language word data (Hebrew/Greek text, glosses, lexicon entries, and Greek and Hebrew grammar decoding: the TAHOT, TAGNT, TBESG, TEGMC and TEHMC datasets) — and the people, peoples and places in the Info tab's Chapter section (TIPNR), from Tyndale House, Cambridge |
 | [OpenBible.info](https://www.openbible.info) | CC BY 4.0 | Related tab — cross-reference data |
+| [Lou Burnard, KJV_1611](https://github.com/lb42/KJV_1611) | Public domain text; no licence stated | Info tab — the chapter summaries of the 1611 King James Bible, from a TEI transcription of the 1611 made from the page images at kingjamesbibleonline.org. Ember modernizes their spelling (`build/context/1611-spelling.tsv`) and keeps the original |
 | [Open Scriptures Hebrew Bible Project](https://hb.openscriptures.org) | CC BY 4.0 | Hebrew lexicon (Brown-Driver-Briggs and Strong's Hebrew Dictionary) powering the Language tab's Lexicon for Hebrew words. When a word has several BDB entries, their order comes from word frequencies in the OSHB text |
 
 The Open Scriptures credit covers both of its repositories Ember draws on, which ask for the same attribution: `openscriptures/HebrewLexicon` (the transcription and markup of BDB and Strong's) and `openscriptures/morphhb` (the Hebrew text whose word counts set the BDB order). The dictionaries themselves are public domain.

@@ -11,6 +11,9 @@ Usage (from the repo root):
                                          #   tabs, search, plans, template bar, templates,
                                          #   translation switch, split view, global settings
    python3 tests/verify.py indicators    # note/bookmark dots on a titled Psalm (verse=0 row)
+   python3 tests/verify.py info          # Info tab: selection levels and the sections they open, the chapter
+                                         #   title, hidden empty fields, split view's active pane, placeholders,
+                                         #   people and places from context.db, and without it
    python3 tests/verify.py notes         # removing tags and verse anchors from a note, long anchors,
                                          #   a 300-note study: scrolling, find, autocomplete, in-place edits
    python3 tests/verify.py sw            # service worker installs and precaches every js/ file
@@ -818,6 +821,368 @@ def check_long_anchors(p):
     check(res['pastLimit'] == [True, True, True, False, False], f"anchor one past the long-anchor limit ({res['pastLimit']})")
     check(res['crossBook'] == [True, True, False, False], f"anchor across a book boundary ({res['crossBook']})")
     check(res['atLimitChapter'] == 2, f"chapter count reaches an anchor's last verse, plus the whole-Bible note ({res['atLimitChapter']})")
+
+
+# ---------------------------------------------------------------- info tab
+
+def info_state(p):
+    """The Info tab as the user sees it: each section's header and whether it's open,
+    the selection level, which title targets are outlined, and the other tabs' text."""
+    return p.evaluate("""() => {
+        const sections = {};
+        for (const d of document.querySelectorAll('#info-tab details.info-section')) {
+            sections[d.dataset.section] = {
+                open: d.open,
+                title: d.querySelector('.info-section-title')?.textContent,
+                summary: d.querySelector('.info-section-summary')?.textContent ?? null,
+                fields: [...d.querySelectorAll('.info-fields dt')].map(dt => [dt.textContent, dt.nextElementSibling.textContent]),
+            };
+        }
+        return {
+            order: [...document.querySelectorAll('#info-tab details.info-section')].map(d => d.dataset.section),
+            sections,
+            level: document.querySelector('#info-tab .info-accordion')?.dataset.level,
+            outlined: [...document.querySelectorAll('.chapter-title-target.selected')]
+                .map(el => el.closest('.reader-pane').id.slice(-1) + ':' + el.dataset.level),
+            selected: document.querySelectorAll('.verse.selected').length,
+            notes: document.querySelectorAll('#info-tab .ref-note-card').length,
+            tags: document.getElementById('tags-tab').textContent,
+            related: document.getElementById('related-tab').textContent,
+            language: document.getElementById('language-tab').textContent,
+            infoText: document.getElementById('info-tab').textContent,
+        };
+    }""")
+
+
+def open_sections(st):
+    return [name for name in st['order'] if st['sections'][name]['open']]
+
+
+def scenario_info(app):
+    """docs/Info_Tab_Spec.md step 1: selection levels, the chapter title, the active
+    pane's outline, and the Translation / Book / Chapter accordions on today's data."""
+    p = app.page
+    p.click('#reference-tabs [data-tab="info"]')
+
+    # First load: nothing selected is the chapter level.
+    p.wait_for_selector('#info-tab .info-summary-text', timeout=30_000)
+    st = info_state(p)
+    check(st['order'] == ['translation', 'book', 'chapter'], f"three sections in order ({st['order']})")
+    check(open_sections(st) == ['chapter'] and st['level'] == 'chapter', f"first load opens Chapter only ({open_sections(st)}, {st['level']})")
+    t, b, c = (st['sections'][n] for n in ('translation', 'book', 'chapter'))
+    check((t['title'], t['summary']) == ('KJV', 'King James Version · 1611 · Public Domain'), f"Translation header and summary ({t['title']!r}, {t['summary']!r})")
+    check((b['title'], b['summary']) == ('Genesis', 'Law'), f"Book header and summary ({b['title']!r}, {b['summary']!r})")
+    check(c['title'] == 'Genesis 1' and c['summary'].startswith('The creation of Heaven and Earth, of the light,'),
+          f"Chapter header: its 1611 summary's first line ({c['title']!r}, {c['summary'][:40]!r})")
+    check(['Chapters', '50'] in b['fields'] and ['Testament', 'Old Testament'] in b['fields'], f"Book fields ({b['fields']})")
+    check(all(value.strip() for sec in st['sections'].values() for _, value in sec['fields']) and '—' not in st['infoText'],
+          'no empty field and no "—" placeholder')
+    check('Select a verse' in st['tags'] and 'Select a verse' in st['related'], 'other tabs wait for a verse at the chapter level')
+
+    # Empty fields are hidden: a translation row with no year or license shows neither.
+    sparse = p.evaluate("""async () => {
+        const reader = await import('./js/reader.js');
+        const ref = await import('./js/reference.js');
+        const row = reader.getActivePaneTranslation();
+        const saved = { year: row.year, license: row.license };
+        row.year = null; row.license = '  ';
+        ref.refreshReference(1001001);
+        const section = document.querySelector('#info-tab details[data-section="translation"]');
+        const result = [section.querySelector('.info-section-summary')?.textContent,
+                        [...section.querySelectorAll('.info-fields dt')].map(dt => dt.textContent)];
+        Object.assign(row, saved);
+        ref.refreshReference(1001001);
+        return result;
+    }""")
+    check(sparse == ['King James Version', ['Name']], f'empty fields are left out of the header and the body ({sparse})')
+
+    # The chapter title sits above the text, and above a Psalm's title.
+    app.navigate(19, 3)
+    order = p.evaluate("""[...document.querySelector('#reader-pane-a .scripture-text').children].slice(0, 2)
+        .map(el => el.className)""")
+    check(order[0] == 'chapter-title' and 'verse-title' in order[1], f'chapter title above the Psalm title ({order})')
+    title = p.evaluate("[...document.querySelectorAll('#reader-pane-a .chapter-title-target')].map(el => [el.dataset.level, el.textContent])")
+    check(title == [['book', 'Psalms'], ['chapter', '3']], f'book and chapter are separate targets ({title})')
+    check(p.evaluate("document.querySelectorAll('[data-help-target=\"chapter-title\"]').length") >= 1
+          and p.evaluate("!!document.querySelector('[data-help-target=\"info-sections\"]')"), 'help targets on the chapter title and the accordion')
+
+    # A verse: Chapter, with the verse's notes; the other tabs show the verse.
+    app.navigate(43, 3)
+    app.select_verse(43003016)
+    p.click('#notes-tab-add')
+    p.click('.add-note-btn')
+    p.wait_for_selector('.note-block-body')
+    p.click('.note-block-body')
+    p.keyboard.type('Info note')
+    p.wait_for_timeout(1000)
+    app.select_verse(43003016)
+    st = info_state(p)
+    check(st['level'] == 'verse' and open_sections(st) == ['chapter'], f"a verse opens Chapter ({st['level']}, {open_sections(st)})")
+    check(st['notes'] == 1 and 'Notes on John 3:16' in st['infoText'], f"the verse's notes under Chapter ({st['notes']})")
+    check('Select a verse' not in st['tags'] and 'John 3:16' in st['related'], 'Tags and Related show the verse')
+
+    # The book name: Book, outlined; the verse selection goes, and the other tabs wait.
+    p.click('#reader-pane-a .chapter-title-book')
+    p.wait_for_timeout(100)
+    st = info_state(p)
+    check(st['level'] == 'book' and open_sections(st) == ['book'], f"the book name opens Book only ({st['level']}, {open_sections(st)})")
+    check(st['outlined'] == ['a:book'] and st['selected'] == 0, f"the book name is outlined, no verse selected ({st['outlined']}, {st['selected']})")
+    check('Select a verse' in st['tags'] and 'Select a verse' in st['related'] and 'Select a verse' in st['language'],
+          'Tags, Related and Language show their placeholders at the book level')
+    check(st['notes'] == 0, 'no verse notes above the verse level')
+    check(st['sections']['book']['summary'] == 'Gospel', f"John is a Gospel ({st['sections']['book']['summary']})")
+
+    # The chapter number: Chapter, outlined.
+    p.click('#reader-pane-a .chapter-title-chapter')
+    p.wait_for_timeout(100)
+    st = info_state(p)
+    check(st['level'] == 'chapter' and open_sections(st) == ['chapter'] and st['outlined'] == ['a:chapter'],
+          f"the chapter number opens Chapter, outlined ({st['level']}, {open_sections(st)}, {st['outlined']})")
+
+    # Opened by hand: more than one at once, kept through a re-render of the same place.
+    p.click('#info-tab details[data-section="translation"] > summary')
+    p.wait_for_timeout(100)
+    check(open_sections(info_state(p)) == ['translation', 'chapter'], 'a section opens by hand beside the open one')
+    p.evaluate("import('./js/reference.js').then(m => m.refreshReference(43003016))")
+    check(open_sections(info_state(p)) == ['translation', 'chapter'], 'a re-render (a note written) keeps what was opened by hand')
+    p.click('#info-tab details[data-section="chapter"] > summary')
+    p.wait_for_timeout(100)
+    check(open_sections(info_state(p)) == ['translation'], 'a section folds by hand')
+
+    # A click in the margin: back to the chapter level.
+    p.click('#reader-pane-a .chapter-title-book')
+    p.mouse.click(*p.evaluate("""(() => { const r = document.querySelector('#reader-pane-a .pane-content').getBoundingClientRect();
+        return [r.left + 6, r.bottom - 6]; })()"""))
+    p.wait_for_timeout(100)
+    st = info_state(p)
+    check(st['level'] == 'chapter' and open_sections(st) == ['chapter'] and st['outlined'] == [],
+          f"a click in the margin goes back to the chapter ({st['level']}, {open_sections(st)}, {st['outlined']})")
+
+    # Switching the translation: Translation; a selected verse stays selected.
+    app.select_verse(43003016)
+    p.click('#reader-pane-a .pane-book-btn')
+    p.click('.translation-btn:has-text("BSB")')
+    p.keyboard.press('Escape')
+    p.wait_for_timeout(300)
+    st = info_state(p)
+    check(st['level'] == 'translation' and open_sections(st) == ['translation'], f"switching translation opens Translation ({st['level']}, {open_sections(st)})")
+    t = st['sections']['translation']
+    check(t['title'] == 'BSB' and t['summary'].startswith('Berean Standard Bible'), f"Translation describes the new one ({t['title']}, {t['summary']})")
+    check(st['selected'] == 1 and st['notes'] == 1, 'the verse stays selected, its notes still under Chapter')
+    app.select_verse(43003017)
+    check(info_state(p)['level'] == 'verse', 'selecting a verse after a switch is the verse level again')
+
+    # Another chapter: Chapter, describing it; a chosen book goes.
+    p.click('#reader-pane-a .chapter-title-book')
+    p.click('#reader-pane-a .pane-next')
+    p.wait_for_timeout(300)
+    st = info_state(p)
+    check(st['level'] == 'chapter' and open_sections(st) == ['chapter'] and st['outlined'] == [],
+          f"another chapter opens Chapter ({st['level']}, {open_sections(st)}, {st['outlined']})")
+    check(st['sections']['chapter']['title'] == 'John 4', f"Chapter follows the pane ({st['sections']['chapter']['title']})")
+
+    # People and places (context.db, from TIPNR): the form used in the chapter, in
+    # order of first appearance, each a link to its first verse there.
+    names = lambda kind: p.evaluate(f"""[...document.querySelectorAll('#info-tab .info-name-list[data-kind="{kind}"] .info-name')]
+        .map(el => el.textContent)""")
+    wait_names = lambda: p.wait_for_selector('#info-tab .info-name', timeout=30_000)
+    app.navigate(1, 12)
+    wait_names()
+    people, places = names('person'), names('place')
+    check(people == ['Abram', 'Lot', 'Sarai', 'Pharaoh'], f'Genesis 12: people as named there, in order ({people})')
+    check(places[:3] == ['Haran', 'Canaan', 'Moreh'] and 'Bethel' in places and 'Egypt' in places,
+          f'Genesis 12: places ({places})')
+    peoples = names('group')
+    check(peoples == ['Canaanite', 'Egyptian'], f'Genesis 12: peoples, the gentilics TIPNR gives ({peoples})')
+    fields = info_state(p)['sections']['chapter']['fields']
+    check([label for label, _ in fields][:4] == ['People', 'Peoples', 'Places', 'Verses'],
+          f'people, peoples and places come before the verse count ({fields})')
+    title = p.evaluate("document.querySelector('#info-tab .info-name').title")
+    check(title.startswith('Also called Abraham · Abraham') and title.endswith('. · first at Genesis 12:1, in 11 verses'),
+          f"a name's tooltip: its other name, TIPNR's one-line summary, where ({title!r})")
+    summary = p.evaluate("""import('./js/db.js').then(db => db.getChapterNames(1, 6))
+        .then(rows => rows.find(row => row.shown_as === 'Noah'))""")
+    check(summary['brief'] and summary['summary'].startswith('Noah') and '<' not in summary['summary'],
+          f"@Brief and @Short come through, as plain text ({summary['brief']!r})")
+    check('STEPBible TIPNR' in info_state(p)['infoText'], 'the source is named')
+    p.evaluate("document.querySelector('#reader-pane-a .pane-content').scrollTop = 0")
+    p.click('#info-tab .info-name-list[data-kind="person"] .info-name:has-text("Pharaoh")')
+    p.wait_for_timeout(200)
+    shown = p.evaluate("""(() => { const v = document.querySelector('#reader-pane-a .verse.shown');
+        const pane = document.querySelector('#reader-pane-a .pane-content').getBoundingClientRect();
+        const r = v?.getBoundingClientRect();
+        return v ? [v.dataset.verseId, r.top >= pane.top && r.bottom <= pane.bottom] : null; })()""")
+    st = info_state(p)
+    check(shown == ['1012015', True], f'a name shows its first verse in the chapter ({shown})')
+    check(st['selected'] == 0 and st['level'] == 'chapter', 'without selecting it, so Info stays where it was')
+    # The 1611 chapter summary: spelling modernized, verse numbers as links, the
+    # header's one line, the label switching to the 1611 spelling and back.
+    summary = lambda: p.evaluate("""(() => {
+        const slot = document.querySelector('#info-tab .info-summary');
+        return slot && {
+            text: slot.querySelector('.info-summary-text')?.textContent,
+            verses: [...slot.querySelectorAll('.info-summary-verse')].map(el => el.textContent),
+            glosses: [...slot.querySelectorAll('.info-gloss')].map(el => [el.textContent, el.title]),
+            label: slot.querySelector('.info-summary-label')?.textContent,
+            header: document.querySelector('#info-tab details[data-section="chapter"] .info-section-summary').textContent,
+        };
+    })()""")
+    wait_summary = lambda: p.wait_for_selector('#info-tab .info-summary-text', timeout=30_000)
+    app.navigate(43, 3)
+    wait_summary()
+    st = summary()
+    check(st['text'] == '1 Christ teacheth Nicodemus the necessity of regeneration. 14 Of faith in his death. 16 The great love '
+                        'of God towards the world. 18 Condemnation for unbelief. 23 The baptism, witness & doctrine of John concerning Christ.',
+          f"John 3's 1611 summary, spelling modernized ({st['text']!r})")
+    check(st['verses'] == ['1', '14', '16', '18', '23'], f"its verse numbers are links ({st['verses']})")
+    lines = lambda: p.evaluate("[...document.querySelectorAll('#info-tab .info-summary-part')].map(el => el.textContent.trim())")
+    check(lines() == ['1 Christ teacheth Nicodemus the necessity of regeneration.', '14 Of faith in his death.',
+                      '16 The great love of God towards the world.', '18 Condemnation for unbelief.',
+                      '23 The baptism, witness & doctrine of John concerning Christ.'], f'one line per verse reference ({lines()})')
+    check(st['header'].startswith('Christ teacheth Nicodemus the necessity of regeneration. Of faith in his death.'),
+          f"the header's one line is the summary without verse numbers ({st['header'][:60]!r})")
+    check(st['label'] == '1611 King James Bible · spelling modernized', f"the label names the source and the spelling ({st['label']!r})")
+    p.evaluate("document.querySelector('#reader-pane-a .pane-content').scrollTop = 0")
+    p.click('#info-tab .info-summary-verse:text-is("16")')
+    p.wait_for_timeout(200)
+    check(p.evaluate("document.querySelector('#reader-pane-a .verse.shown')?.dataset.verseId") == '43003016'
+          and info_state(p)['selected'] == 0, 'a verse number shows that verse, without selecting it')
+    p.click('#info-tab .info-summary-spelling')
+    st = summary()
+    check('The great loue of God' in st['text'] and 'doctrine of Iohn' in st['text'] and st['label'].endswith('1611 spelling'),
+          f"the label switches to the 1611 spelling ({st['text'][:80]!r})")
+    app.navigate(43, 4)
+    wait_summary()
+    check('1611 spelling' in summary()['label'], 'the 1611 spelling is remembered from chapter to chapter')
+    p.click('#info-tab .info-summary-spelling')
+    check(summary()['label'].endswith('spelling modernized'), 'and switches back')
+    app.navigate(11, 8)
+    wait_summary()
+    check(lines()[1] == '12. and 54. Solomon’s blessing.', f'verses that share a heading share a line ({lines()})')
+    # Possessives get the apostrophe the 1611 didn't print; plurals don't.
+    app.navigate(19, 23)
+    wait_summary()
+    check(summary()['text'] == 'David’s confidence in God’s grace.', f"Psalm 23: possessives' apostrophes ({summary()['text']!r})")
+    p.click('#info-tab .info-summary-spelling')
+    check(summary()['text'] == 'Dauids confidence in Gods grace.', 'the 1611 spelling keeps them as printed')
+    p.click('#info-tab .info-summary-spelling')
+    app.navigate(17, 3)
+    wait_summary()
+    check('He casteth Lots.' in summary()['text'], f"Esther 3: the plural 'Lots' has none ({summary()['text'][:120]!r})")
+    # Hard words glossed in the modern spelling; not in the 1611 one.
+    app.navigate(46, 13)
+    wait_summary()
+    check(summary()['glosses'] == [['charity', 'love'], ['prelation', 'preference: being ranked above']],
+          f"1 Corinthians 13: charity and prelation glossed ({summary()['glosses']})")
+    p.click('#info-tab .info-summary-spelling')
+    check(summary()['glosses'] == [] and 'charitie' in summary()['text'], 'no glosses on the 1611 spelling')
+    p.click('#info-tab .info-summary-spelling')
+    # Proverbs 11-24 have none in the 1611: Proverbs 10's note, in Ember's brackets.
+    app.navigate(20, 15)
+    wait_summary()
+    st = summary()
+    check(st['text'].startswith('[From Proverbs 10:] From this Chapter to the five and twentieth, are sundry observations of moral virtues')
+          and st['verses'] == [], f"Proverbs 15: Proverbs 10's note, marked as Ember's addition ({st['text'][:70]!r})")
+    # A number that's no verse of the chapter (a count, or a slip) stays text.
+    app.navigate(2, 24)
+    wait_summary()
+    check('40' not in summary()['verses'] and '40. days' in summary()['text'], f"Exodus 24: '40. days' isn't a verse link ({summary()['verses']})")
+    app.navigate(12, 7)
+    wait_summary()
+    check(summary()['verses'] == ['1', '3', '17'], f"2 Kings 7: the slip '22' (20 verses) isn't a link ({summary()['verses']})")
+    # The label opens the manual's note on what was changed.
+    p.click('#info-tab .info-summary-source')
+    wait_guide_rendered(p)
+    heading = p.evaluate("""(() => { const el = document.getElementById('help-the-1611-chapter-summaries');
+        const body = el?.closest('.help-guide-body') || el?.parentElement;
+        return el && [el.textContent, Math.abs(el.getBoundingClientRect().top - body.getBoundingClientRect().top) < 80]; })()""")
+    check(heading == ['The 1611 chapter summaries', True], f"the label opens the guide at the note ({heading})")
+    # The manual's map links: Show me outlines each control, not its neighbour.
+    for name, outlined, other in (('summary-spelling', 'info-summary-spelling', 'info-summary-source'),
+                                  ('summary-label', 'info-summary-source', 'info-summary-spelling')):
+        if not p.evaluate("!document.getElementById('help-guide')?.classList.contains('hidden')"):
+            p.click('#info-tab .info-summary-source')
+            wait_guide_rendered(p)
+        click_map_link(p, name)
+        p.click('#help-guide .help-map-show-me')
+        p.wait_for_timeout(150)
+        shown = p.evaluate(f"""[document.querySelector('#info-tab .{outlined}').classList.contains('help-show-me'),
+                                document.querySelector('#info-tab .{other}').classList.contains('help-show-me')]""")
+        check(shown == [True, False], f'Show me for map:{name} outlines .{outlined} only ({shown})')
+        p.wait_for_function("!document.querySelector('#info-tab .help-show-me')", timeout=5_000)   # gone after 1.5 s
+    p.keyboard.press('Escape')
+    p.wait_for_timeout(200)
+    p.click('#global-settings-btn')
+    credits = p.evaluate("document.querySelector('#global-settings-popover .settings-credits-list')?.textContent || ''")
+    check('Lou Burnard, KJV_1611' in credits and 'Public domain text; no licence stated.' in credits
+          and credits.count('CC BY 4.0.') == 3, 'Data & Attribution credits the 1611 transcription, without a CC licence')
+    p.keyboard.press('Escape')
+
+    # A people named after its ancestor: under Peoples, saying the data can't tell which.
+    app.navigate(43, 3)
+    wait_names()
+    check('Israel' not in names('person') and names('group') == ['Jew', 'Israel'],
+          f"John 3: Israel (3:10) and the Jews (3:1) are peoples, not people ({names('person')}, {names('group')})")
+    tips = p.evaluate("""Object.fromEntries([...document.querySelectorAll('#info-tab .info-name-list[data-kind="group"] .info-name')]
+        .map(el => [el.textContent, el.title]))""")
+    check(tips['Israel'].startswith("The people named after Israel, or Israel himself: STEPBible's data doesn't say which · Israel, also named Jacob"),
+          f"an ancestor's name says it may mean either ({tips['Israel'][:90]!r})")
+    check(tips['Jew'].startswith('Descendants of Judah'), f"a gentilic says who it's named after ({tips['Jew']!r})")
+    app.navigate(19, 3)
+    wait_names()
+    check(names('person') == ['Absalom', 'David'], f"Psalm 3: the title's people ({names('person')})")
+    check('Psalms 3, title' in p.evaluate("document.querySelector('#info-tab .info-name').title"), 'a name in a Psalm title says so')
+    app.navigate(13, 1)
+    wait_names()
+    count = len(names('person'))
+    more = p.evaluate("document.querySelector('#info-tab .info-name-list[data-kind=\"person\"] .info-name-more')?.textContent")
+    p.click('#info-tab .info-name-list[data-kind="person"] .info-name-more')
+    check(count == 24 and more and len(names('person')) == 24 + int(more.split()[0]),
+          f'a long list shows 24 and the rest on request ({count}, {more}, {len(names("person"))})')
+    app.navigate(43, 4)
+
+    # Split view: the active pane is outlined, and Info describes it.
+    p.click('#split-toggle-btn')
+    p.wait_for_timeout(300)
+    outline = lambda pane: p.evaluate(f"getComputedStyle(document.getElementById('reader-pane-{pane}')).outlineStyle")
+    check(outline('a') == 'solid' and outline('b') == 'none', f"the active pane is outlined ({outline('a')}, {outline('b')})")
+    p.click('#reader-pane-b .chapter-title-book')
+    p.wait_for_timeout(100)
+    st = info_state(p)
+    check(outline('b') == 'solid' and outline('a') == 'none', 'clicking the other pane moves the outline')
+    check(st['level'] == 'book' and st['sections']['book']['title'] == 'Genesis' and st['outlined'] == ['b:book'],
+          f"Info follows the active pane ({st['level']}, {st['sections']['book']['title']}, {st['outlined']})")
+    check(st['sections']['translation']['title'] == 'KJV', 'and its translation')
+    p.click('#reader-pane-a .verse[data-verse-id="43004001"]')
+    p.wait_for_timeout(100)
+    st = info_state(p)
+    check(st['level'] == 'verse' and st['sections']['chapter']['title'] == 'John 4' and st['outlined'] == [],
+          f"back in the first pane, Info describes it ({st['level']}, {st['sections']['chapter']['title']}, {st['outlined']})")
+    p.click('#split-toggle-btn')
+    p.wait_for_timeout(200)
+    check(outline('a') == 'none', 'no outline without split view')
+
+    info_without_context_db(p.context.browser)
+    return FAILURES
+
+
+def info_without_context_db(browser):
+    """context.db not to be had (offline before its first download): the Chapter
+    section leaves people and places out, with no error, and the rest is as usual."""
+    ctx = browser.new_context(viewport={'width': 1600, 'height': 1000})
+    page = ctx.new_page()
+    page.route('**/data/context.db', lambda route: route.abort())
+    app = App(page, ignore=is_expected_network_line)
+    app.boot()
+    app.navigate(1, 12)
+    page.wait_for_timeout(1500)
+    st = info_state(page)
+    check(page.evaluate("document.querySelectorAll('#info-tab .info-name, #info-tab .info-summary-text').length") == 0
+          and [label for label, _ in st['sections']['chapter']['fields']] == ['Verses']
+          and st['sections']['chapter']['summary'] == '20 verses',
+          f"without context.db: no people or places, the rest as usual ({st['sections']['chapter']['fields']})")
+    check(app.errors == [], f"without context.db: no console errors but the browser's own failed-request lines ({app.errors})")
+    ctx.close()
 
 
 # ---------------------------------------------------------------- service worker
@@ -3494,8 +3859,8 @@ def scenario_updates(browser):
     # An install from before this (no records): each file hashed once, nothing fetched
     p.evaluate("localStorage.removeItem('ember.installedFiles')")
     updated, digests, requests = run.check_updates()
-    check(updated == [] and digests == 7 and requests == [],
-          f'no records yet: each of the 7 files hashed once, none fetched ({updated}, {digests} hashes, {requests})')
+    check(updated == [] and digests == 8 and requests == [],
+          f'no records yet: each of the 8 files hashed once, none fetched ({updated}, {digests} hashes, {requests})')
 
     # A changed translation is downloaded, checked, written, and read from the next launch
     asv_path = os.path.join(TRANSLATIONS_DIR, 'asv.db')
@@ -3540,6 +3905,14 @@ def scenario_updates(browser):
     check(updated == ['lexicon-hebrew.db'] and p.evaluate(OPFS_SHA_JS, 'lexicon-hebrew.db') == sha256_of(new_lexicon),
           f'changed lexicon-hebrew.db: replaced ({updated}, {requests})')
     p.unroute('**/data/lexicon-hebrew.db')
+    new_context = edited_copy(os.path.join(ROOT, 'data', 'context.db'), 'context-new.db',
+                              "CREATE TABLE zz_update_marker (x)")
+    run.route_catalogs(translations={'asv.db': new_asv}, references={'lexicon-hebrew.db': new_lexicon, 'context.db': new_context})
+    p.route('**/data/context.db', lambda route: route.fulfill(status=200, body=new_context))
+    updated, digests, requests = run.check_updates()
+    check(updated == ['context.db'] and p.evaluate(OPFS_SHA_JS, 'context.db') == sha256_of(new_context),
+          f'changed context.db: replaced ({updated}, {requests})')
+    p.unroute('**/data/context.db')
 
     # Offline: nothing. (Routes off first: in Firefox a routed page can't reload
     # offline through the service worker.)
@@ -4356,6 +4729,7 @@ def main():
             elif args[0] == 'popovers': failures = scenario_popovers(app)
             elif args[0] == 'smoke':    failures = scenario_smoke(app)
             elif args[0] == 'indicators': failures = scenario_indicators(app)
+            elif args[0] == 'info':       failures = scenario_info(app)
             elif args[0] == 'notes':      failures = scenario_notes(app)
             elif args[0] == 'hebrew':     failures = scenario_hebrew(app)
             elif args[0] == 'export':     failures = scenario_export(app)

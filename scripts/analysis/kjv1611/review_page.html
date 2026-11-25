@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1611 Summary Word Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE work: a reviewer's list, dense, exact, calm
+   IDEA a printer's correction sheet for the 1611: each word as printed, struck through to its correction
+   PICTURE the list itself, opened at the spelling changes, with a tally strip of how each change was found
+   COLOUR white paper, black ink, rubric red for every correction; night: deep ink ground, warm red
+   TYPE IM Fell English (a 17th-century face) for printed words and title + Source Sans 3 for the working parts
+   LAYOUT title and tally across the top, tabs and search on one line, the table below; on a phone the rows stack */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#121014);--ink:light-dark(#16131a,#ece8ee);--soft:light-dark(#5d5763,#a8a1ad);--rule:light-dark(#e4e0e7,#2c2830);--panel:light-dark(#f6f4f7,#1b181e);--red:light-dark(#b3121e,#ff6b6b);--red-soft:light-dark(#fbe7e8,#3a1d20);--mark:light-dark(#ffe58a,#5b4a12)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 "Source Sans 3",system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(22px,3.5vw,44px) max(4vw,16px) 0}
+.wrap{max-width:1240px;margin:0 auto}
+h1{font:400 clamp(32px,4.6vw,48px)/1.05 "IM Fell English",Georgia,serif;letter-spacing:-.01em;margin:0 0 8px;text-wrap:balance}
+.lede{margin:0 0 18px;color:var(--soft);max-width:68ch}
+.lede strong{color:var(--ink);font-weight:600}
+.tally{display:flex;height:34px;border-radius:4px;overflow:hidden;border:1px solid var(--rule)}
+.tally button{border:0;padding:0 8px;font:600 13px "Source Sans 3",sans-serif;color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.tally button:focus-visible{outline:3px solid var(--ink);outline-offset:-3px}
+.key{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0 0;font-size:14px;color:var(--soft)}
+.key span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;background:var(--c)}
+.bar{background:var(--bg);border-bottom:1px solid var(--rule);margin-top:22px}
+@media(min-width:761px){.bar{position:sticky;top:0;z-index:2}}
+.bar .wrap{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding:10px max(4vw,16px)}
+.tabs{display:flex;flex-wrap:wrap;gap:4px}
+.tabs button{font:600 15px "Source Sans 3",sans-serif;padding:9px 12px;min-height:44px;border:1px solid var(--rule);background:var(--bg);color:var(--ink);border-radius:4px;cursor:pointer}
+.tabs button[aria-selected=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tabs b{font-weight:400;opacity:.75;margin-left:4px;font-variant-numeric:tabular-nums}
+#q{font:16px "Source Sans 3",sans-serif;padding:9px 12px;min-height:44px;border:1px solid var(--soft);border-radius:4px;background:var(--bg);color:var(--ink);width:min(260px,100%)}
+#q:focus-visible,.tabs button:focus-visible,.chips button:focus-visible,#copy:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+.flags{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:15px;color:var(--soft)}
+#copy{font:600 15px "Source Sans 3",sans-serif;min-height:44px;padding:0 14px;border-radius:4px;border:1px solid var(--red);background:var(--red);color:#fff;cursor:pointer}
+#copy:disabled{opacity:.4;cursor:default}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:12px 0 0}
+.chips button{font:15px "Source Sans 3",sans-serif;min-height:36px;padding:4px 12px;border-radius:18px;border:1px solid var(--rule);background:var(--bg);color:var(--ink);cursor:pointer}
+.chips button[aria-pressed=true]{border-color:var(--red);background:var(--red-soft)}
+.about{font-size:15px;color:var(--soft);margin:12px 0 0;max-width:80ch}
+main{padding:8px max(4vw,16px) 64px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th{text-align:left;font-weight:600;font-size:14px;color:var(--soft);padding:10px 8px;border-bottom:2px solid var(--ink);white-space:nowrap;cursor:pointer;user-select:none}
+th[data-k=uses],td.n{text-align:right}
+th[aria-sort=ascending]::after{content:" ↑"}th[aria-sort=descending]::after{content:" ↓"}
+th.nosort{cursor:default}
+td{padding:9px 8px;border-bottom:1px solid var(--rule);vertical-align:top}
+tr.row{cursor:pointer}
+tr.row:hover td{background:var(--panel)}
+td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
+.old{font:19px/1.3 "IM Fell English",Georgia,serif}
+.old.struck{text-decoration:line-through;text-decoration-color:var(--red);text-decoration-thickness:1.5px}
+.new{font:600 17px "Source Sans 3",sans-serif;color:var(--red)}
+.basis{color:var(--soft);font-size:14px}
+.basis i{font-style:normal;color:var(--ink);font-weight:600;margin-right:6px}
+td.f{width:44px;padding:4px}
+td.f input{width:22px;height:22px;margin:7px 8px;accent-color:var(--red);cursor:pointer}
+tr.open td{background:var(--panel)}
+tr.uses td{background:var(--panel);padding:2px 8px 14px 52px}
+.use{display:grid;grid-template-columns:9em minmax(0,1fr) minmax(0,1fr);gap:4px 18px;padding:8px 0;border-top:1px dotted var(--rule)}
+.use:first-child{border-top:0}
+.use .ref{font-weight:600;white-space:nowrap}
+.use .p{font:17px/1.4 "IM Fell English",Georgia,serif}
+mark{background:var(--mark);color:inherit;padding:0 1px;border-radius:2px}
+.none{color:var(--soft);font-style:italic}
+.empty{padding:40px 8px;color:var(--soft);text-align:center}
+footer{max-width:1240px;margin:0 auto;padding:0 max(4vw,16px) 40px;color:var(--soft);font-size:14px}
+#status{min-height:1.5em}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media(max-width:760px){.flags{margin-left:0}.use{grid-template-columns:minmax(0,1fr)}tr.uses td{padding-left:8px}}
+@media(max-width:600px){table{font-size:14px}thead{display:none}tr.row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;padding:6px 0}tr.row td{border:0;padding:3px 6px}tr.row td.b{grid-column:2/4}tr.row td.m{grid-column:2/4}tr.row{border-bottom:1px solid var(--rule)}}
+@media(prefers-reduced-motion:no-preference){tr.uses td{animation:open .18s ease-out}@keyframes open{from{opacity:0}}}
+</style>
+</head>
+<body>
+<header class="band"><div class="wrap">
+  <h1>The 1611 summaries, word by word</h1>
+  <p class="lede">Every change Ember makes to the 1611 King James Bible's chapter summaries, and every word it leaves alone, with where each comes from. <strong>Click a row</strong> to see the word in its summaries, as printed and as modernized. <strong>Tick the box</strong> on any row that looks wrong, then Copy flagged to send the list.</p>
+  <div class="tally" id="tally" aria-label="How the changes were found"></div>
+  <div class="key" id="key"></div>
+</div></header>
+<div class="bar"><div class="wrap">
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <input id="q" type="search" placeholder="Find a word" aria-label="Find a word, printed or modern" autocomplete="off">
+  <div class="flags"><span id="flagged">No rows flagged</span><button id="copy" disabled>Copy flagged</button></div>
+</div></div>
+<main><div class="wrap">
+  <div class="chips" id="chips"></div>
+  <p class="about" id="about"></p>
+  <div class="scroll"><table><thead id="head"></thead><tbody id="body"></tbody></table></div>
+  <p id="status" role="status"></p>
+</div></main>
+<footer id="foot">Loading the lists…</footer>
+<script>
+{
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const KINDS = [
+  {k:'aligned', label:'Matched in the 1769 KJV', c:'#b3121e', test:b => b.startsWith('aligned')},
+  {k:'rule', label:'Spelling rule', c:'#d9622b', test:b => b.startsWith('rule')},
+  {k:'stem', label:'Stem + ending', c:'#c99a12', test:b => b.startsWith('stem')},
+  {k:'convention', label:"Printers' convention", c:'#6f8a2a', test:b => b.startsWith('the printers')},
+  {k:'manual', label:'By hand', c:'#2f6f8f', test:b => b.startsWith('manual')},
+];
+const kindOf = b => KINDS.find(x => x.test(b)) || {k:'other', label:'Other', c:'#777'};
+const TABS = [
+  {k:'spelling', label:'Spelling', about:'Spelling changes only: u and v, i and j, y and i, final and doubled letters, the printers\' mark for a dropped m or n. Matched case-blind; the printed word\'s capital is kept.'},
+  {k:'possessive', label:'Possessives', about:'Apostrophes the 1611 didn\'t print, matched exactly as printed, so "Gods" (God\'s) and "gods" (a plural) are told apart. Phrases are matched whole, before single words.'},
+  {k:'unchanged', label:'Left as printed', about:'Words no evidence or rule reached. Most are right as they are ("complaineth", names); any that still need modern spelling belong in the list by hand.'},
+  {k:'glosses', label:'Glosses', about:'Hard words kept in place with a dotted underline and their meaning. Kept by hand, and drafts until someone qualified has checked them.'},
+  {k:'rejected', label:'Rejected', about:'Changes the evidence suggested that were wrong, with the reason.'},
+];
+const COLS = {
+  spelling:[['printed','Printed'],['modern','Modern'],['uses','Uses'],['basis','How it was found']],
+  possessive:[['printed','Printed'],['modern','Modern'],['uses','Uses'],['basis','How it was found']],
+  unchanged:[['printed','Printed'],['uses','Uses']],
+  glosses:[['printed','Word or phrase'],['meaning','Meaning'],['example','Example'],['reviewed','Reviewed']],
+  rejected:[['printed','Printed'],['basis','Why']],
+};
+let data = null, tab = 'spelling', sort = {k:'printed', dir:1}, kind = null, open = new Set();
+let flags = new Set();
+try { flags = new Set(JSON.parse(localStorage.getItem('review1611.flags') || '[]')); } catch (e) {}
+const saveFlags = () => { try { localStorage.setItem('review1611.flags', JSON.stringify([...flags])); } catch (e) {} };
+const $ = id => document.getElementById(id);
+
+function basisCell(b) {
+  const kd = kindOf(b);
+  const label = tab === 'possessive' ? (b.startsWith('manual') ? 'By hand' : 'Possessive') : kd.label;
+  return `<span class="basis"><i>${esc(label)}</i>${esc(b.replace(/^(manual|rule|possessive|stem)[:;]?\s*/, ''))}</span>`;
+}
+function highlight(text, word) {
+  const at = text.toLowerCase().indexOf(word.toLowerCase());
+  if (!word || at < 0) return esc(text);
+  return esc(text.slice(0, at)) + '<mark>' + esc(text.slice(at, at + word.length)) + '</mark>' + esc(text.slice(at + word.length));
+}
+function usesBlock(r) {
+  if (!r.seen || !r.seen.length) return '<p class="none">Not found in a summary.</p>';
+  const target = tab === 'glosses' ? r.printed : (r.modern || r.printed);
+  return r.seen.map(([ref, old, mod]) => `<div class="use"><span class="ref">${esc(ref)}</span>` +
+    (tab === 'glosses' ? `<span>${highlight(mod, target)}</span><span class="p">${esc(old)}</span>`
+                       : `<span class="p">${highlight(old, r.printed)}</span><span>${highlight(mod, target)}</span>`) + '</div>').join('') +
+    (r.uses > r.seen.length ? `<p class="none">${r.uses - r.seen.length} more use${r.uses - r.seen.length === 1 ? '' : 's'} not shown.</p>` : '');
+}
+function rows() {
+  let list = data[tab] || [];
+  if (tab === 'spelling' && kind) list = list.filter(r => kindOf(r.basis).k === kind);
+  const q = $('q').value.trim().toLowerCase();
+  if (q) list = list.filter(r => [r.printed, r.modern, r.meaning].some(v => (v || '').toLowerCase().includes(q)));
+  const k = sort.k;
+  return [...list].sort((a, b) => {
+    const x = a[k] ?? '', y = b[k] ?? '';
+    return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'en', {sensitivity:'base'})) * sort.dir;
+  });
+}
+function cell(r, k) {
+  if (k === 'printed') return `<td class="old${r.modern ? ' struck' : ''}">${esc(r.printed)}</td>`;
+  if (k === 'modern') return `<td class="new m">${esc(r.modern)}</td>`;
+  if (k === 'uses') return `<td class="n">${esc(r.uses)}</td>`;
+  if (k === 'basis') return `<td class="b">${basisCell(r.basis)}</td>`;
+  if (k === 'reviewed') return `<td class="b">${r.reviewed ? esc(r.reviewed) : '<span class="none">Not yet</span>'}</td>`;
+  return `<td class="b">${esc(r[k])}</td>`;
+}
+function render() {
+  const cols = COLS[tab];
+  $('tabs').innerHTML = TABS.map(t => `<button role="tab" id="tab-${t.k}" aria-selected="${t.k === tab}" data-t="${t.k}">${esc(t.label)}<b>${(data[t.k] || []).length.toLocaleString()}</b></button>`).join('');
+  $('about').textContent = TABS.find(t => t.k === tab).about;
+  $('chips').innerHTML = tab === 'spelling' ? [{k:null, label:'All'}, ...KINDS].map(x =>
+    `<button data-kind="${x.k ?? ''}" aria-pressed="${kind === x.k}">${esc(x.label)} ${x.k ? (data.spelling.filter(r => kindOf(r.basis).k === x.k).length) : data.spelling.length}</button>`).join('') : '';
+  $('head').innerHTML = '<tr><th class="nosort"><span class="sr">Flag</span></th>' + cols.map(([k, l]) =>
+    `<th data-k="${k}"${sort.k === k ? ` aria-sort="${sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}>${esc(l)}</th>`).join('') + '</tr>';
+  const list = rows();
+  $('body').innerHTML = list.length ? list.map(r => {
+    const id = tab + ':' + r.printed, isOpen = open.has(id);
+    return `<tr class="row${isOpen ? ' open' : ''}" data-id="${esc(id)}"><td class="f"><input type="checkbox" aria-label="Flag ${esc(r.printed)}" ${flags.has(id) ? 'checked' : ''}></td>${cols.map(([k]) => cell(r, k)).join('')}</tr>` +
+      (isOpen ? `<tr class="uses"><td colspan="${cols.length + 1}">${usesBlock(r)}</td></tr>` : '');
+  }).join('') : `<tr><td class="empty" colspan="${cols.length + 1}">No words match “${esc($('q').value)}”.</td></tr>`;
+  $('status').textContent = `${list.length.toLocaleString()} of ${(data[tab] || []).length.toLocaleString()} shown`;
+  $('flagged').textContent = flags.size ? `${flags.size} row${flags.size === 1 ? '' : 's'} flagged` : 'No rows flagged';
+  $('copy').disabled = !flags.size;
+}
+function tally() {
+  const total = data.spelling.length + data.possessive.length + data.unchanged.length;
+  const parts = [...KINDS.map(x => ({...x, n:data.spelling.filter(r => kindOf(r.basis).k === x.k).length, t:'spelling'})),
+    {k:'possessive', label:'Possessives', c:'#7a2c6e', n:data.possessive.length, t:'possessive'},
+    {k:'unchanged', label:'Left as printed', c:'#a9a3ad', n:data.unchanged.length, t:'unchanged'}];
+  $('tally').innerHTML = parts.map(p => `<button style="background:${p.c};width:${(p.n / total * 100).toFixed(2)}%" data-t="${p.t}" data-kind="${p.t === 'spelling' ? p.k : ''}" title="${esc(p.label)}: ${p.n}">${p.n / total > .07 ? esc(p.n.toLocaleString()) : ''}</button>`).join('');
+  $('key').innerHTML = parts.map(p => `<span style="--c:${p.c}">${esc(p.label)} ${p.n.toLocaleString()}</span>`).join('');
+}
+function route() {
+  const h = location.hash.slice(1);
+  if (TABS.some(t => t.k === h)) tab = h;
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-t]');
+  if (t) { tab = t.dataset.t; kind = t.dataset.kind || null; open.clear(); sort = {k:'printed', dir:1}; history.replaceState(null, '', '#' + tab); render(); return; }
+  const c = e.target.closest('.chips button');
+  if (c) { kind = c.dataset.kind || null; render(); return; }
+  const h = e.target.closest('th[data-k]');
+  if (h) { sort = sort.k === h.dataset.k ? {k:h.dataset.k, dir:-sort.dir} : {k:h.dataset.k, dir:h.dataset.k === 'uses' ? -1 : 1}; render(); return; }
+  const row = e.target.closest('tr.row');
+  if (!row) return;
+  const id = row.dataset.id;
+  if (e.target.matches('input[type=checkbox]')) { e.target.checked ? flags.add(id) : flags.delete(id); saveFlags(); render(); return; }
+  open.has(id) ? open.delete(id) : open.add(id);
+  render();
+});
+$('q').addEventListener('input', render);
+$('copy').addEventListener('click', async () => {
+  const lines = [...flags].map(id => {
+    const [t, ...rest] = id.split(':'), printed = rest.join(':');
+    const r = (data[t] || []).find(x => x.printed === printed) || {};
+    return [TABS.find(x => x.k === t)?.label || t, printed, r.modern || r.meaning || '', r.basis || ''].join('\t');
+  });
+  const text = 'List\tPrinted\tModern\tHow it was found\n' + lines.join('\n');
+  try { await navigator.clipboard.writeText(text); $('status').textContent = `Copied ${lines.length} flagged row${lines.length === 1 ? '' : 's'}; paste them into a message.`; }
+  catch (err) { $('status').textContent = 'The browser refused the copy. The flagged rows: ' + lines.map(l => l.split('\t').slice(0, 2).join(' ')).join('; '); }
+});
+window.addEventListener('hashchange', () => { route(); render(); });
+fetch('data.json').then(r => r.json()).then(d => {
+  data = d; route(); tally(); render();
+  $('foot').textContent = `From build/context/1611-spelling.tsv and 1611-glosses.tsv, and the ${d.source.chapters.toLocaleString()} chapter summaries in context.db (lb42/KJV_1611 at ${String(d.source.commit).slice(0, 7)}). Read-only: changes go in scripts/analysis/kjv1611/derive_spelling.py or the glosses file.`;
+}).catch(() => { $('foot').textContent = 'The word lists could not be loaded.'; });
+}
+</script>
+</body>
+</html>

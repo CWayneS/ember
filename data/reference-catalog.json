@@ -10,6 +10,11 @@
       "filename": "lexicon-hebrew.db",
       "size_bytes": 4403200,
       "sha256": "1e5f9af59709873e6d9a7b153885d6e0385e831c86c457d384a0d3cfca085a3e"
+    },
+    {
+      "filename": "context.db",
+      "size_bytes": 2027520,
+      "sha256": "38d7f0236fa814048600b1c416c46d8e2c74344198b8dc5a02116c1dc3414674"
     }
   ]
 }

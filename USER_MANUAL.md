@@ -70,6 +70,12 @@ If you restore a backup made on another computer, you keep every translation thi
 
 Click the split-reader icon in the reader header to open a second pane. Each pane navigates and switches translations independently — a common use is the same chapter in two translations, or two different passages, side by side. Click the icon again to close the second pane.
 
+The pane you last clicked in is the active one. With two panes open it has a faint outline round its edge, and the reference panel describes what it shows.
+
+### The chapter title
+
+Above each chapter's text (and above a Psalm's title) is a quiet title line, such as "JOHN 3". Its two parts can be clicked separately: [the book name](#the-chapter-title "map:chapter-title") opens **Book** in the [Info tab](#info), and the chapter number opens **Chapter**. Whichever you clicked gets the same outline as a selected verse, so you can see what Info is describing. Clicking either clears any verse selection; clicking a verse, or in the margin, moves off it again. To go somewhere else, use the translation and chapter button at the top of the pane, as before.
+
 ### Navigating chapters
 
 Click [**‹**](#navigating-chapters "map:chapter-arrows") to go back one chapter, **›** to go forward. At the end of a book, the arrows cross into the next or previous book automatically. At Genesis 1, the back arrow does nothing. At Revelation 22, the forward arrow does nothing.
@@ -204,13 +210,46 @@ The reference panel sits beside the notes panel (or below it, if you've stacked 
 
 Selecting a verse leaves the open tab alone. To have a particular tab come up every time you select a verse instead, choose it under [the panel's **⚙**](#the-reference-panel "map:reference-settings") → Default tab; **Keep** (the default) leaves the tab as it is.
 
-Select a verse in the reader to populate the first four tabs. Without a selection, each shows "Select a verse to see reference material." Plans doesn't depend on a selection — see below.
+Info always describes what the reader shows; see below. Tags, Related and Language need a selected verse: without one, each says "Select a verse to see…". Plans doesn't depend on a selection — see below.
 
 ### Info
 
-Shows the book name, testament, and genre. Below that, the current chapter number and verse count. If the selected verse has notes, they're listed here too — with their text, tags, and a button to open the parent study.
+Info answers "what am I reading?" It has [three sections](#info "map:info-sections") for the active pane: **Translation**, **Book** and **Chapter**. Each one's header shows its name and a one-line summary, so the tab is useful with everything folded:
+
+- **Translation**: the abbreviation, its full name, year and license.
+- **Book**: the name and genre; open, its testament and number of chapters.
+- **Chapter**: the book and chapter and the first line of its 1611 summary (below); open, the whole summary, the people, peoples and places named in it, its number of verses, any headings, and your notes on the selected verse.
+
+What you've selected in the reader decides which section is open, and folds the other two:
+
+- Nothing selected, a verse or range, or [the chapter number](#the-chapter-title) clicked: **Chapter**. With a verse selected, its notes are listed there, with their text, tags, and a button to open the parent study.
+- The book name clicked: **Book**.
+- The pane switched to another translation: **Translation**. A selected verse stays selected.
+- Another chapter: **Chapter**, describing it.
+
+You can also open or fold any section yourself by clicking its header, and have more than one open. A section only shows what Ember has for it: a field with nothing in it is left out.
+
+**People, peoples and places.** Chapter lists the people, peoples and places the chapter names, in the order they first appear, from STEPBible's list of proper names (TIPNR). Each is called what the chapter calls them: "Abram" in Genesis 12, "Abraham" from Genesis 17. Hover over a name to see who they are, in a sentence from STEPBible ("Aaron was Moses' older brother and served as the first high priest of Israel."), any other name they go by, and where they first appear in the chapter; click it to bring that verse into view. People who share a name are kept apart, so the Zechariah of 2 Chronicles 24 isn't the one in Luke 1. A long list shows its first 24 names, with "N more" for the rest. People the text doesn't name aren't listed.
+
+**Peoples** are tribes, nations and clans: the Amorites, the Levites, the Philistines, and words like "Canaanite" or "Jew" (hover to see whom they're named after). Some names are both a man and the people descended from him. "Israel" is Jacob and the nation; "Judah", "Benjamin" and the other tribes are a son of Jacob and his tribe; "Esau" is also Edom. STEPBible's list doesn't say which a verse means, so these are always under Peoples, even where the man himself is meant (Jacob in Genesis 32), and hovering says it could be either.
+
+The summaries and these lists come in a small file Ember downloads soon after it first starts. Until it has, for instance on a first start without a connection, Chapter leaves them out.
 
 The WEB is shown verse-only, so its headings — Psalm 119's Hebrew letters (ALEPH, BETH…), the speakers in the Song of Songs (Beloved, Lover, Friends), and the five books of the Psalms — aren't in the reading text. When the pane shows the WEB, the Info tab lists the chapter's headings and where each falls, such as "BETH — before 119:9".
+
+#### The 1611 chapter summaries
+
+The 1611 King James Bible printed a short summary at the head of every chapter, and Chapter shows it as a quotation: "1 Christ teacheth Nicodemus the necessity of regeneration. 14 Of faith in his death. 16 The great love of God towards the world…". The numbers are the verses each part is about, and each starts a line of its own; click one to bring that verse into view. These are the 1611 translators' words, not Ember's, and the summaries of 1611 read some Old Testament passages as speaking of Christ and the Church (Song of Solomon 2: "The mutual love of Christ and his Church"), as Christians of their day did.
+
+**What was changed: the spelling, and the apostrophes.** "loue" is shown as "love", "Iohn" as "John", "vnbeliefe" as "unbelief": u and v, i and j, y and i, a final or doubled letter, a printer's mark for a dropped m or n. The 1611 printed possessives without an apostrophe ("Dauids confidence in Gods grace"), so Ember adds one: "David’s confidence in God’s grace". Only to a possessive, never a plural: "strange gods" and "he casteth lots" stay as they are. Each change comes from a fixed list, mostly taken from how the 1769 edition (the King James text Ember shows) writes the same word in the verses. The words, their order and the rest of the punctuation stay as printed, and so do "-eth" endings. Where "fathers" or "kings" could be either a plural or a possessive, it's left as printed. A word the list doesn't cover is left as printed. Four obvious slips in the transcription or the print ("miraracles" for miracles) are put right in the modern spelling only.
+
+**Original spelling.** Click [**spelling modernized**](#the-1611-chapter-summaries "map:summary-spelling") under a summary to see it as printed in 1611; click **1611 spelling** to come back. Ember remembers which you chose. Clicking [**1611 King James Bible**](#the-1611-chapter-summaries "map:summary-label") opens this note.
+
+**Hard words** whose meaning has changed or dropped out of use keep their place and get a dotted underline; hover for the meaning: "humane" (human), "prelation" (preference), "no let" (no hindrance). The list of these is short and kept by hand, and hasn't yet been checked by a scholar.
+
+**Square brackets** mark the only words Ember adds. Proverbs 11 to 24 have no summary of their own in the 1611; the note at Proverbs 10 covers them, so they show it, beginning "[From Proverbs 10:]".
+
+The summaries come from Lou Burnard's transcription of the 1611 King James Bible ([github.com/lb42/KJV_1611](https://github.com/lb42/KJV_1611)), made from the page images at kingjamesbibleonline.org.
 
 ### Tags
 

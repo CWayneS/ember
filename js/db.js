@@ -628,7 +628,7 @@ export function mergeInstalledTranslations(bytes) {
 // file on the server would never reach an install that already has one. After
 // launch, online, checkForDataUpdates() compares each installed file's SHA-256
 // with its catalog entry (data/translations/catalog.json for translations,
-// data/reference-catalog.json for language.db and lexicon-hebrew.db) and
+// data/reference-catalog.json for language.db, lexicon-hebrew.db and context.db) and
 // downloads, checks and writes the new one when they differ. It never runs
 // during boot, and sql.js holds each database in memory, so a replaced file is
 // used from the next launch. One file at a time: checking a 64 MB file means
@@ -761,7 +761,7 @@ async function runDataUpdates() {
         await updateIfChanged(path, () => store.sha256(entry.filename), entry.sha256,
             () => updateTranslationFile(store, entry), updated);
     }
-    for (const source of referencesInOpfs ? [LANGUAGE_DB, HEBREW_LEXICON_DB] : []) {
+    for (const source of referencesInOpfs ? [LANGUAGE_DB, HEBREW_LEXICON_DB, CONTEXT_DB] : []) {
         const entry = references.find(file => file.filename === source.file);
         if (!entry || _opfsDownloads.has(source.file)) continue;
         await updateIfChanged(source.file, () => installedSha256(source.file), entry.sha256,
@@ -816,8 +816,8 @@ async function updateReferenceFile(source, entry) {
 }
 
 // ============================================================
-// Reference DBs, lazy-loaded: language.db (TAHOT/TAGNT/TBESG, Build 6) and
-// lexicon-hebrew.db (Hebrew_Lexicon_Spec)
+// Reference DBs, lazy-loaded: language.db (TAHOT/TAGNT/TBESG, Build 6),
+// lexicon-hebrew.db (Hebrew_Lexicon_Spec) and context.db (Info_Tab_Spec)
 // ============================================================
 //
 // Unlike translations (every installed one opened eagerly at init — small files,
@@ -826,7 +826,9 @@ async function updateReferenceFile(source, entry) {
 // steps: startReferenceDbDownloads() streams each file into OPFS shortly after
 // launch, so it is there before the user next goes offline, but nothing loads
 // it into memory until something first needs it: the Language tab or a titled
-// Psalm for language.db, a Lexicon tap on a Hebrew word for lexicon-hebrew.db.
+// Psalm for language.db, a Lexicon tap on a Hebrew word for lexicon-hebrew.db,
+// the Info tab's Chapter section for context.db (under 1 MB, so it's usually
+// opened at launch).
 // Once opened, the handle is cached for the rest of the session. Neither is
 // ever part of the db.export()/saveToStorage() write cycle.
 
@@ -846,6 +848,14 @@ const HEBREW_LEXICON_DB = {
     url: './data/lexicon-hebrew.db',
     downloadStartedEvent: null,
     unavailableWarning: 'The Hebrew lexicon is not available yet:',
+    database: null, opening: null, warned: false,
+};
+
+const CONTEXT_DB = {
+    file: 'context.db',
+    url: './data/context.db',
+    downloadStartedEvent: null,
+    unavailableWarning: 'People and places are not available yet:',
     database: null, opening: null, warned: false,
 };
 
@@ -926,6 +936,7 @@ async function loadReferenceBuffer(source) {
 // browser reports coming online; openReferenceDb() also retries on its next use.
 export function startReferenceDbDownloads() {
     setTimeout(() => {
+        downloadReferenceDbInBackground(CONTEXT_DB);
         downloadReferenceDbInBackground(LANGUAGE_DB);
         downloadReferenceDbInBackground(HEBREW_LEXICON_DB);
     }, REFERENCE_DOWNLOAD_DELAY_MS);
@@ -2755,6 +2766,55 @@ export function getCrossReferencesForVerse(verseId, options = {}) {
          LIMIT ?`,
         [verseId, floor, limit]
     );
+}
+
+// ============================================================
+// Context — the Info tab's people and places (context.db, from STEPBible's
+// TIPNR; scripts/build_context.py)
+// ============================================================
+
+// The people, peoples and places named in a chapter, in order of first
+// appearance: [{ name_id, shown_as, name, kind ('person' | 'group' | 'place'),
+// type, description, brief, summary, ambiguous, first_verse, verse_count }].
+// ambiguous is 1 for a name TIPNR uses for both a people and its ancestor
+// (Israel, Judah), with nothing to say which a verse means. shown_as is the form used in the
+// chapter ("Abram" in Genesis 12), name the one TIPNR files them under
+// ("Abraham"); brief and summary are TIPNR's @Brief and @Short.
+// Rejects when context.db can't be had (offline before its first download).
+export async function getChapterNames(bookId, chapter) {
+    const contextDb = await openReferenceDb(CONTEXT_DB);
+    return queryAll(contextDb,
+        `SELECT c.name_id, c.shown_as, n.name, n.kind, n.type, n.description, n.brief, n.summary,
+                n.ambiguous, c.first_verse, c.verse_count
+         FROM chapter_names c JOIN context_names n ON n.id = c.name_id
+         WHERE c.book = ? AND c.chapter = ?
+         ORDER BY c.first_verse, c.shown_as, c.name_id`,
+        [bookId, chapter]
+    );
+}
+
+// A chapter's 1611 summary: { original, modern, borrowed_from } (borrowed_from
+// is 10 for Proverbs 11-24, which carry Proverbs 10's note), or null.
+export async function getChapterSummary(bookId, chapter) {
+    const contextDb = await openReferenceDb(CONTEXT_DB);
+    return queryOne(contextDb,
+        'SELECT original, modern, borrowed_from FROM chapter_summaries WHERE book = ? AND chapter = ?',
+        [bookId, chapter]);
+}
+
+// The summaries' hard words: [{ phrase, meaning }], phrases in lower case and
+// modern spelling ("humane", "no let"). Read once.
+let _summaryGlosses = null;
+export async function getSummaryGlosses() {
+    if (!_summaryGlosses) {
+        const contextDb = await openReferenceDb(CONTEXT_DB);
+        _summaryGlosses = queryAll(contextDb, 'SELECT phrase, meaning FROM summary_glosses');
+    }
+    return _summaryGlosses;
+}
+
+export function warnContextUnavailable(e) {
+    warnReferenceDbUnavailable(CONTEXT_DB, e);
 }
 
 // ============================================================

@@ -3,10 +3,12 @@
 import {
     getBook, parseVerseId, formatReference,
     getChapterVerseCount, getTopicsForVerse, getUserTagsForVerse,
-    getNotesForVerse, getCrossReferencesForVerse, getHeadingsForChapter
+    getNotesForVerse, getCrossReferencesForVerse, getHeadingsForChapter,
+    getChapterNames, getChapterSummary, getSummaryGlosses, warnContextUnavailable
 } from './db.js';
-import { navigateTo, getCurrentLocation, getActivePaneTranslationId, getActivePaneTranslationAbbrev } from './reader.js';
-import { selectVerseRange } from './selection.js';
+import { openHelpGuide } from './help-guide.js';
+import { navigateTo, showVerse, getCurrentLocation, getActivePaneId, getActivePaneTranslation, getActivePaneTranslationId, getActivePaneTranslationAbbrev } from './reader.js';
+import { selectVerseRange, getSelectionLevel, getSelectedVerseOnScreen } from './selection.js';
 import { openStudy, openTagView } from './panels.js';
 import { initLanguageTab, renderLanguageTab as renderLanguageTabContent } from './language.js';
 
@@ -16,26 +18,17 @@ const EMPTY_MSG = 'Select a verse to see reference material.';
 // content derives from the user's own notes: Info (the verse's notes) and
 // Tags ("Your Tags"). Related and Language depend only on reference data.
 export function refreshReference(verseId) {
-    const parsed = parseVerseId(verseId);
-    const book   = getBook(parsed.book);
-    renderInfoTab(book, parsed.chapter, verseId);
+    renderInfoTab();
     renderTagsTab(verseId);
 }
 
-// The verse the Info tab is showing, so it can be shown again when the active
-// pane's translation changes (its headings section depends on it).
-let infoVerseId = null;
-
 export function initReference() {
     initLanguageTab();
-    const refreshInfo = () => {
-        if (infoVerseId === null) return;
-        const parsed = parseVerseId(infoVerseId);
-        renderInfoTab(getBook(parsed.book), parsed.chapter, infoVerseId);
-    };
-    // A translation switch re-renders the pane; switching panes may change translation.
-    document.addEventListener('chapter-rendered', refreshInfo);
-    document.addEventListener('pane-changed', refreshInfo);
+    // Selecting something opens its section; a re-render (a note written, the
+    // same chapter drawn again) keeps whatever the user opened or folded.
+    document.addEventListener('level-changed', () => renderInfoTab({ reopen: true }));
+    document.addEventListener('chapter-rendered', () => renderInfoTab());
+    document.addEventListener('pane-changed', () => renderInfoTab());
     document.addEventListener('selection-changed', (e) => {
         const { verseIds } = e.detail;
         if (verseIds.length > 0) {
@@ -43,81 +36,394 @@ export function initReference() {
         } else {
             clearAll();
         }
+        renderInfoTab({ reopen: true });
     });
+    // Nothing is selected yet: the verse tabs wait for one.
+    for (const id of ['tags-tab', 'related-tab']) {
+        setPlaceholder(document.getElementById(id), EMPTY_MSG);
+    }
+    renderInfoTab({ reopen: true });
 }
 
-// Info/Tags/Related are single-verse tabs (always keyed to the first verse of
+// Tags/Related are single-verse tabs (always keyed to the first verse of
 // a range, unchanged pre-Build-6 behavior). Language is the only tab that
 // uses the full range — an interlinear naturally extends across a multi-verse
-// selection the way a single "current verse" concept doesn't.
+// selection the way a single "current verse" concept doesn't. Info follows
+// the selection level instead (renderInfoTab).
 function renderAll(verseIds) {
     const verseId = verseIds[0];
     const parsed  = parseVerseId(verseId);
     const book    = getBook(parsed.book);
-    renderInfoTab(book, parsed.chapter, verseId);
     renderTagsTab(verseId);
     renderRelatedTab(verseId, book, parsed);
     renderLanguageTabContent(verseIds);
 }
 
 function clearAll() {
-    for (const id of ['info-tab', 'tags-tab', 'related-tab']) {
+    for (const id of ['tags-tab', 'related-tab']) {
         setPlaceholder(document.getElementById(id), EMPTY_MSG);
     }
     renderLanguageTabContent([]);
 }
 
 // ============================================================
-// Info tab — book metadata + chapter info
+// Info tab — Translation, Book and Chapter accordions
+// (docs/Info_Tab_Spec.md). The selection level decides which is open:
+// translation → Translation, book → Book, chapter or verse → Chapter. Any of
+// them can be opened or folded by hand, more than one at a time.
 // ============================================================
 
-function renderInfoTab(book, chapter, verseId) {
-    const container = document.getElementById('info-tab');
-    container.innerHTML = '';
-    infoVerseId = book ? verseId : null;
+const SECTION_FOR_LEVEL = { translation: 'translation', book: 'book', chapter: 'chapter', verse: 'chapter' };
 
+let openSections = new Set(['chapter']);
+let infoContext  = '';   // what the tab last described; a change opens the level's section
+
+function renderInfoTab({ reopen = false } = {}) {
+    const container = document.getElementById('info-tab');
+    const translation = getActivePaneTranslation();
+    const { book: bookId, chapter } = getCurrentLocation();
+    const book = getBook(bookId);
     if (!book) {
         setPlaceholder(container, EMPTY_MSG);
         return;
     }
 
+    const level   = getSelectionLevel();
+    const verseId = getSelectedVerseOnScreen();
+    const context = [getActivePaneId(), translation?.id, bookId, chapter, level, verseId].join('|');
+    if (reopen || context !== infoContext) {
+        openSections = new Set([SECTION_FOR_LEVEL[level]]);
+    }
+    infoContext = context;
+
+    container.innerHTML = '';
+    const accordion = document.createElement('div');
+    accordion.className = 'info-accordion';
+    accordion.dataset.helpTarget = 'info-sections';
+    accordion.dataset.level = level;
+    if (translation) accordion.appendChild(translationSection(translation));
+    accordion.appendChild(bookSection(book));
+    accordion.appendChild(chapterSection(book, chapter, verseId));
+    container.appendChild(accordion);
+}
+
+function translationSection(translation) {
+    const section = infoSection('translation', translation.abbreviation,
+        [translation.name, translation.year, translation.license]);
+    appendFields(section.body, [
+        ['Name', translation.name],
+        ['Year', translation.year],
+        ['License', translation.license],
+    ]);
+    return section.element;
+}
+
+function bookSection(book) {
     const testament = book.testament === 'OT' ? 'Old Testament' : 'New Testament';
+    const genre = capitalize(book.genre);
+    const section = infoSection('book', book.name, [genre]);
+    appendFields(section.body, [
+        ['Testament', testament],
+        ['Genre', genre],
+        ['Chapters', book.chapters],
+    ]);
+    return section.element;
+}
 
-    // Book section
-    const bookSection = document.createElement('div');
-    bookSection.className = 'ref-section';
-
-    const bookName = document.createElement('div');
-    bookName.className   = 'ref-book-name';
-    bookName.textContent = book.name;
-
-    const bookMeta = document.createElement('div');
-    bookMeta.className   = 'ref-meta';
-    bookMeta.textContent = `${testament} · ${book.genre}`;
-
-    bookSection.appendChild(bookName);
-    bookSection.appendChild(bookMeta);
-    container.appendChild(bookSection);
-
-    // Chapter section
+function chapterSection(book, chapter, verseId) {
     const verseCount = getChapterVerseCount(book.id, chapter);
+    const verses = verseCount ? `${verseCount} verse${verseCount !== 1 ? 's' : ''}` : '';
+    // Until chapters have summaries, the verse count is the header's line.
+    const section = infoSection('chapter', `${book.name} ${chapter}`, [verses]);
+    appendChapterSummary(section, book, chapter, verseCount);
+    const credit = document.createElement('div');
+    credit.className = 'info-source';
+    appendChapterNames(section.body, book, chapter, credit);
+    appendFields(section.body, [['Verses', verseCount]]);
+    appendChapterHeadings(section.body, book, chapter);
+    if (verseId !== null) appendVerseNotes(section.body, verseId);
+    section.body.appendChild(credit);
+    return section.element;
+}
 
-    const chapterSection = document.createElement('div');
-    chapterSection.className = 'ref-section';
+// The chapter's summary from the 1611 King James Bible (context.db), shown as
+// a quotation with its source, never as Ember's words (docs/Info_Tab_Spec.md,
+// Item 4). Its verse numbers link to the verses; hard words have a dotted
+// underline with their meaning; the label switches between modernized and
+// 1611 spelling, which is remembered. Until the summary arrives, the header
+// keeps the verse count; once it does, the header shows it on one line.
+const SUMMARY_SPELLING_KEY = 'ember.info.summarySpelling';   // 'modern' | 'original'
+const SUMMARY_HELP_SECTION = 'the-1611-chapter-summaries';
+const chapterSummaryCache = new Map();  // 'book:chapter' → Promise of the row
 
-    const chapterLabel = document.createElement('div');
-    chapterLabel.className   = 'ref-chapter-label';
-    chapterLabel.textContent = `Chapter ${chapter}`;
+function chapterSummary(bookId, chapter) {
+    const key = `${bookId}:${chapter}`;
+    if (!chapterSummaryCache.has(key)) {
+        const row = Promise.all([getChapterSummary(bookId, chapter), getSummaryGlosses()])
+            .then(([summary, glosses]) => summary && { ...summary, glosses });
+        row.catch(() => chapterSummaryCache.delete(key));
+        chapterSummaryCache.set(key, row);
+    }
+    return chapterSummaryCache.get(key);
+}
 
-    const chapterMeta = document.createElement('div');
-    chapterMeta.className   = 'ref-meta';
-    chapterMeta.textContent = `${verseCount} verse${verseCount !== 1 ? 's' : ''}`;
+function summarySpelling() {
+    return localStorage.getItem(SUMMARY_SPELLING_KEY) === 'original' ? 'original' : 'modern';
+}
 
-    chapterSection.appendChild(chapterLabel);
-    chapterSection.appendChild(chapterMeta);
-    container.appendChild(chapterSection);
-    appendChapterHeadings(container, book, chapter);
-    appendVerseNotes(container, verseId);
+function appendChapterSummary(section, book, chapter, verseCount) {
+    const slot = document.createElement('div');
+    slot.className = 'info-summary';
+    section.body.appendChild(slot);
+    chapterSummary(book.id, chapter).then(summary => {
+        if (!summary || !slot.isConnected) return;
+        const headerLine = section.element.querySelector('.info-section-summary');
+        if (headerLine) headerLine.textContent = summaryLine(summary.modern);
+        fillChapterSummary(slot, summary, book, chapter, verseCount);
+    }).catch(warnContextUnavailable);
+}
+
+// The header's one line: the summary without its verse numbers.
+function summaryLine(text) {
+    return text.replace(/(^|\s)\d+(?:\.\s?\d+)*\.?(?=\s)/g, '$1').replace(/\s+/g, ' ').trim();
+}
+
+function fillChapterSummary(slot, summary, book, chapter, verseCount) {
+    slot.replaceChildren();
+    const spelling = summarySpelling();
+    const quote = document.createElement('blockquote');
+    quote.className = 'info-summary-text';
+    quote.lang = spelling === 'original' ? 'en-GB-x-1611' : 'en';
+    if (summary.borrowed_from) {
+        // Square brackets: words Ember adds (the spec's editorial convention).
+        const added = document.createElement('span');
+        added.className = 'info-summary-added';
+        added.textContent = `[From ${book.name} ${summary.borrowed_from}:] `;
+        quote.appendChild(added);
+    }
+    const text = spelling === 'original' ? summary.original : summary.modern;
+    // Verse links only within the chapter the summary is the summary of.
+    const ownChapter = summary.borrowed_from ?? chapter;
+    const linkVerses = summary.borrowed_from ? 0 : verseCount;
+    appendSummaryText(quote, text, spelling === 'modern' ? summary.glosses : [], book, ownChapter, linkVerses);
+    // The bracketed words open the first line rather than sit above it.
+    const added = quote.querySelector(':scope > .info-summary-added');
+    quote.querySelector('.info-summary-part')?.prepend(added ?? '');
+    slot.appendChild(quote);
+
+    const label = document.createElement('div');
+    label.className = 'info-summary-label';
+    const source = document.createElement('button');
+    source.className = 'info-summary-source';
+    source.dataset.helpTarget = 'summary-label';
+    source.textContent = '1611 King James Bible';
+    source.title = 'What was changed, and the source';
+    source.addEventListener('click', () => openHelpGuide(SUMMARY_HELP_SECTION));
+    const toggle = document.createElement('button');
+    toggle.className = 'info-summary-spelling';
+    toggle.dataset.helpTarget = 'summary-spelling';
+    toggle.textContent = spelling === 'original' ? '1611 spelling' : 'spelling modernized';
+    toggle.title = spelling === 'original' ? 'Show modern spelling' : 'Show the 1611 spelling';
+    toggle.setAttribute('aria-pressed', String(spelling === 'original'));
+    toggle.addEventListener('click', () => {
+        localStorage.setItem(SUMMARY_SPELLING_KEY, spelling === 'original' ? 'modern' : 'original');
+        fillChapterSummary(slot, summary, book, chapter, verseCount);
+    });
+    label.append(source, document.createTextNode(' · '), toggle);
+    slot.appendChild(label);
+}
+
+// The text as DOM: verse numbers within the chapter as links, glossed phrases
+// as <abbr> with the meaning, everything else as text nodes. Each verse
+// reference starts a line of its own (a block <span>), so the summary reads as
+// a list; numbers that share one heading stay together ("7. 13 Of their…",
+// "12. and 54. Solomon’s blessing").
+const SAME_HEADING = /^[\s.,;]*(?:and|&)?[\s.,;]*$/i;
+
+function appendSummaryText(container, text, glosses, book, chapter, verseCount) {
+    const phrases = glosses.map(gloss => gloss.phrase).sort((a, b) => b.length - a.length);
+    const meanings = new Map(glosses.map(gloss => [gloss.phrase, gloss.meaning]));
+    const escaped = phrases.map(phrase => phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const pattern = new RegExp(
+        (escaped.length ? `(?<![\\p{L}\\d])(${escaped.join('|')})(?![\\p{L}\\d])|` : '') + '(?<![\\p{L}\\d])(\\d+)(?![\\p{L}\\d])',
+        'giu');
+
+    let part = null;
+    const newPart = () => {
+        part = document.createElement('span');
+        part.className = 'info-summary-part';
+        container.appendChild(part);
+    };
+    const appendText = (piece) => {
+        if (!piece) return;
+        if (!part) newPart();
+        part.appendChild(document.createTextNode(piece));
+    };
+
+    let last = 0;
+    let lastLinkEnd = -1;   // where the previous verse link ended
+    for (const match of text.matchAll(pattern)) {
+        const [whole, phrase, number] = escaped.length ? match : [match[0], undefined, match[1]];
+        const verse = number ? parseInt(number, 10) : 0;
+        if (number && !(verse >= 1 && verse <= verseCount)) continue;   // a count, or a slip
+        const before = text.slice(last, match.index);
+        if (phrase) {
+            appendText(before);
+            const glossed = document.createElement('abbr');
+            glossed.className = 'info-gloss';
+            glossed.title = meanings.get(phrase.toLowerCase());
+            glossed.textContent = whole;
+            if (!part) newPart();
+            part.appendChild(glossed);
+        } else {
+            const sameHeading = lastLinkEnd >= 0 && SAME_HEADING.test(text.slice(lastLinkEnd, match.index));
+            // The space stays at the end of the line it follows, where it doesn't
+            // show, so copied text and screen readers still have it.
+            appendText(before);
+            if (!part || (!sameHeading && part.textContent.trim())) newPart();
+            const link = document.createElement('button');
+            link.className = 'info-summary-verse';
+            link.textContent = number;
+            link.title = `${book.name} ${chapter}:${verse}`;
+            link.addEventListener('click', () => showVerse(book.id, chapter, book.id * 1000000 + chapter * 1000 + verse));
+            part.appendChild(link);
+            lastLinkEnd = match.index + whole.length;
+        }
+        last = match.index + whole.length;
+    }
+    appendText(text.slice(last));
+}
+
+// People, peoples and places named in the chapter (context.db, from
+// STEPBible's TIPNR), each a link to its first verse here. context.db is read asynchronously, so a
+// slot goes in now and fills when the rows come; a slot the tab has since
+// redrawn over is left alone. Nothing shows if context.db can't be had yet
+// (offline before its first download).
+const NAMES_SHOWN_AT_FIRST = 24;
+const chapterNamesCache = new Map();  // 'book:chapter' → Promise of rows
+
+function chapterNames(bookId, chapter) {
+    const key = `${bookId}:${chapter}`;
+    if (!chapterNamesCache.has(key)) {
+        const rows = getChapterNames(bookId, chapter);
+        rows.catch(() => chapterNamesCache.delete(key));  // tried again next time
+        chapterNamesCache.set(key, rows);
+    }
+    return chapterNamesCache.get(key);
+}
+
+// `credit` is an empty line at the foot of the section, which names the source
+// once there are names to credit.
+function appendChapterNames(container, book, chapter, credit) {
+    const slot = document.createElement('div');
+    slot.className = 'info-names';
+    container.appendChild(slot);
+    chapterNames(book.id, chapter).then(rows => {
+        if (!slot.isConnected) return;
+        if (rows.length === 0) return;
+        const list = document.createElement('dl');
+        list.className = 'info-fields';
+        for (const [label, kind] of [['People', 'person'], ['Peoples', 'group'], ['Places', 'place']]) {
+            const group = rows.filter(row => row.kind === kind);
+            if (group.length === 0) continue;
+            const term = document.createElement('dt');
+            term.textContent = label;
+            const detail = document.createElement('dd');
+            detail.className = 'info-name-list';
+            detail.dataset.kind = group[0].kind;
+            fillNameList(detail, group, book, chapter);
+            list.append(term, detail);
+        }
+        slot.appendChild(list);
+        credit.textContent = 'People, peoples and places: STEPBible TIPNR';
+    }).catch(warnContextUnavailable);
+}
+
+// The names as links, the first NAMES_SHOWN_AT_FIRST of them with "N more" for
+// the rest (1 Chronicles' genealogies run to dozens).
+function fillNameList(detail, rows, book, chapter) {
+    const shown = rows.length > NAMES_SHOWN_AT_FIRST + 4 ? rows.slice(0, NAMES_SHOWN_AT_FIRST) : rows;
+    for (const row of shown) detail.appendChild(nameLink(row, book, chapter));
+    if (shown.length === rows.length) return;
+    const more = document.createElement('button');
+    more.className = 'info-name-more';
+    more.textContent = `${rows.length - shown.length} more`;
+    more.addEventListener('click', () => {
+        more.remove();
+        for (const row of rows.slice(shown.length)) detail.appendChild(nameLink(row, book, chapter));
+    });
+    detail.appendChild(more);
+}
+
+function nameLink(row, book, chapter) {
+    const link = document.createElement('button');
+    link.className = 'info-name';
+    link.textContent = row.shown_as;
+    const where = row.first_verse === 0 ? `${book.name} ${chapter}, title` : `${book.name} ${chapter}:${row.first_verse}`;
+    // TIPNR's one-sentence @Short says who they are; @Brief, then the plain
+    // description ("Man living at the time of the Patriarchs", "Descendants of
+    // Amram"), stand in. An ancestor's name that may mean his people says so.
+    link.title = [
+        row.ambiguous ? `The people named after ${row.shown_as}, or ${row.shown_as} himself: STEPBible's data doesn't say which` : null,
+        row.name !== row.shown_as ? `Also called ${row.name}` : null,
+        row.summary || row.brief || row.description || null,
+        row.verse_count > 1 ? `first at ${where}, in ${row.verse_count} verses` : where,
+    ].filter(Boolean).join(' · ');
+    const verseId = book.id * 1000000 + chapter * 1000 + row.first_verse;
+    link.addEventListener('click', () => showVerse(book.id, chapter, verseId));
+    return link;
+}
+
+// A folded-or-open section: a <details> whose summary carries the name and a
+// one-line digest (empty parts left out). Returns the element and its body.
+function infoSection(name, title, summaryParts) {
+    const details = document.createElement('details');
+    details.className = 'info-section';
+    details.dataset.section = name;
+    details.open = openSections.has(name);
+    details.addEventListener('toggle', () => {
+        if (details.open) openSections.add(name);
+        else openSections.delete(name);
+    });
+
+    const summary = document.createElement('summary');
+    summary.className = 'info-section-header';
+    const titleEl = document.createElement('span');
+    titleEl.className = 'info-section-title';
+    titleEl.textContent = title;
+    summary.appendChild(titleEl);
+    const line = summaryParts.filter(part => part !== null && part !== undefined && String(part).trim() !== '').join(' · ');
+    if (line) {
+        const lineEl = document.createElement('span');
+        lineEl.className = 'info-section-summary';
+        lineEl.textContent = line;
+        summary.appendChild(lineEl);
+    }
+
+    const body = document.createElement('div');
+    body.className = 'info-section-body';
+    details.append(summary, body);
+    return { element: details, body };
+}
+
+// Label/value rows; a field with no value is left out, never shown as "—".
+function appendFields(container, fields) {
+    const present = fields.filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '');
+    if (present.length === 0) return;
+    const list = document.createElement('dl');
+    list.className = 'info-fields';
+    for (const [label, value] of present) {
+        const term = document.createElement('dt');
+        term.textContent = label;
+        const detail = document.createElement('dd');
+        detail.textContent = String(value);
+        list.append(term, detail);
+    }
+    container.appendChild(list);
+}
+
+function capitalize(text) {
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 }
 
 // Headings the active pane's translation keeps out of its verse text (only
@@ -166,7 +472,7 @@ function appendVerseNotes(container, verseId) {
     const notes = getNotesForVerse(verseId);
     if (notes.length === 0) return;
 
-    container.appendChild(refHeading('Notes'));
+    container.appendChild(refHeading(`Notes on ${formatReference(verseId)}`));
 
     for (const note of notes) {
         const card     = document.createElement('div');

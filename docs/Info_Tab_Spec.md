@@ -1,6 +1,6 @@
 # Ember Bible Study — Info Tab Spec
 
-**Status:** Draft 2026-11-24. Not built.
+**Status:** Draft 2026-11-24. Steps 1–3 built 2026-11-25 (see "Step 1 as built", "Step 2 as built" and "Step 3 as built" below); steps 4–5 not built.
 **Ground rule:** the code wins where it and this spec disagree. "Current state" claims were checked against `js/reference.js`, `js/reader.js`, `index.html` and `data/core.db` on 2026-11-24. Re-check before building.
 
 ---
@@ -116,7 +116,8 @@ Looked at and not used: aruljohn/Bible-kjv-1611 (1611 verse text as JSON, no sum
 
 ### Editorial convention
 
-- **Modernize spelling only; never change a word.** u/v, i/j, final -e, doubled letters and the like ("loue" → "love", "Iohn" → "John", "vnbeliefe" → "unbelief"). Wording, word order and punctuation stay as printed. Spelling is modernized by a fixed, reviewable word list in the build, not by hand, edit by edit.
+- **Modernize spelling only; never change a word.** u/v, i/j, final -e, doubled letters and the like ("loue" → "love", "Iohn" → "John", "vnbeliefe" → "unbelief"). Wording and word order stay as printed. Spelling is modernized by a fixed, reviewable word list in the build, not by hand, edit by edit.
+- **Possessives get their apostrophe (Wayne, 2026-11-25):** "Dauids confidence in Gods grace" → "David’s confidence in God’s grace", from the same list. Only possessives, never plurals; other punctuation stays as printed.
 - **One label per summary, not a mark per word:** a small line under it, "1611 King James Bible · spelling modernized". Modernization touches almost every line, so marking each word would bury the text, and editions of early modern texts state their spelling policy once. The label links to a short note in `USER_MANUAL.md` saying what was and wasn't changed.
 - **Square brackets only for words Ember adds,** the standard editorial use. The only planned case is the Proverbs 10 note shown on 11–24, introduced as "[From Proverbs 10:]".
 - **Hard words are glossed, not replaced.** A word whose meaning has changed or dropped out of use (e.g. "prelation", 1 Corinthians 13, meaning preference) keeps its place and gets a dotted underline with the meaning on hover. The glosses are a small hand-kept list, so they're part of the review.
@@ -159,6 +160,37 @@ Where OPFS can't be written, it is online-only, like `language.db`.
 3. Chapter summaries from the 1611 KJV (lb42/KJV_1611), spelling modernized.
 4. Translation and book copy, drafted for review.
 5. Review (Wayne finds help); corrections ship through the update path.
+
+### Step 1 as built (2026-11-25)
+
+Where the code and the table in Item 1 part ways, the code chose:
+
+- **Navigating keeps the verse selection.** It always has (the Language tab's lexicon references and the way back rely on it). Info describes the chapter on screen at the chapter level, and shows the verse level again when the selected verse's chapter is back. Tags, Related and Language keep showing the selected verse.
+- **Switching translation keeps the verse selection** too, for the same reason; Info opens Translation, and the verse's notes stay under Chapter.
+- **Esc doesn't clear the selection;** it never has. Left as a question in `docs/TODO.md`.
+- **Chapter's header summary is the verse count** until chapters have summaries (step 3).
+- A click in the pane's margin clears a chosen book, chapter or translation as well as the verses.
+
+### Step 2 as built (2026-11-25)
+
+- **Source:** TIPNR at STEPBible-Data commit `be4191f` (2026-10-24), the commit `language.db` is pinned to and the last to change TIPNR; sha256 `d595b916…16a318c`. `scripts/build_context.py` downloads and checks it, and rebuilds byte-identically. `data/context.db` is 1.34 MB (0.72 MB before @Brief, @Short and the peoples) and joins `data/reference-catalog.json`, so it has the background download and the sha256 update path.
+- **Format, as checked:** `$`-separated records, one per individual; a first line of fields (UniqueName=uStrong, description, family, …, Type) and sub-records ("– Named", "– Greek", "– Spelled", …) each listing every verse a form of the name occurs in, in English versification with Psalm titles as verse 0, Ember's numbering. Every one of the 30,935 references used lands on a real verse.
+- **People, peoples and places:** PERSON(s) records of type Male or Female are people (2,979 with a verse); PLACE and PLACE+PERSON are places (1,003). TIPNR gives each individual their own record, which is how people who share a name stay apart (29 Zechariahs). Peoples (271): Group records (the Amorites), each record's gentilic forms as one entry ("Levite", "Philistine", "Jew"; described as "Descendants of Levi", "People of Philistia"), and 17 ancestors whose own name TIPNR also uses for their people. Left out: unnamed people ("– Mentioned"), LXX-only references, and the OTHER records (God, months, titles). 1,105 of the 1,189 chapters name someone or somewhere.
+- **Ancestors and their peoples (Wayne chose option A, 2026-11-25):** TIPNR files a nation under its ancestor where they share a name: every Old Testament "Israel" (2,501) is under the patriarch, and Judah's record is the man, the tribe and the kingdom. Nothing in the data says which sense a verse has. So Israel/Jacob, the tribes (Reuben, Simeon, Levi, Judah, Issachar, Zebulun, Gad, Asher, Naphtali, Joseph, Benjamin, Ephraim, Manasseh), Esau (Edom), Javan (Greece) and Kedar always go under Peoples, marked `ambiguous`, and the tooltip says the name may mean the people or the man. The cost: where the man is meant (Jacob in Genesis 32) he's still under Peoples. The list is `ANCESTOR_PEOPLES` in the build, chosen by hand: a rule on references long after the man's lifetime also catches David, Moses and Abraham. Nations TIPNR already keeps apart from their ancestor (Moab, Edom, Amalek, Dan, Cush, Midian, Canaan) need nothing. Rejected: listing them under People with a note (B), and guessing the sense by book (C).
+- **The name shown** is the form the chapter uses, from TIPNR's own AltName|UnifiedName ("Abram" in Genesis 12); the tooltip gives the other name, TIPNR's one-sentence @Short, and where they first appear. A click shows the verse without selecting it (as a BDB reference does), so Info stays where it was.
+- **TIPNR's descriptions:** @Brief and @Short are kept and @Short is shown. TIPNR marks them as adapted from AI output, but STEPBible uses them in its own lexicon (TIPNR's extraction recipe maps them to @STEPSuperMeaning and @ShortDef), and Wayne decided (2026-11-25) that STEPBible's use is the review: they're outside the "Review" rule above, which covers copy Ember writes or chooses itself. Their `<ref>` markup becomes plain references. @Article isn't used. With them, and the peoples, the file is 1.34 MB.
+- **Upstream slips** are items 28–30 in `docs/DATA_QUIRKS.md`.
+
+### Step 3 as built (2026-11-25)
+
+- **Licence (Wayne, 2026-11-25):** shipped. The 1611 text is public domain, the repository states no licence, and the summaries are the 1611's own words; Ember credits the repository (Settings → Data & Attribution, README, the manual's note). Wayne is contacting Lou Burnard.
+- **Source:** lb42/KJV_1611 at `c62d87f` (2017-10-29), the 1,189 chapter files of the 66 books, fetched from raw.githubusercontent.com one by one (the archive download is blocked here) and checked by one sha256 over all of them. The summaries are plain text in the files: no markup to keep. Coverage as surveyed: 1,175 summaries, Proverbs 11–24 borrowing Proverbs 10's note (`borrowed_from`).
+- **Spelling (the editorial convention's "fixed, reviewable word list"):** `build/context/1611-spelling.tsv`, 1,559 spelling changes and 118 possessives, each with its evidence, made by `scripts/analysis/kjv1611/derive_spelling.py`. Most spelling changes (1,098) come from aligning the 1611 verse text with Ember's KJV, the 1769 edition: a word takes the 1769 spelling it's paired with at least 90% of the time, when the two differ only in spelling (u/v, i/j, y/i, e, doubled letters, macrons). So "then" stays "then" (1769 often changed it to "than", a different word), and a word the 1769 wrote two ways (doeth/doth, borne/born) stays as printed. The rest come from narrow rules checked against real words, stems with their endings kept, the printers' own conventions, and a manual list with a reason for each. 427 words stay as printed, listed at the end of the file for review. Where 1769 changed a spelling that's already today's (fulfill→fulfil, scepter→sceptre, Kiriath→Kirjath), the 1611 one stays.
+- **Possessives:** the apostrophe (’, as Ember's KJV prints it) goes only on a word that is a possessive in the summaries, decided word by word as printed, capitals included. First by the 1769: where the word is in the verse text at least twice, it takes the apostrophe if the 1769 has one at least 90% of the time ("Gods" with a capital does; "gods" doesn't). Otherwise when the plain form isn't a 1769 word but the possessive is ("Solomon’s"), or it's a name plus s that isn't itself a word ("Iobs innocencie"; a people in the plural, "the Macedonians", excepted). By hand: "Gods" (the 1611 verses also print the pagan plural "Gods", but every summary use is possessive), and the phrases "Lots wife" and "fathers brothers", whose words alone are also plurals. Rejected with reasons: "Lambes" (John 21), "Lots" (Esther 3), "Macedonians". A common noun that could be either ("fathers", "kings") stays as printed. The build checks Psalm 23, Genesis 19, Esther 3 and John 21.
+- **Glosses:** `build/context/1611-glosses.tsv`, 40 entries kept by hand (meaning, an example chapter, and an empty `reviewed` column), phrases allowed so only the old sense is glossed ("no let", not "let the people go"). The build stops if one matches no summary. Shown only on the modern spelling.
+- **Verse numbers** become links when they're a verse of the chapter: all 5,300-odd are, except four counts ("40. dayes", "70000", "2300. daies") and three slips (DATA_QUIRKS item 32), listed in the build, which stops if that changes. Lists such as Jeremiah 50's "1. 9.21. 35." link each number.
+- **In the tab:** the summary is Chapter's first field, as a quotation (`<blockquote>`), under it "1611 King James Bible · spelling modernized": the first opens the manual's note ("The 1611 chapter summaries"), the second switches to the 1611 spelling and back, remembered in localStorage (`ember.info.summarySpelling`). The header's one line is the summary without its verse numbers, replacing the verse count once it arrives.
+- **Size:** `context.db` is 1.93 MB; the build's limit is now 3 MB.
 
 ## Out of Scope
 

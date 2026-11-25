@@ -76,7 +76,7 @@ function onTranslationsChanged() {
     _translationsCache = null;
     for (const paneId of fallBackFromMissingTranslations()) {
         if (visiblePaneIds().includes(paneId)) {
-            renderPane(paneId, panes[paneId].bookId, panes[paneId].chapter);
+            renderPane(paneId, panes[paneId].bookId, panes[paneId].chapter, null, 'translation');
         }
     }
     for (const paneId of ['a', 'b']) updateTranslationLabel(paneId);
@@ -254,16 +254,23 @@ export function getActivePaneTranslationId() {
 
 // Returns the abbreviation string (e.g. "KJV") for the active pane's translation.
 export function getActivePaneTranslationAbbrev() {
+    return getActivePaneTranslation()?.abbreviation ?? 'KJV';
+}
+
+// The active pane's translation row (id, name, abbreviation, year, license),
+// or null if it isn't open.
+export function getActivePaneTranslation() {
     const tid = panes[activePaneId].translationId;
-    const t   = getTranslationsList().find(t => t.id === tid);
-    return t ? t.abbreviation : 'KJV';
+    return getTranslationsList().find(t => t.id === tid) ?? null;
 }
 
 // ============================================================
 // Render
 // ============================================================
 
-function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
+// `cause` is 'translation' when the pane re-renders because its translation
+// changed (the Info tab opens Translation then), 'navigate' otherwise.
+function renderPane(paneId, bookId, chapter, highlightVerseId = null, cause = 'navigate') {
     panes[paneId].bookId         = bookId;
     panes[paneId].chapter        = chapter;
     panes[paneId].scrollPosition = 0;  // reset on navigation; scroll listener updates it
@@ -277,6 +284,7 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
     navEl(paneId, '.pane-location').textContent = `${book.name} ${chapter}`;
 
     textEl.innerHTML = '';
+    textEl.appendChild(chapterTitle(book, chapter));
     const chapterBookmarks  = getBookmarksForChapter(bookId, chapter);
     const chapterNoteCounts = getNoteCountsForChapter(bookId, chapter);
 
@@ -318,7 +326,9 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
 
     // The selection outlives the chapter on screen; selection.js outlines it
     // again when its chapter comes back.
-    document.dispatchEvent(new CustomEvent('chapter-rendered', { detail: { paneId } }));
+    document.dispatchEvent(new CustomEvent('chapter-rendered', {
+        detail: { paneId, bookId, chapter, translationId: panes[paneId].translationId, cause }
+    }));
 
     if (highlightVerseId) {
         const target = textEl.querySelector(`[data-verse-id="${highlightVerseId}"]`);
@@ -329,6 +339,30 @@ function renderPane(paneId, bookId, chapter, highlightVerseId = null) {
     } else {
         getContentEl(paneId).scrollTop = 0;
     }
+}
+
+// The quiet "JOHN  3" line above a chapter. The book name and the chapter
+// number are separate targets: clicking one selects that level, and the Info
+// tab opens its section (selection.js handles the click).
+function chapterTitle(book, chapter) {
+    const title = document.createElement('div');
+    title.className = 'chapter-title';
+    title.dataset.helpTarget = 'chapter-title';
+
+    const bookTarget = document.createElement('button');
+    bookTarget.className = 'chapter-title-target chapter-title-book';
+    bookTarget.dataset.level = 'book';
+    bookTarget.textContent = book.name;
+    bookTarget.title = `About ${book.name}`;
+
+    const chapterTarget = document.createElement('button');
+    chapterTarget.className = 'chapter-title-target chapter-title-chapter';
+    chapterTarget.dataset.level = 'chapter';
+    chapterTarget.textContent = String(chapter);
+    chapterTarget.title = `About ${book.name} ${chapter}`;
+
+    title.append(bookTarget, chapterTarget);
+    return title;
 }
 
 // Fills an empty Psalm-title row (KJV/ASV/Darby's own base text has none) with
@@ -590,7 +624,7 @@ function switchPaneTranslation(paneId, translationId) {
     const { bookId, chapter } = panes[paneId];
     const target = findValidReference(translationId, bookId, chapter);
     panes[paneId].translationId = translationId;
-    renderPane(paneId, target.bookId, target.chapter);
+    renderPane(paneId, target.bookId, target.chapter, null, 'translation');
     // Re-render the row so the active highlight updates without reopening.
     renderTranslationRow(paneId);
 }
