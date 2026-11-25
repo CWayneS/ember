@@ -11,6 +11,7 @@ These are small next to what the sources get right, and Ember is grateful for bo
 | STEPBible-Data (TAHOT, TAGNT, TBESG) | commit `be4191f0082aeedddb0eff0c02c966292b2bd641` (2026-10-24) |
 | Open Scriptures HebrewLexicon (BDB, Strong's) | commit `21c9add13bc727d3a951361778e97e3ff7afd1ce` |
 | Open Scriptures morphhb | commit `3d15126fb1ef74867fc1434be1942e837932691f` |
+| STEPBible-Data (TIPNR, proper names) | commit `be4191f0082aeedddb0eff0c02c966292b2bd641` (2026-10-24), file sha256 `d595b916…16a318c` |
 
 Created 2026-11-10.
 
@@ -192,8 +193,27 @@ Six `<ref>` elements have an empty `r`: e.bm.aa (Ez 36:35), g.bg.ac (Jb 28:17), 
 
 ---
 
+## STEPBible-Data: TIPNR (proper names)
+
+The All Refs field (the fifth tab-separated field) of `TIPNR - Translators Individualised Proper Names with all References`'s sub-record lines. References are separated by `; `. All 30,935 references in the records Ember reads are to verses that exist in standard English versification; the items below are the only ones not written `Book.Chapter.Verse`.
+
+### 28. Two verses in one reference — *probably a slip*
+
+`Hoshea|Joshua@Exo.17.9-Heb`, "– Named" line: `Num.13.8,16`. Every other reference names one verse; this one is Numbers 13:8 and 13:16.
+
+### 29. A comma between references — *probably a slip*
+
+Two "– Group" lines separate a pair of references with `, ` rather than `; `: `Egypt@Gen.12.10-Rev` (`Exo.1.13, Exo.1.19`) and `Gentile@Gen.10.5-Rev`, in EXCLUDED OTHER (`Mat.5.47, Mat.6.7`).
+
+### 30. "etc" in place of references — *possibly intentional*
+
+Four "– Named"/"– Greek" lines of the LORD record (`LORD@Gen.1.1-Rev`, `God|LORD@Gen.1.1-Rev` twice, `Lord|LORD@Gen.1.1-Rev`) end their reference lists with `etc`. Likely a deliberate cut in the longest lists in the file; worth saying in the field description if so.
+
+---
+
 ## How Ember handles these
 
 - **TBESG** (`js/greek-lexicon.js`): items 1, 7, 8, 9 and 11 are repaired for display; item 2's outer reference is kept as text and the inner one used; items 3 and 12 stay unlinked; item 4 links as its attribute says, so its last "3" opens 1 Peter 3:3; items 5 and 6 are read as written.
 - **BDB** (`js/hebrew-lexicon.js`): item 23's book names are read as the printed book, except `Jos.21.23`, which stays text; in item 24, `Exod24.17`, `Ezra,6,15` and `Job.37:23` are read anyway and `Ezra.814` stays text; items 25–27 stay text.
+- **TIPNR** (`scripts/build_context.py`): item 28 is read as Numbers 13:8 and 13:16; items 29 and 30 are in records Ember leaves out (groups and OTHER), and the build would read item 29's pairs as two references.
 - **TAHOT**: items 13–15 are handled in `scripts/build_language.py` (`docs/HEBREW_ANATOMY_DATA_REPORT.md`); 16–21 are shown as written; item 22's Ketiv line is skipped (`js/manuscript-variants.js`).

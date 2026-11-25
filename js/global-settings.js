@@ -86,7 +86,7 @@ const SECTIONS = [
                 {
                     name: 'STEPBible-Data',
                     url: 'https://www.stepbible.org',
-                    note: 'Original-language word data (Hebrew/Greek text, glosses, lexicon entries, and Greek and Hebrew grammar decoding: the TAHOT, TAGNT, TBESG, TEGMC and TEHMC datasets) powering the Language tab, from Tyndale House, Cambridge.'
+                    note: 'Original-language word data (Hebrew/Greek text, glosses, lexicon entries, and Greek and Hebrew grammar decoding: the TAHOT, TAGNT, TBESG, TEGMC and TEHMC datasets) powering the Language tab, and the people and places in the Info tab’s Chapter section (TIPNR), from Tyndale House, Cambridge.'
                 },
                 {
                     name: 'OpenBible.info',

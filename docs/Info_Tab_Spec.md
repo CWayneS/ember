@@ -1,6 +1,6 @@
 # Ember Bible Study — Info Tab Spec
 
-**Status:** Draft 2026-11-24. Step 1 built 2026-11-25 (see "Step 1 as built" below); steps 2–5 not built.
+**Status:** Draft 2026-11-24. Steps 1 and 2 built 2026-11-25 (see "Step 1 as built" and "Step 2 as built" below); steps 3–5 not built.
 **Ground rule:** the code wins where it and this spec disagree. "Current state" claims were checked against `js/reference.js`, `js/reader.js`, `index.html` and `data/core.db` on 2026-11-24. Re-check before building.
 
 ---
@@ -169,6 +169,15 @@ Where the code and the table in Item 1 part ways, the code chose:
 - **Esc doesn't clear the selection;** it never has. Left as a question in `docs/TODO.md`.
 - **Chapter's header summary is the verse count** until chapters have summaries (step 3).
 - A click in the pane's margin clears a chosen book, chapter or translation as well as the verses.
+
+### Step 2 as built (2026-11-25)
+
+- **Source:** TIPNR at STEPBible-Data commit `be4191f` (2026-10-24), the commit `language.db` is pinned to and the last to change TIPNR; sha256 `d595b916…16a318c`. `scripts/build_context.py` downloads and checks it, and rebuilds byte-identically. `data/context.db` is 0.72 MB and joins `data/reference-catalog.json`, so it has the background download and the sha256 update path.
+- **Format, as checked:** `$`-separated records, one per individual; a first line of fields (UniqueName=uStrong, description, family, …, Type) and sub-records ("– Named", "– Greek", "– Spelled", …) each listing every verse a form of the name occurs in, in English versification with Psalm titles as verse 0, Ember's numbering. Every one of the 30,935 references used lands on a real verse.
+- **People and places:** PERSON(s) records of type Male or Female are people (3,054); PLACE and PLACE+PERSON are places (1,006). TIPNR gives each individual their own record, which is how people who share a name stay apart (29 Zechariahs). Left out: groups and gentilics, unnamed people ("– Mentioned"), LXX-only references, and the OTHER records (God, months, titles). 1,103 of the 1,189 chapters name someone or somewhere.
+- **The name shown** is the form the chapter uses, from TIPNR's own AltName|UnifiedName ("Abram" in Genesis 12); the tooltip gives the other name, TIPNR's description, and where they first appear. A click shows the verse without selecting it (as a BDB reference does), so Info stays where it was.
+- **Not used:** TIPNR's @Brief, @Short and @Article, which it marks as adapted from AI output. See `docs/TODO.md`.
+- **Upstream slips** are items 28–30 in `docs/DATA_QUIRKS.md`.
 
 ## Out of Scope
 

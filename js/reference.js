@@ -3,9 +3,10 @@
 import {
     getBook, parseVerseId, formatReference,
     getChapterVerseCount, getTopicsForVerse, getUserTagsForVerse,
-    getNotesForVerse, getCrossReferencesForVerse, getHeadingsForChapter
+    getNotesForVerse, getCrossReferencesForVerse, getHeadingsForChapter,
+    getChapterNames, warnContextUnavailable
 } from './db.js';
-import { navigateTo, getCurrentLocation, getActivePaneId, getActivePaneTranslation, getActivePaneTranslationId, getActivePaneTranslationAbbrev } from './reader.js';
+import { navigateTo, showVerse, getCurrentLocation, getActivePaneId, getActivePaneTranslation, getActivePaneTranslationId, getActivePaneTranslationAbbrev } from './reader.js';
 import { selectVerseRange, getSelectionLevel, getSelectedVerseOnScreen } from './selection.js';
 import { openStudy, openTagView } from './panels.js';
 import { initLanguageTab, renderLanguageTab as renderLanguageTabContent } from './language.js';
@@ -133,10 +134,91 @@ function chapterSection(book, chapter, verseId) {
     const verses = verseCount ? `${verseCount} verse${verseCount !== 1 ? 's' : ''}` : '';
     // Until chapters have summaries, the verse count is the header's line.
     const section = infoSection('chapter', `${book.name} ${chapter}`, [verses]);
+    const credit = document.createElement('div');
+    credit.className = 'info-source';
+    appendChapterNames(section.body, book, chapter, credit);
     appendFields(section.body, [['Verses', verseCount]]);
     appendChapterHeadings(section.body, book, chapter);
     if (verseId !== null) appendVerseNotes(section.body, verseId);
+    section.body.appendChild(credit);
     return section.element;
+}
+
+// People and places named in the chapter (context.db, from STEPBible's TIPNR),
+// each a link to its first verse here. context.db is read asynchronously, so a
+// slot goes in now and fills when the rows come; a slot the tab has since
+// redrawn over is left alone. Nothing shows if context.db can't be had yet
+// (offline before its first download).
+const NAMES_SHOWN_AT_FIRST = 24;
+const chapterNamesCache = new Map();  // 'book:chapter' → Promise of rows
+
+function chapterNames(bookId, chapter) {
+    const key = `${bookId}:${chapter}`;
+    if (!chapterNamesCache.has(key)) {
+        const rows = getChapterNames(bookId, chapter);
+        rows.catch(() => chapterNamesCache.delete(key));  // tried again next time
+        chapterNamesCache.set(key, rows);
+    }
+    return chapterNamesCache.get(key);
+}
+
+// `credit` is an empty line at the foot of the section, which names the source
+// once there are names to credit.
+function appendChapterNames(container, book, chapter, credit) {
+    const slot = document.createElement('div');
+    slot.className = 'info-names';
+    container.appendChild(slot);
+    chapterNames(book.id, chapter).then(rows => {
+        if (!slot.isConnected) return;
+        const people = rows.filter(row => row.kind === 'person');
+        const places = rows.filter(row => row.kind === 'place');
+        if (people.length === 0 && places.length === 0) return;
+        const list = document.createElement('dl');
+        list.className = 'info-fields';
+        for (const [label, group] of [['People', people], ['Places', places]]) {
+            if (group.length === 0) continue;
+            const term = document.createElement('dt');
+            term.textContent = label;
+            const detail = document.createElement('dd');
+            detail.className = 'info-name-list';
+            detail.dataset.kind = group[0].kind;
+            fillNameList(detail, group, book, chapter);
+            list.append(term, detail);
+        }
+        slot.appendChild(list);
+        credit.textContent = 'People and places: STEPBible TIPNR';
+    }).catch(warnContextUnavailable);
+}
+
+// The names as links, the first NAMES_SHOWN_AT_FIRST of them with "N more" for
+// the rest (1 Chronicles' genealogies run to dozens).
+function fillNameList(detail, rows, book, chapter) {
+    const shown = rows.length > NAMES_SHOWN_AT_FIRST + 4 ? rows.slice(0, NAMES_SHOWN_AT_FIRST) : rows;
+    for (const row of shown) detail.appendChild(nameLink(row, book, chapter));
+    if (shown.length === rows.length) return;
+    const more = document.createElement('button');
+    more.className = 'info-name-more';
+    more.textContent = `${rows.length - shown.length} more`;
+    more.addEventListener('click', () => {
+        more.remove();
+        for (const row of rows.slice(shown.length)) detail.appendChild(nameLink(row, book, chapter));
+    });
+    detail.appendChild(more);
+}
+
+function nameLink(row, book, chapter) {
+    const link = document.createElement('button');
+    link.className = 'info-name';
+    link.textContent = row.shown_as;
+    const where = row.first_verse === 0 ? `${book.name} ${chapter}, title` : `${book.name} ${chapter}:${row.first_verse}`;
+    link.title = [
+        row.name !== row.shown_as ? `Also called ${row.name}` : null,
+        row.description || null,
+        row.verse_count > 1 ? `first at ${where}, in ${row.verse_count} verses` : where,
+    ].filter(Boolean).join(' · ');
+    const verseId = book.id * 1000000 + chapter * 1000 + row.first_verse;
+    link.addEventListener('click', () => showVerse(book.id, chapter, verseId));
+    return link;
 }
 
 // A folded-or-open section: a <details> whose summary carries the name and a

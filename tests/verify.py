@@ -12,7 +12,8 @@ Usage (from the repo root):
                                          #   translation switch, split view, global settings
    python3 tests/verify.py indicators    # note/bookmark dots on a titled Psalm (verse=0 row)
    python3 tests/verify.py info          # Info tab: selection levels and the sections they open, the chapter
-                                         #   title, hidden empty fields, split view's active pane, placeholders
+                                         #   title, hidden empty fields, split view's active pane, placeholders,
+                                         #   people and places from context.db, and without it
    python3 tests/verify.py notes         # removing tags and verse anchors from a note, long anchors,
                                          #   a 300-note study: scrolling, find, autocomplete, in-place edits
    python3 tests/verify.py sw            # service worker installs and precaches every js/ file
@@ -978,6 +979,46 @@ def scenario_info(app):
           f"another chapter opens Chapter ({st['level']}, {open_sections(st)}, {st['outlined']})")
     check(st['sections']['chapter']['title'] == 'John 4', f"Chapter follows the pane ({st['sections']['chapter']['title']})")
 
+    # People and places (context.db, from TIPNR): the form used in the chapter, in
+    # order of first appearance, each a link to its first verse there.
+    names = lambda kind: p.evaluate(f"""[...document.querySelectorAll('#info-tab .info-name-list[data-kind="{kind}"] .info-name')]
+        .map(el => el.textContent)""")
+    wait_names = lambda: p.wait_for_selector('#info-tab .info-name', timeout=30_000)
+    app.navigate(1, 12)
+    wait_names()
+    people, places = names('person'), names('place')
+    check(people == ['Abram', 'Lot', 'Sarai', 'Pharaoh'], f'Genesis 12: people as named there, in order ({people})')
+    check(places[:3] == ['Haran', 'Canaan', 'Moreh'] and 'Bethel' in places and 'Egypt' in places,
+          f'Genesis 12: places ({places})')
+    fields = info_state(p)['sections']['chapter']['fields']
+    check([label for label, _ in fields][:3] == ['People', 'Places', 'Verses'], f'people and places come before the verse count ({fields})')
+    title = p.evaluate("document.querySelector('#info-tab .info-name').title")
+    check(title == 'Also called Abraham · Man living at the time of the Patriarchs · first at Genesis 12:1, in 11 verses',
+          f"a name's tooltip: its other name, who, where ({title!r})")
+    check('STEPBible TIPNR' in info_state(p)['infoText'], 'the source is named')
+    p.evaluate("document.querySelector('#reader-pane-a .pane-content').scrollTop = 0")
+    p.click('#info-tab .info-name-list[data-kind="person"] .info-name:has-text("Pharaoh")')
+    p.wait_for_timeout(200)
+    shown = p.evaluate("""(() => { const v = document.querySelector('#reader-pane-a .verse.shown');
+        const pane = document.querySelector('#reader-pane-a .pane-content').getBoundingClientRect();
+        const r = v?.getBoundingClientRect();
+        return v ? [v.dataset.verseId, r.top >= pane.top && r.bottom <= pane.bottom] : null; })()""")
+    st = info_state(p)
+    check(shown == ['1012015', True], f'a name shows its first verse in the chapter ({shown})')
+    check(st['selected'] == 0 and st['level'] == 'chapter', 'without selecting it, so Info stays where it was')
+    app.navigate(19, 3)
+    wait_names()
+    check(names('person') == ['Absalom', 'David'], f"Psalm 3: the title's people ({names('person')})")
+    check('Psalms 3, title' in p.evaluate("document.querySelector('#info-tab .info-name').title"), 'a name in a Psalm title says so')
+    app.navigate(13, 1)
+    wait_names()
+    count = len(names('person'))
+    more = p.evaluate("document.querySelector('#info-tab .info-name-list[data-kind=\"person\"] .info-name-more')?.textContent")
+    p.click('#info-tab .info-name-list[data-kind="person"] .info-name-more')
+    check(count == 24 and more and len(names('person')) == 24 + int(more.split()[0]),
+          f'a long list shows 24 and the rest on request ({count}, {more}, {len(names("person"))})')
+    app.navigate(43, 4)
+
     # Split view: the active pane is outlined, and Info describes it.
     p.click('#split-toggle-btn')
     p.wait_for_timeout(300)
@@ -999,7 +1040,26 @@ def scenario_info(app):
     p.wait_for_timeout(200)
     check(outline('a') == 'none', 'no outline without split view')
 
+    info_without_context_db(p.context.browser)
     return FAILURES
+
+
+def info_without_context_db(browser):
+    """context.db not to be had (offline before its first download): the Chapter
+    section leaves people and places out, with no error, and the rest is as usual."""
+    ctx = browser.new_context(viewport={'width': 1600, 'height': 1000})
+    page = ctx.new_page()
+    page.route('**/data/context.db', lambda route: route.abort())
+    app = App(page, ignore=is_expected_network_line)
+    app.boot()
+    app.navigate(1, 12)
+    page.wait_for_timeout(1500)
+    st = info_state(page)
+    check(page.evaluate("document.querySelectorAll('#info-tab .info-name').length") == 0
+          and [label for label, _ in st['sections']['chapter']['fields']] == ['Verses'],
+          f"without context.db: no people or places, the rest as usual ({st['sections']['chapter']['fields']})")
+    check(app.errors == [], f"without context.db: no console errors but the browser's own failed-request lines ({app.errors})")
+    ctx.close()
 
 
 # ---------------------------------------------------------------- service worker
@@ -3676,8 +3736,8 @@ def scenario_updates(browser):
     # An install from before this (no records): each file hashed once, nothing fetched
     p.evaluate("localStorage.removeItem('ember.installedFiles')")
     updated, digests, requests = run.check_updates()
-    check(updated == [] and digests == 7 and requests == [],
-          f'no records yet: each of the 7 files hashed once, none fetched ({updated}, {digests} hashes, {requests})')
+    check(updated == [] and digests == 8 and requests == [],
+          f'no records yet: each of the 8 files hashed once, none fetched ({updated}, {digests} hashes, {requests})')
 
     # A changed translation is downloaded, checked, written, and read from the next launch
     asv_path = os.path.join(TRANSLATIONS_DIR, 'asv.db')
@@ -3722,6 +3782,14 @@ def scenario_updates(browser):
     check(updated == ['lexicon-hebrew.db'] and p.evaluate(OPFS_SHA_JS, 'lexicon-hebrew.db') == sha256_of(new_lexicon),
           f'changed lexicon-hebrew.db: replaced ({updated}, {requests})')
     p.unroute('**/data/lexicon-hebrew.db')
+    new_context = edited_copy(os.path.join(ROOT, 'data', 'context.db'), 'context-new.db',
+                              "CREATE TABLE zz_update_marker (x)")
+    run.route_catalogs(translations={'asv.db': new_asv}, references={'lexicon-hebrew.db': new_lexicon, 'context.db': new_context})
+    p.route('**/data/context.db', lambda route: route.fulfill(status=200, body=new_context))
+    updated, digests, requests = run.check_updates()
+    check(updated == ['context.db'] and p.evaluate(OPFS_SHA_JS, 'context.db') == sha256_of(new_context),
+          f'changed context.db: replaced ({updated}, {requests})')
+    p.unroute('**/data/context.db')
 
     # Offline: nothing. (Routes off first: in Firefox a routed page can't reload
     # offline through the service worker.)

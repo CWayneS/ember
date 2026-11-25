@@ -3,12 +3,12 @@
 
 data/translations/catalog.json lists every translation Ember offers, installed
 or not (docs/Translation_Addons_Spec.md, Item 1). data/reference-catalog.json
-lists language.db and lexicon-hebrew.db. size_bytes, sha256 and verse_count are
+lists language.db, lexicon-hebrew.db and context.db. size_bytes, sha256 and verse_count are
 read from the real files, never typed by hand. Add checks a download against
 them, and an installed file whose sha256 no longer matches its entry is replaced
 by the app's background update (js/db.js:checkForDataUpdates). So run this after
-any rebuild of a shipped file; build_language.py and build_lexicon_hebrew.py run
-it themselves with --ship. tests/verify.py translations fails if either catalog
+any rebuild of a shipped file; build_language.py, build_lexicon_hebrew.py and
+build_context.py run it themselves with --ship. tests/verify.py translations fails if either catalog
 no longer matches the files.
 
 The editorial fields (tier, description) live in CATALOG below. name, year and
@@ -27,7 +27,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TRANSLATIONS_DIR = os.path.join(ROOT, 'data', 'translations')
 OUTPUT = os.path.join(TRANSLATIONS_DIR, 'catalog.json')
 REFERENCE_OUTPUT = os.path.join(ROOT, 'data', 'reference-catalog.json')
-REFERENCE_FILES = ['language.db', 'lexicon-hebrew.db']
+REFERENCE_FILES = ['language.db', 'lexicon-hebrew.db', 'context.db']
 
 SCHEMA_VERSION = 1
 
