@@ -70,6 +70,14 @@ OPFS → IndexedDB fallback done 2026-11-23: without OPFS, without `createWritab
 6. **The 14 ghost rows** (Ketiv-only words), which need their own display design. From "Deferred to Follow-Up Specs" in `docs/Hebrew_Word_Anatomy_Spec.md`.
 7. **Devotional content for reading plans.** `plan_days` has `devotional_title`, `devotional_body` and `reflection_questions_json`, and import and export carry them, but no plan fills them and nothing displays them. Waits on someone writing the content, then needs a place in the plan view. See `docs/BUILD_3_ACTUAL_STATE.md` §7.
 
+**Maybe, not planned:**
+
+- **The 1611 KJV's marginal notes.** Two sources, surveyed 2026-11-24:
+  - The translators' notes ("Heb. expansion", "Or, creeping", "That is, sorrowful"; about 7,350) come from [basil/bible's listing](https://github.com/basil/bible/blob/master/sources/exhaustive-listing-marginal-notes-1611-edition-king-james-bible.md) (from Literatura Bautista; licence unclear). It's in modern spelling, one note per line, with the verse and the word the note is about (`Genesis 1:20 moving: Or, creeping`). In the KJV, that word could carry a small mark, with the note shown on hover.
+  - The 1611 cross-references (about 4,500) come from [lb42/KJV_1611](https://github.com/lb42/KJV_1611) (no licence stated), as a "1611 margin" group in the Related tab. lb42 ties each note to its verse but not its word: a verse's notes are joined into one, and the 1611's reference marks were dropped. Scrivener (1910) warns the 1611's references are often misprinted, and its Psalms references follow the Vulgate's numbering.
+
+  Both licences need settling first. Background: "Source" in Item 4 of `docs/Info_Tab_Spec.md`.
+
 ## From the proposal
 
 Features `docs/Bible_Study_Software_Proposal_v6.md` describes that no build or spec has taken on yet. They're the design's long-range horizon, not planned work: each needs a spec before it's built. Checked against the code on 2026-11-22.
